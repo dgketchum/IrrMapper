@@ -19,6 +19,25 @@ import os
 from fiona import open as fopen
 from rasterio import open as rasopen
 
+'''
+This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
+function `compose_data_array` will return a numpy.ndarray object ready for a learning algorithm.  
+'''
+
+
+def compose_data_array_():
+    """ Compose numpy.ndarray prepped for a learning algorithm.
+    
+    
+    Keyword Arguments:
+    :param shapefile: .shp file from which point locations will be taken.
+    :param raster: Single raster file path, list of files, or list of dirs, from which all
+    /*.tif files will be used.
+    :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
+    :return: numpy.ndarray
+    """
+    pass
+
 
 def raster_point_extract(raster, points, dtime):
     """ Get point values from a raster.
