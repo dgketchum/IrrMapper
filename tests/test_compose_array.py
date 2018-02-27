@@ -14,22 +14,32 @@
 # limitations under the License.
 # ===============================================================================
 
-import os
 import unittest
+
+from fiona import open as fopen
+from rasterio import open as rasopen
 
 from core.compose_array import raster_point_extract
 
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        print(os.path.isfile('tests/data/extract_test_points.shp'))
-        self.shapefile = None
+        self.shapefile = 'tests/data/extract_test_attributed_Z12.shp'
+        self.raster = 'tests/data/LE07_L1TP_039027_20130726_20160907_01_T1_B3_clip.tif'
 
     def tearDown(self):
         pass
 
-    def test_something(self):
-        self.assertEqual(True, False)
+    def test_raster_extract_by_point(self):
+        """ Test native pet rasters vs. xarray netcdf point extract.
+        :return: 
+        """
+
+        points = raster_point_extract(self.raster, self.shapefile)
+
+        for key, val in points.items():
+            self.assertEqual(val['raster_val'], val['extract_value'])
+
 
 
 if __name__ == '__main__':
