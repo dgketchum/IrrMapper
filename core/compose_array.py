@@ -39,36 +39,36 @@ def compose_data_array_():
     pass
 
 
-def raster_point_extract(raster, points, dtime):
+def raster_point_extract(raster, points):
     """ Get point values from a raster.
     
-    This function opens a points shapefile, gets the coordinates of the points, 
-    opens a raster as an np.array object, and finds the row, col of the cell covering
-    that point.
-    
-    :param raster: local_raster: Thredds.Gridmet-derived array in Landsat image geometry.
+    :param raster: local_raster
     :param points: Shapefile of points.
-    :param dtime: Datetime.datetime object.
     :return: Dict of coords, row/cols, and values of raster at that point.
     """
     point_data = {}
+
     with fopen(points, 'r') as src:
         for feature in src:
-            name = feature['properties']['siteid']
-            point_data[name] = {'coords': feature['geometry']['coordinates']}
+            name = feature['id']
+            proj_coords = feature['geometry']['coordinates']
 
-        with rasopen(raster, 'r') as rsrc:
-            rass_arr = rsrc.read()
-            rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-            affine = rsrc.transform
+            point_data[name] = {'coords': proj_coords,
+                                'label': feature['properties']['LType'],
+                                'raster_val': int(feature['properties']['LE07_L1TP_'])}
 
-        for key, val in point_data.items():
-            x, y = val['coords']
-            col, row = ~affine * (x, y)
-            val = rass_arr[int(row), int(col)]
-            point_data[key][dtime] = [val, None]
+    with rasopen(raster, 'r') as rsrc:
+        rass_arr = rsrc.read()
+        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+        affine = rsrc.affine
 
-        return point_data
+    for key, val in point_data.items():
+        x, y = val['coords']
+        col, row = ~affine * (x, y)
+        raster_val = rass_arr[int(row), int(col)]
+        val['extract_value'] = raster_val
+
+    return point_data
 
 
 if __name__ == '__main__':
