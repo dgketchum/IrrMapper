@@ -25,7 +25,7 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def load_irrigation_data(shapefile, rasters, target_field='LType', bands=[]):
+def load_irrigation_data(shapefile, rasters, target_field='LType'):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
@@ -39,7 +39,13 @@ def load_irrigation_data(shapefile, rasters, target_field='LType', bands=[]):
     target_names = None
     target = None
     data = None
-    raster_list = raster_paths(rasters)
+    rasters = raster_paths(rasters)
+    raster_list = []
+    for r in rasters:
+        for b in ['3', '4', '6_VCID_1']:
+            if r.endswith('B{}.TIF'.format(b)):
+                raster_list.append(r)
+
     for r in raster_list:
         point_data = raster_point_extract(r, shapefile)
 
@@ -53,7 +59,8 @@ def raster_paths(rasters):
     elif os.path.isfile(rasters[0]):
         return rasters
     elif os.path.isdir(rasters):
-        return list(recursive_file_gen(rasters))
+        lst = list(recursive_file_gen(rasters))
+        return [x for x in lst if x.endswith('.TIF')]
 
     else:
         raise ValueError('Must provide a single .tif, a list of .tif files, or a dir')
@@ -62,8 +69,7 @@ def raster_paths(rasters):
 def recursive_file_gen(mydir):
     for root, dirs, files in os.walk(mydir):
         for file in files:
-            if file.endswith('.tif'):
-                yield os.path.join(root, file)
+            yield os.path.join(root, file)
 
 
 def raster_point_extract(raster, points):
@@ -79,10 +85,8 @@ def raster_point_extract(raster, points):
         for feature in src:
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
-
-            point_data[name] = {'coords': proj_coords,
-                                'label': feature['properties']['LType'],
-                                'raster_val': int(feature['properties']['LE07_L1TP_'])}
+            # TODO reproject hex centroid file to Z12
+            point_data[name] = {'coords': proj_coords}
 
     with rasopen(raster, 'r') as rsrc:
         rass_arr = rsrc.read()
@@ -102,7 +106,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat')
-    shape = os.path.join(montana, 'hex_centroids_1000m_intersect.shp')
+    shape = os.path.join(montana, 'hex_centoids_1000m_intersect.shp')
     load_irrigation_data(shape, images)
 
 # ========================= EOF ====================================================================
