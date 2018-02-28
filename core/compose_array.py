@@ -16,6 +16,8 @@
 
 import os
 
+from pandas import DataFrame, Series, Index
+
 from fiona import open as fopen
 from rasterio import open as rasopen
 
@@ -39,15 +41,19 @@ def load_irrigation_data(shapefile, rasters, target_field='LType'):
     target_names = None
     target = None
     data = None
-    rasters = raster_paths(rasters)
-    raster_list = []
-    for r in rasters:
-        for b in ['3', '4', '6_VCID_1']:
-            if r.endswith('B{}.TIF'.format(b)):
-                raster_list.append(r)
 
-    for r in raster_list:
-        point_data = raster_point_extract(r, shapefile)
+    rasters = raster_paths(rasters)
+
+    first = True
+    for r in rasters:
+        for b in ['2', '3', '4', '6_VCID_1']:
+            if r.endswith('B{}.TIF'.format(b)):
+                band_series = raster_point_extract(r, shapefile)
+                if first:
+                    df = DataFrame(band_series)
+                    first = False
+                else:
+                    df.join(band_series, how='outer')
 
     return data, target, target_names
 
@@ -81,32 +87,45 @@ def raster_point_extract(raster, points):
     """
     point_data = {}
 
+    basename = os.path.basename(raster)
+    name_split = basename.split(sep='_')
+    band = name_split[7].split(sep='.')[0]
+    date_string = name_split[3]
+    column_name = '{}_{}'.format(date_string, band)
+
     with fopen(points, 'r') as src:
         for feature in src:
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
-            # TODO reproject hex centroid file to Z12
             point_data[name] = {'coords': proj_coords}
+            point_crs = src.profile['crs']['init']
 
     with rasopen(raster, 'r') as rsrc:
         rass_arr = rsrc.read()
         rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
         affine = rsrc.affine
+        raster_crs = rsrc.profile['crs']['init']
+
+    if point_crs != raster_crs:
+        raise ValueError('Points and raster are not in same coordinate system.')
+
+    index = Index(range(len(point_data)))
+    point_series = Series(name=column_name, index=index)
 
     for key, val in point_data.items():
         x, y = val['coords']
         col, row = ~affine * (x, y)
         raster_val = rass_arr[int(row), int(col)]
-        val['extract_value'] = raster_val
+        point_series.iloc[int(key)] = float(raster_val)
 
-    return point_data
+    return point_series
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat')
-    shape = os.path.join(montana, 'hex_centoids_1000m_intersect.shp')
+    shape = os.path.join(montana, 'hex_centoids_1000m_intersect_Z12.shp')
     load_irrigation_data(shape, images)
 
 # ========================= EOF ====================================================================
