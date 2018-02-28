@@ -41,6 +41,40 @@ class TestPointExtract(unittest.TestCase):
             self.assertEqual(val['raster_val'], val['extract_value'])
 
 
+# ----------------------------------ANCILLARY FUNCTIONS-----------------------
+
+def raster_point_extract(raster, points):
+    """ Get point values from a raster.
+    
+    :param raster: local_raster
+    :param points: Shapefile of points.
+    :return: Dict of coords, row/cols, and values of raster at that point.
+    """
+    point_data = {}
+
+    with fopen(points, 'r') as src:
+        for feature in src:
+            name = feature['id']
+            proj_coords = feature['geometry']['coordinates']
+
+            point_data[name] = {'coords': proj_coords,
+                                'label': feature['properties']['LType'],
+                                'raster_val': int(feature['properties']['LE07_L1TP_'])}
+
+    with rasopen(raster, 'r') as rsrc:
+        rass_arr = rsrc.read()
+        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+        affine = rsrc.affine
+
+    for key, val in point_data.items():
+        x, y = val['coords']
+        col, row = ~affine * (x, y)
+        raster_val = rass_arr[int(row), int(col)]
+        val['extract_value'] = raster_val
+
+    return point_data
+
+
 if __name__ == '__main__':
     unittest.main()
 
