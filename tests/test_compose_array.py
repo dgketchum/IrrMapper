@@ -41,7 +41,6 @@ class TestPointExtract(unittest.TestCase):
             self.assertEqual(val['raster_val'], val['extract_value'])
 
 
-
 if __name__ == '__main__':
     unittest.main()
 
