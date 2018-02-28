@@ -25,18 +25,45 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def compose_data_array_():
+def load_irrigation_data(shapefile, rasters, target_field='LType', bands=[]):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
     Keyword Arguments:
     :param shapefile: .shp file from which point locations will be taken.
-    :param raster: Single raster file path, list of files, or list of dirs, from which all
+    :param raster: Single raster file path, list of file paths, or a dir, from which all
     /*.tif files will be used.
     :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
     :return: numpy.ndarray
     """
-    pass
+    target_names = None
+    target = None
+    data = None
+    raster_list = raster_paths(rasters)
+    for r in raster_list:
+        point_data = raster_point_extract(r, shapefile)
+
+    return data, target, target_names
+
+
+def raster_paths(rasters):
+    """ Return list of rasters from single raster, list of rasters, or a dir.    """
+    if os.path.isfile(rasters):
+        return [rasters]
+    elif os.path.isfile(rasters[0]):
+        return rasters
+    elif os.path.isdir(rasters):
+        return list(recursive_file_gen(rasters))
+
+    else:
+        raise ValueError('Must provide a single .tif, a list of .tif files, or a dir')
+
+
+def recursive_file_gen(mydir):
+    for root, dirs, files in os.walk(mydir):
+        for file in files:
+            if file.endswith('.tif'):
+                yield os.path.join(root, file)
 
 
 def raster_point_extract(raster, points):
@@ -73,5 +100,9 @@ def raster_point_extract(raster, points):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
+    montana = os.path.join(home, 'images', 'irrigation', 'MT')
+    images = os.path.join(montana, 'landsat')
+    shape = os.path.join(montana, 'hex_centroids_1000m_intersect.shp')
+    load_irrigation_data(shape, images)
 
 # ========================= EOF ====================================================================
