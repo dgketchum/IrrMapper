@@ -18,6 +18,7 @@ import os
 import pickle
 
 from pandas import DataFrame, Series, Index
+from numpy import nan
 
 from fiona import open as fopen
 from rasterio import open as rasopen
@@ -62,6 +63,10 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None):
                     # then just get point values from raster
                     band_series = point_extract(r, shapefile)
                     df = df.join(band_series, how='outer')
+
+    # combined = df.join(target, how='outer')
+    # combined[combined == 0.] = nan
+    # combined.dropna(axis=0, how='any', inplace=True)
 
     data = {'classes': target.unique(), 'data': df.values,
             'target_values': target.values}
