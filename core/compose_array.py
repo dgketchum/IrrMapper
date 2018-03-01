@@ -15,6 +15,7 @@
 # =============================================================================================
 
 import os
+import pickle
 
 from pandas import DataFrame, Series, Index
 
@@ -27,35 +28,49 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def load_irrigation_data(shapefile, rasters, target_field='LType'):
+def load_irrigation_data(shapefile, rasters, pickle_path=None):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
     Keyword Arguments:
+    :param pickle_path: 
+    :param rasters: 
     :param shapefile: .shp file from which point locations will be taken.
-    :param raster: Single raster file path, list of file paths, or a dir, from which all
+    :param rasters: Single raster file path, list of file paths, or a dir, from which all
     /*.tif files will be used.
-    :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
+    # :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
     :return: numpy.ndarray
     """
-    target_names = None
-    target = None
-    data = None
 
+    df = None
     rasters = raster_paths(rasters)
 
     first = True
     for r in rasters:
         for b in ['2', '3', '4', '6_VCID_1']:
             if r.endswith('B{}.TIF'.format(b)):
-                band_series = raster_point_extract(r, shapefile)
+
                 if first:
+                    # build DataFrame and acquire target (shapefile) point values
+                    # along with first raster point values
+                    target, band_series = point_extract(r, shapefile,
+                                                        get_point_attrs=True)
                     df = DataFrame(band_series)
                     first = False
-                else:
-                    df.join(band_series, how='outer')
 
-    return data, target, target_names
+                else:
+                    # then just get point values from raster
+                    band_series = point_extract(r, shapefile)
+                    df = df.join(band_series, how='outer')
+
+    data = {'features': list(df.columns.values), 'data': df.values,
+            'target_values': target.values}
+
+    if pickle_path:
+        with open(pickle_path, 'wb') as handle:
+            pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    return data
 
 
 def raster_paths(rasters):
@@ -78,9 +93,10 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def raster_point_extract(raster, points):
+def point_extract(raster, points, get_point_attrs=False):
     """ Get point values from a raster.
     
+    :param get_point_attrs: 
     :param raster: local_raster
     :param points: Shapefile of points.
     :return: Dict of coords, row/cols, and values of raster at that point.
@@ -92,12 +108,14 @@ def raster_point_extract(raster, points):
     band = name_split[7].split(sep='.')[0]
     date_string = name_split[3]
     column_name = '{}_{}'.format(date_string, band)
+    print('raster {}'.format(column_name))
 
     with fopen(points, 'r') as src:
         for feature in src:
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
             point_data[name] = {'coords': proj_coords}
+            point_data[name]['land_type'] = feature['properties']['LType']
             point_crs = src.profile['crs']['init']
 
     with rasopen(raster, 'r') as rsrc:
@@ -118,14 +136,26 @@ def raster_point_extract(raster, points):
         raster_val = rass_arr[int(row), int(col)]
         point_series.iloc[int(key)] = float(raster_val)
 
+    if get_point_attrs:
+        target_series = _point_attrs(point_data, index)
+        return target_series, point_series
+
     return point_series
 
+
+def _point_attrs(pt_data, index):
+    target = Series(name='target', index=index)
+    for key, val in pt_data.items():
+        target.iloc[int(key)] = pt_data[key]['land_type']
+    return target
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat')
-    shape = os.path.join(montana, 'hex_centoids_1000m_intersect_Z12.shp')
-    load_irrigation_data(shape, images)
+    shape = os.path.join(montana, 'hex_centoids_1000m_intersect_Z12_LItype.shp')
+    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
+    p_path = os.path.join(spatial, 'pick.pickle')
+    data = load_irrigation_data(shape, images)
 
 # ========================= EOF ====================================================================
