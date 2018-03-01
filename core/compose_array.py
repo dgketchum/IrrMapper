@@ -63,7 +63,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None):
                     band_series = point_extract(r, shapefile)
                     df = df.join(band_series, how='outer')
 
-    data = {'features': list(df.columns.values), 'data': df.values,
+    data = {'classes': target.unique(), 'data': df.values,
             'target_values': target.values}
 
     if pickle_path:
@@ -156,6 +156,6 @@ if __name__ == '__main__':
     shape = os.path.join(montana, 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'pick.pickle')
-    data = load_irrigation_data(shape, images)
+    data = load_irrigation_data(shape, images, pickle_path=p_path)
 
 # ========================= EOF ====================================================================

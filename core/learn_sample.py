@@ -29,13 +29,13 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
         with open(path_to_pickled, 'rb') as p:
             data = pickle.load(p)
     else:
-        dct_form = "'{'features': list, 'data': numpy.ndarray,\n " \
+        dct_form = "'{'classes': target.unique, 'data': numpy.ndarray,\n " \
                    "'target_values': target}'"
         raise ValueError('\nMust provide data for classification.  '
                          'This can \neither beas a dict or '
                          'pickled dict of form:\n{}'.format(dct_form))
 
-    mapping = {'softmax': softmax_regression(data),
+    mapping = {'softmax': softmax_regression(data, binary_true='I'),
                'neural_net': neural_net()}
 
     try:
