@@ -48,7 +48,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None):
 
     first = True
     for r in rasters:
-        for b in ['2', '3', '4', '6_VCID_1']:
+        for b in ['3', '4', '5', '10']:
             if r.endswith('B{}.TIF'.format(b)):
 
                 if first:
@@ -157,8 +157,8 @@ def _point_attrs(pt_data, index):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
-    images = os.path.join(montana, 'landsat')
-    shape = os.path.join(montana, 'hex_centoids_1000m_intersect_Z12_LItype.shp')
+    images = os.path.join(montana, 'landsat', 'LC8_39_27')
+    shape = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'pick.pickle')
     data = load_irrigation_data(shape, images, pickle_path=p_path)

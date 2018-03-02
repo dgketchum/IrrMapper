@@ -34,7 +34,7 @@ def softmax_regression(data, binary_true=None):
     for t, yi in zip(T, y):
         t[yi] = 1
 
-    N_iterations = 4
+    N_iterations = 10
 
     eta = 0.001
     W = 0.1 * np.random.randn(n, N)
@@ -66,6 +66,6 @@ def _gradient(X, W, T, m, N):
         [np.sum([(T - _softmax(X, W, N))[i, k] * X[i] for i in range(m)], axis=0) for k in range(N)])
 
 
-def _softmax(X, W, N):
+def _softmax(X, W):
     a = np.dot(X, W)
     return np.exp(a) / np.sum(np.exp(a), axis=1, keepdims=True)
