@@ -68,4 +68,4 @@ def _gradient(X, W, T, m, N):
 
 def _softmax(X, W, N):
     a = np.dot(X, W)
-    return np.exp(a) / np.repeat(np.sum(np.exp(a), axis=1, keepdims=True), N, axis=1)
+    return np.exp(a) / np.sum(np.exp(a), axis=1, keepdims=True)
