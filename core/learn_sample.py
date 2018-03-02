@@ -35,12 +35,12 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
                          'This can \neither beas a dict or '
                          'pickled dict of form:\n{}'.format(dct_form))
 
-    mapping = {'softmax': softmax_regression(data, binary_true='I'),
-               'neural_net': neural_net()}
+    mapping = {'softmax': softmax_regression(data),
+               'neural_net': neural_net(data)}
 
     try:
         cls = mapping[alg]
-        results = cls(data)
+        results = cls()
 
     except KeyError:
         print('Invalid satellite key: "{}". available keys = {}'.format
