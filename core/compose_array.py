@@ -29,11 +29,12 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def load_irrigation_data(shapefile, rasters, pickle_path=None):
+def load_irrigation_data(shapefile, rasters, pickle_path=None, nlcd_path=None):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
     Keyword Arguments:
+    :param nlcd_path: 
     :param pickle_path: 
     :param rasters: 
     :param shapefile: .shp file from which point locations will be taken.
