@@ -29,11 +29,13 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def load_irrigation_data(shapefile, rasters, pickle_path=None, nlcd_path=None):
+def load_irrigation_data(shapefile, rasters, pickle_path=None,
+                         nlcd_path=None, target_shapefiles=None):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
     Keyword Arguments:
+    :param target_shapefiles: 
     :param nlcd_path: 
     :param pickle_path: 
     :param rasters: 
@@ -45,25 +47,18 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None, nlcd_path=None):
     """
 
     df = None
-    rasters = raster_paths(rasters)
+    target = None
 
-    first = True
+    target = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
+                                  target_shapefile=target_shapefiles)
+    df = DataFrame(target)
+
+    rasters = raster_paths(rasters)
     for r in rasters:
         for b in ['3', '4', '5', '10']:
             if r.endswith('B{}.TIF'.format(b)):
-
-                if first:
-                    # build DataFrame and acquire target (shapefile) point values
-                    # along with first raster point values
-                    target, band_series = point_extract(r, shapefile,
-                                                        get_point_attrs=True)
-                    df = DataFrame(band_series)
-                    first = False
-
-                else:
-                    # then just get point values from raster
-                    band_series = point_extract(r, shapefile)
-                    df = df.join(band_series, how='outer')
+                band_series = point_raster_extract(r, shapefile)
+                df = df.join(band_series, how='outer')
 
     # combined = df.join(target, how='outer')
     # combined[combined == 0.] = nan
@@ -99,7 +94,32 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_extract(raster, points, get_point_attrs=False):
+def point_target_extract(points, nlcd_path=None, target_shapefile=None):
+
+    data = Series()
+    point_data = {}
+
+    with fopen(target_shapefile, 'r') as target_src:
+        for t_feature in target_src:
+
+
+        with fopen(points, 'r') as src:
+            for feature in src:
+                name = feature['id']
+                proj_coords = feature['geometry']['coordinates']
+                point_data[name] = {'coords': proj_coords}
+                point_crs = src.profile['crs']['init']
+
+    with rasopen(nlcd_path, 'r') as rsrc:
+        rass_arr = rsrc.read()
+        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+        affine = rsrc.affine
+        raster_crs = rsrc.profile['crs']['init']
+
+    return data
+
+
+def point_raster_extract(raster, points, get_point_attrs=False):
     """ Get point values from a raster.
     
     :param get_point_attrs: 
@@ -121,7 +141,6 @@ def point_extract(raster, points, get_point_attrs=False):
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
             point_data[name] = {'coords': proj_coords}
-            point_data[name]['land_type'] = feature['properties']['LType']
             point_crs = src.profile['crs']['init']
 
     with rasopen(raster, 'r') as rsrc:
@@ -155,6 +174,7 @@ def _point_attrs(pt_data, index):
         target.iloc[int(key)] = pt_data[key]['land_type']
     return target
 
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
@@ -162,6 +182,9 @@ if __name__ == '__main__':
     shape = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'pick.pickle')
-    data = load_irrigation_data(shape, images, pickle_path=p_path)
+    nlcd = os.path.join(montana, 'nlcd_Z12.tif')
+    flu = os.path.join(montana, 'OE_Shapefiles', 'FLU_2017_Irrig.shp')
+    data = load_irrigation_data(shape, images, pickle_path=p_path, nlcd_path=nlcd,
+                                target_shapefiles=flu)
 
 # ========================= EOF ====================================================================

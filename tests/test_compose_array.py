@@ -19,7 +19,7 @@ import unittest
 from fiona import open as fopen
 from rasterio import open as rasopen
 
-from core.compose_array import point_extract
+from core.compose_array import point_raster_extract
 
 
 class TestPointExtract(unittest.TestCase):
