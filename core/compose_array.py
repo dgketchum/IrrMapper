@@ -18,10 +18,10 @@ import os
 import pickle
 
 from pandas import DataFrame, Series, Index
-from numpy import nan
 
 from fiona import open as fopen
 from rasterio import open as rasopen
+from shapely.geometry import shape
 
 '''
 This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
@@ -95,20 +95,18 @@ def recursive_file_gen(mydir):
 
 
 def point_target_extract(points, nlcd_path=None, target_shapefile=None):
-
     data = Series()
     point_data = {}
 
-    with fopen(target_shapefile, 'r') as target_src:
-        for t_feature in target_src:
+    points = ([pt for pt in fopen(points)])
 
-
-        with fopen(points, 'r') as src:
-            for feature in src:
-                name = feature['id']
-                proj_coords = feature['geometry']['coordinates']
-                point_data[name] = {'coords': proj_coords}
-                point_crs = src.profile['crs']['init']
+    with fopen(target_shapefile, 'r') as target:
+        for poly in target:
+            print(poly)
+            for i, pt in enumerate(points):
+                point = shape(pt['geometry'])
+                if point.within(shape(poly['geometry'])):
+                    print(i, shape(points[i]['geometry']))
 
     with rasopen(nlcd_path, 'r') as rsrc:
         rass_arr = rsrc.read()
@@ -179,12 +177,12 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat', 'LC8_39_27')
-    shape = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
+    centroids = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'pick.pickle')
     nlcd = os.path.join(montana, 'nlcd_Z12.tif')
-    flu = os.path.join(montana, 'OE_Shapefiles', 'FLU_2017_Irrig.shp')
-    data = load_irrigation_data(shape, images, pickle_path=p_path, nlcd_path=nlcd,
+    flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_Irrigation_Z12.shp')
+    data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
                                 target_shapefiles=flu)
 
 # ========================= EOF ====================================================================
