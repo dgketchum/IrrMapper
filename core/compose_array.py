@@ -165,7 +165,7 @@ if __name__ == '__main__':
     images = os.path.join(montana, 'landsat', 'LC8_39_27')
     shape = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'pick.pickle')
+    p_path = os.path.join(spatial, 'Sun_test.pickle')
     data = load_irrigation_data(shape, images, pickle_path=p_path)
 
 # ========================= EOF ====================================================================
