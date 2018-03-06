@@ -17,12 +17,12 @@
 import os
 import pickle
 
-from core.softmax import softmax_regression
+from core.tf_softmax import softmax
 from core.neural_network import neural_net
 from core.prep_structured_data import StructuredData
 
-def classify(alg='softmax', data=None, path_to_pickled=None):
 
+def classify(alg='softmax', data=None, path_to_pickled=None):
     if data:
         pass
     elif path_to_pickled:
@@ -37,12 +37,12 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
 
     data = StructuredData(data)
 
-    mapping = {'softmax': softmax_regression(data),
-               'neural_net': neural_net(data)}
+    mapping = {'softmax': softmax,
+               'neural_net': neural_net}
 
     try:
         cls = mapping[alg]
-        results = cls()
+        results = cls(data)
 
     except KeyError:
         print('Invalid satellite key: "{}". available keys = {}'.format

@@ -16,13 +16,14 @@
 
 import os
 import numpy as np
+from pandas import DataFrame, get_dummies
 
 
 class StructuredData(object):
     def __init__(self, data, binary_true=False):
         self.data = data
 
-        self.x = self.data['data']
+        self.x = self.data['data'].astype(np.float32)
         y_strings = self.data['target_values']
 
         self.classes = self.data['classes']
@@ -35,6 +36,8 @@ class StructuredData(object):
         if binary_true:
             self.y[y_strings == binary_true] = 1
             self.y[y_strings != binary_true] = 0
+
+        self.one_hot = get_dummies(self.y).values
 
 
 if __name__ == '__main__':
