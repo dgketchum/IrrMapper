@@ -17,11 +17,8 @@
 import os
 import numpy as np
 import tensorflow as tf
+from pandas import get_dummies
 from sklearn.model_selection import train_test_split
-
-
-# from sklearn.preprocessing import scale, normalize
-# from sklearn.metrics import confusion_matrix, accuracy_score
 
 
 def softmax(data):
@@ -43,7 +40,9 @@ def softmax(data):
     d_test, d_validate, y_test, y_validate = train_test_split(d_test, y_test, test_size=0.50,
                                                               random_state=None)
 
-    y = tf.one_hot(indices=y, depth=len(data.classes))
+    y = get_dummies(y).values
+    y_validate = get_dummies(y_validate).values
+    y_test = get_dummies(y_test).values
 
     batch_size = int(np.floor(d.shape[0] / 10))
     graph = tf.Graph()
@@ -82,7 +81,7 @@ def softmax(data):
             offset = np.random.randint(0, y.shape[0] - batch_size - 1)
 
             # Generate a minibatch.
-            batch_data = tf_train_dataset[offset:(offset + batch_size), :]
+            batch_data = d[offset:(offset + batch_size), :]
             batch_labels = y[offset:(offset + batch_size), :]
 
             # Prepare the feed dict
