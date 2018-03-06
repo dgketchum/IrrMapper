@@ -15,15 +15,54 @@
 # =============================================================================================
 
 import os
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
+# from sklearn.preprocessing import scale, normalize
+# from sklearn.metrics import confusion_matrix, accuracy_score
 
 
 def softmax(data):
+    '''
+    :param data: Use the prep_structured_data.StructuredData class.
+    :return:
+    '''
+    classes = data.classes
+    x = data.x
+    m = data.x.shape[0]
+    n = data.x.shape[1]
+    y = data.y
+    eta = 0.05
+    batch_size = m / 10.
+    epochs = 10000
 
-    classes = len(data['classes'])
-    m = data.shape[0]
-    n = data.shape[1]
-    y =
-    pass
+    d, d_test, y, y_test = train_test_split(x, y, test_size=0.50,
+                                            random_state=None)
+    d_test, d_validate, y_test, y_validate = train_test_split(d_test, y_test, test_size=0.50,
+                                                              random_state=None)
+
+    graph = tf.Graph()
+    with graph.as_default():
+        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, m))
+        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, n))
+        tf_valid_dataset = tf.constant(d_validate)
+        tf_test_dataset = tf.constant(d_test)
+
+        weights = tf.Variable(tf.truncated_normal([m, n]))
+        biases = tf.Variable(tf.zeros([n]))
+
+        logits = tf.matmul(tf_train_dataset, weights) + biases
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+                            labels=tf_train_labels, logits=logits))
+
+        optimizer = tf.train.GradientDescentOptimizer(eta).minimize(loss)
+
+        train_prediction = tf.nn.softmax(logits)
+        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights) + biases)
+        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights) + biases)
+
+        pass
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
