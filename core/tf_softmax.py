@@ -18,6 +18,8 @@ import os
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+
+
 # from sklearn.preprocessing import scale, normalize
 # from sklearn.metrics import confusion_matrix, accuracy_score
 
@@ -28,6 +30,7 @@ def softmax(data):
     :return:
     '''
 
+    N = len(data.classes)
     x = data.x
     m = data.x.shape[0]
     n = data.x.shape[1]
@@ -40,20 +43,22 @@ def softmax(data):
     d_test, d_validate, y_test, y_validate = train_test_split(d_test, y_test, test_size=0.50,
                                                               random_state=None)
 
-    batch_size = d.shape[0] / 10
+    y = tf.one_hot(indices=y, depth=len(data.classes))
+
+    batch_size = int(np.floor(d.shape[0] / 10))
     graph = tf.Graph()
     with graph.as_default():
-        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, d.shape[0]))
-        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, n))
+        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, n))
+        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, N))
         tf_valid_dataset = tf.constant(d_validate)
         tf_test_dataset = tf.constant(d_test)
 
-        weights = tf.Variable(tf.truncated_normal([m, n]))
-        biases = tf.Variable(tf.zeros([n]))
+        weights = tf.Variable(tf.truncated_normal([n, N]))
+        biases = tf.Variable(tf.zeros([N]))
 
         logits = tf.matmul(tf_train_dataset, weights) + biases
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-                            labels=tf_train_labels, logits=logits))
+            labels=tf_train_labels, logits=logits))
 
         optimizer = tf.train.GradientDescentOptimizer(eta).minimize(loss)
 
@@ -74,31 +79,29 @@ def softmax(data):
 
         for step in range(epochs):
             # pick a randomized offset
-            offset = np.random.randint(0, train_labels.shape[0] - batch_size - 1)
+            offset = np.random.randint(0, y.shape[0] - batch_size - 1)
 
             # Generate a minibatch.
-            batch_data = train_dataset[offset:(offset + batch_size), :]
-            batch_labels = train_labels[offset:(offset + batch_size), :]
+            batch_data = tf_train_dataset[offset:(offset + batch_size), :]
+            batch_labels = y[offset:(offset + batch_size), :]
 
             # Prepare the feed dict
-            feed_dict = {tf_train_dataset : batch_data,
-                         tf_train_labels : batch_labels}
+            feed_dict = {tf_train_dataset: batch_data,
+                         tf_train_labels: batch_labels}
 
             # run one step of computation
             _, l, predictions = session.run([optimizer, loss, train_prediction],
                                             feed_dict=feed_dict)
 
-            if (step % 500 == 0):
+            if step % 500 == 0:
                 print("Minibatch loss at step {0}: {1}".format(step, l))
                 print("Minibatch accuracy: {:.1f}%".format(
                     accuracy(predictions, batch_labels)))
                 print("Validation accuracy: {:.1f}%".format(
-                    accuracy(valid_prediction.eval(), valid_labels)))
+                    accuracy(valid_prediction.eval(), y_validate)))
 
         print("\nTest accuracy: {:.1f}%".format(
-            accuracy(test_prediction.eval(), test_labels)))
-
-        pass
+            accuracy(test_prediction.eval(), y_test)))
 
 
 if __name__ == '__main__':
