@@ -6,19 +6,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score
 
 def softmax_regression(data, binary_true=None):
 
-    x = data['data']
-    y_strings = data['target_values']
 
-    classes = data['classes']
-    unique, y = np.unique(y_strings, return_inverse=True)
-    class_counts = {x: list(y_strings).count(x) for x in classes}
-    print('Class counts: {}'.format(class_counts))
-    class_map = dict(zip(list(unique), [0, 1, 2, 3]))
-    print('Class integer map: {}'.format(class_map))
-
-    if binary_true:
-        y[y_strings == binary_true] = 1
-        y[y_strings != binary_true] = 0
 
     N = len(classes)
     d, d_test, y, y_test = train_test_split(x, y, test_size=0.33,

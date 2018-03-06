@@ -19,7 +19,7 @@ import pickle
 
 from core.softmax import softmax_regression
 from core.neural_network import neural_net
-
+from core.prep_structured_data import StructuredData
 
 def classify(alg='softmax', data=None, path_to_pickled=None):
 
@@ -32,8 +32,10 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
         dct_form = "'{'classes': target.unique, 'data': numpy.ndarray,\n " \
                    "'target_values': target}'"
         raise ValueError('\nMust provide data for classification.  '
-                         'This can \neither beas a dict or '
+                         'This can \neither be a dict or '
                          'pickled dict of form:\n{}'.format(dct_form))
+
+    data = StructuredData(data)
 
     mapping = {'softmax': softmax_regression(data),
                'neural_net': neural_net(data)}
