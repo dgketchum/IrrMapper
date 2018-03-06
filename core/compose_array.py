@@ -18,10 +18,10 @@ import os
 import pickle
 
 from pandas import DataFrame, Series, Index
-from numpy import nan
 
 from fiona import open as fopen
 from rasterio import open as rasopen
+from shapely.geometry import shape
 
 '''
 This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
@@ -47,24 +47,18 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     """
 
     df = None
-    rasters = raster_paths(rasters)
+    target = None
 
-    first = True
+    target = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
+                                  target_shapefile=target_shapefiles)
+    df = DataFrame(target)
+
+    rasters = raster_paths(rasters)
     for r in rasters:
         for b in ['3', '4', '5', '10']:
             if r.endswith('B{}.TIF'.format(b)):
-
-                if first:
-                    # build DataFrame and acquire target (shapefile) point values
-                    # along with first raster point values
-                    target, band_series = point_raster_extract(r, shapefile, get_point_attrs=True)
-                    df = DataFrame(band_series)
-                    first = False
-
-                else:
-                    # then just get point values from raster
-                    band_series = point_raster_extract(r, shapefile)
-                    df = df.join(band_series, how='outer')
+                band_series = point_raster_extract(r, shapefile)
+                df = df.join(band_series, how='outer')
 
     # combined = df.join(target, how='outer')
     # combined[combined == 0.] = nan
@@ -100,12 +94,32 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_raster_extract(raster, points, get_point_attrs=False,
-                         nlcd_path=None, target_shapefiles=None):
+def point_target_extract(points, nlcd_path=None, target_shapefile=None):
+    data = Series()
+    point_data = {}
+
+    points = ([pt for pt in fopen(points)])
+
+    with fopen(target_shapefile, 'r') as target:
+        for poly in target:
+            print(poly)
+            for i, pt in enumerate(points):
+                point = shape(pt['geometry'])
+                if point.within(shape(poly['geometry'])):
+                    print(i, shape(points[i]['geometry']))
+
+    with rasopen(nlcd_path, 'r') as rsrc:
+        rass_arr = rsrc.read()
+        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+        affine = rsrc.affine
+        raster_crs = rsrc.profile['crs']['init']
+
+    return data
+
+
+def point_raster_extract(raster, points, get_point_attrs=False):
     """ Get point values from a raster.
     
-    :param target_shapefiles: 
-    :param nlcd_path: 
     :param get_point_attrs: 
     :param raster: local_raster
     :param points: Shapefile of points.
@@ -125,7 +139,6 @@ def point_raster_extract(raster, points, get_point_attrs=False,
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
             point_data[name] = {'coords': proj_coords}
-            point_data[name]['land_type'] = feature['properties']['LType']
             point_crs = src.profile['crs']['init']
 
     with rasopen(raster, 'r') as rsrc:
@@ -159,13 +172,17 @@ def _point_attrs(pt_data, index):
         target.iloc[int(key)] = pt_data[key]['land_type']
     return target
 
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat', 'LC8_39_27')
-    shape = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
+    centroids = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'Sun_test.pickle')
-    data = load_irrigation_data(shape, images, pickle_path=p_path)
+    p_path = os.path.join(spatial, 'pick.pickle')
+    nlcd = os.path.join(montana, 'nlcd_Z12.tif')
+    flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_Irrigation_Z12.shp')
+    data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
+                                target_shapefiles=flu)
 
 # ========================= EOF ====================================================================
