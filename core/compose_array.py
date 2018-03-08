@@ -50,8 +50,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     df = None
     target = None
 
-    target = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
-                                  target_shapefile=target_shapefiles)
+    target = point_target_extract(points=shapefile, nlcd_path=nlcd_path, target_shapefile=target_shapefiles)
     df = DataFrame(target)
 
     rasters = raster_paths(rasters)
@@ -95,41 +94,51 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_target_extract(points, nlcd_path=None, target_shapefile=None):
-
-    data = Series()
+def point_target_extract(points, nlcd_path, target_shapefile=None):
+    data = DataFrame()
     point_data = {}
     with fopen(points, 'r') as src:
         for feature in src:
             name = feature['id']
             proj_coords = feature['geometry']['coordinates']
-            point_data[name] = {'coords': proj_coords}
+            point_data[name] = {'point': feature['geometry'],
+                                'coords': proj_coords}
             # point_crs = src.profile['crs']['init']
 
+    for id, val in point_data.items():
+        if int(id) < 101:
+            pt = shape(val['point'])
+            with fopen(target_shapefile, 'r') as target_src:
+                has_attr = False
+                for t_feature in target_src:
+                    polygon = t_feature['geometry']
+                    if pt.within(shape(polygon)):
+                        print('bingo: pt id {}, poly id: {} props: {}'
+                              .format(id, t_feature['id'], t_feature['properties']))
+                        props = t_feature['properties']
+                        point_data[id]['properties'] = {'IType': props['IType'],
+                                                        'LType': props['LType']}
+                        has_attr = True
+                        break
 
-    for id, val in point_data:
-        pt = val['coords']
-        with fopen(target_shapefile, 'r') as target_src:
-            for t_feature in target_src:
-                if pt.within(shape(t_feature['geometry'])):
-                    print('bingo: {}, {}, {}'.format(id, pt, t_feature))
+                if not has_attr:
+                    print('id {} has no FLU attr'.format(id))
+                    with rasopen(nlcd_path, 'r') as rsrc:
+                        rass_arr = rsrc.read()
+                        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+                        affine = rsrc.affine
 
-
-
-
-    with rasopen(nlcd_path, 'r') as rsrc:
-        rass_arr = rsrc.read()
-        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-        affine = rsrc.affine
-        raster_crs = rsrc.profile['crs']['init']
-
+                        x, y = val['coords']
+                        col, row = ~affine * (x, y)
+                        raster_val = rass_arr[int(row), int(col)]
+                        point_data[id]['properties'] = {'IType': None,
+                                                        'LType': str(raster_val)}
     return data
 
 
-def point_raster_extract(raster, points, get_point_attrs=False):
+def point_raster_extract(raster, points):
     """ Get point values from a raster.
 
-    :param get_point_attrs:
     :param raster: local_raster
     :param points: Shapefile of points.
     :return: Dict of coords, row/cols, and values of raster at that point.
@@ -168,10 +177,6 @@ def point_raster_extract(raster, points, get_point_attrs=False):
         raster_val = rass_arr[int(row), int(col)]
         point_series.iloc[int(key)] = float(raster_val)
 
-    if get_point_attrs:
-        target_series = _point_attrs(point_data, index)
-        return target_series, point_series
-
     return point_series
 
 
@@ -184,13 +189,16 @@ def _point_attrs(pt_data, index):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
+
     montana = os.path.join(home, 'images', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat', 'LC8_39_27')
-    centroids = os.path.join(montana, 'SunAreaTest', 'hex_centoids_1000m_intersect_Z12_LItype.shp')
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'pick.pickle')
+    centroids = os.path.join(montana, 'P39R27_Test', 'centroids_Z12.shp')
     nlcd = os.path.join(montana, 'nlcd_Z12.tif')
-    flu = os.path.join(montana, 'OE_Shapefiles', 'FLU_2017_Irrig.shp')
+    flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
+
+    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
+    p_path = os.path.join(spatial, 'P39R27_Test.pkl')
+
     data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
                                 target_shapefiles=flu)
 
