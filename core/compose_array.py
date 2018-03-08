@@ -17,8 +17,7 @@
 import os
 import pickle
 
-from pandas import DataFrame, Series, Index
-from numpy import nan
+from pandas import DataFrame, Series
 
 from fiona import open as fopen
 from rasterio import open as rasopen
@@ -47,25 +46,20 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     :return: numpy.ndarray
     """
 
-    df = None
-    target = None
-
-    target = point_target_extract(points=shapefile, nlcd_path=nlcd_path, target_shapefile=target_shapefiles)
-    df = DataFrame(target)
+    df = point_target_extract(points=shapefile, nlcd_path=nlcd_path, target_shapefile=target_shapefiles)
 
     rasters = raster_paths(rasters)
     for r in rasters:
         for b in ['3', '4', '5', '10']:
             if r.endswith('B{}.TIF'.format(b)):
-                band_series = point_raster_extract(r, shapefile)
+                band_series = point_raster_extract(r, df)
                 df = df.join(band_series, how='outer')
 
-    # combined = df.join(target, how='outer')
-    # combined[combined == 0.] = nan
-    # combined.dropna(axis=0, how='any', inplace=True)
 
-    data = {'classes': target.unique(), 'data': df.values,
-            'target_values': target.values}
+    target_values = Series(df.LTYPE).values
+    df.drop(['X', 'Y', 'ID', 'ITYPE', 'LTYPE'], inplace=True, axis=1)
+    data = {'classes': df.columns.values, 'data': df.values,
+            'target_values': target_values}
 
     if pickle_path:
         with open(pickle_path, 'wb') as handle:
@@ -95,7 +89,6 @@ def recursive_file_gen(mydir):
 
 
 def point_target_extract(points, nlcd_path, target_shapefile=None):
-    data = DataFrame()
     point_data = {}
     with fopen(points, 'r') as src:
         for feature in src:
@@ -105,8 +98,8 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
                                 'coords': proj_coords}
             # point_crs = src.profile['crs']['init']
 
-    for id, val in point_data.items():
-        if int(id) < 101:
+    for pt_id, val in point_data.items():
+        if 5792 < int(pt_id) < 5810:
             pt = shape(val['point'])
             with fopen(target_shapefile, 'r') as target_src:
                 has_attr = False
@@ -114,15 +107,16 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
                     polygon = t_feature['geometry']
                     if pt.within(shape(polygon)):
                         print('bingo: pt id {}, poly id: {} props: {}'
-                              .format(id, t_feature['id'], t_feature['properties']))
+                              .format(pt_id, t_feature['id'], t_feature['properties']))
                         props = t_feature['properties']
-                        point_data[id]['properties'] = {'IType': props['IType'],
-                                                        'LType': props['LType']}
+                        point_data[pt_id]['properties'] = {'IType': props['IType'],
+                                                           'LType': props['LType']}
+
                         has_attr = True
                         break
 
                 if not has_attr:
-                    print('id {} has no FLU attr'.format(id))
+                    print('id {} has no FLU attr'.format(pt_id))
                     with rasopen(nlcd_path, 'r') as rsrc:
                         rass_arr = rsrc.read()
                         rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
@@ -131,8 +125,31 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
                         x, y = val['coords']
                         col, row = ~affine * (x, y)
                         raster_val = rass_arr[int(row), int(col)]
-                        point_data[id]['properties'] = {'IType': None,
-                                                        'LType': str(raster_val)}
+                        point_data[pt_id]['properties'] = {'IType': None,
+                                                           'LType': str(raster_val)}
+    pt_d = {}
+    for pt_id, val in point_data.items():
+        try:
+            x = val['properties']
+            pt_d[pt_id] = val
+        except KeyError:
+            pass
+
+    idd = []
+    ltype = []
+    itype = []
+    x = []
+    y = []
+    for pt_id, val in pt_d.items():
+        idd.append(pt_id)
+        ltype.append(val['properties']['LType'])
+        itype.append(val['properties']['IType'])
+        x.append(val['coords'][0])
+        y.append(val['coords'][1])
+    dct = dict(zip(['ID', 'LTYPE', 'ITYPE', 'X', 'Y'],
+                   [idd, ltype, itype, x, y]))
+    data = DataFrame(data=dct)
+
     return data
 
 
@@ -143,7 +160,6 @@ def point_raster_extract(raster, points):
     :param points: Shapefile of points.
     :return: Dict of coords, row/cols, and values of raster at that point.
     """
-    point_data = {}
 
     basename = os.path.basename(raster)
     name_split = basename.split(sep='_')
@@ -152,32 +168,22 @@ def point_raster_extract(raster, points):
     column_name = '{}_{}'.format(date_string, band)
     print('raster {}'.format(column_name))
 
-    with fopen(points, 'r') as src:
-        for feature in src:
-            name = feature['id']
-            proj_coords = feature['geometry']['coordinates']
-            point_data[name] = {'coords': proj_coords}
-            point_crs = src.profile['crs']['init']
-
     with rasopen(raster, 'r') as rsrc:
         rass_arr = rsrc.read()
         rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
         affine = rsrc.affine
-        raster_crs = rsrc.profile['crs']['init']
 
-    if point_crs != raster_crs:
-        raise ValueError('Points and raster are not in same coordinate system.')
+    s = Series(index=range(0, points.shape[0]), name=column_name)
+    for ind, row in points.iterrows():
+        x, y = row['X'], row['Y']
+        c, r = ~affine * (x, y)
+        try:
+            raster_val = rass_arr[int(r), int(c)]
+            s[ind] = float(raster_val)
+        except IndexError:
+            s[ind] = None
 
-    index = Index(range(len(point_data)))
-    point_series = Series(name=column_name, index=index)
-
-    for key, val in point_data.items():
-        x, y = val['coords']
-        col, row = ~affine * (x, y)
-        raster_val = rass_arr[int(row), int(col)]
-        point_series.iloc[int(key)] = float(raster_val)
-
-    return point_series
+    return s
 
 
 def _point_attrs(pt_data, index):
