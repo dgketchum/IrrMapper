@@ -18,6 +18,7 @@ import os
 import pickle
 
 from pandas import DataFrame, Series, Index
+from numpy import nan
 
 from fiona import open as fopen
 from rasterio import open as rasopen
@@ -45,6 +46,9 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     # :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
     :return: numpy.ndarray
     """
+
+    df = None
+    target = None
 
     target = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
                                   target_shapefile=target_shapefiles)
@@ -95,17 +99,23 @@ def point_target_extract(points, nlcd_path=None, target_shapefile=None):
 
     data = Series()
     point_data = {}
+    with fopen(points, 'r') as src:
+        for feature in src:
+            name = feature['id']
+            proj_coords = feature['geometry']['coordinates']
+            point_data[name] = {'coords': proj_coords}
+            # point_crs = src.profile['crs']['init']
 
-    points = ([pt for pt in fopen(points)])
 
-    with fopen(target_shapefile, 'r') as target:
-        x = 0
-        # for poly in target:
-        #     print(poly)
-        #     for i, pt in enumerate(points):
-        #         point = shape(pt['geometry'])
-        #         if point.within(shape(poly['geometry'])):
-        #             print(i, shape(points[i]['geometry']))
+    for id, val in point_data:
+        pt = val['coords']
+        with fopen(target_shapefile, 'r') as target_src:
+            for t_feature in target_src:
+                if pt.within(shape(t_feature['geometry'])):
+                    print('bingo: {}, {}, {}'.format(id, pt, t_feature))
+
+
+
 
     with rasopen(nlcd_path, 'r') as rsrc:
         rass_arr = rsrc.read()
@@ -118,8 +128,8 @@ def point_target_extract(points, nlcd_path=None, target_shapefile=None):
 
 def point_raster_extract(raster, points, get_point_attrs=False):
     """ Get point values from a raster.
-    
-    :param get_point_attrs: 
+
+    :param get_point_attrs:
     :param raster: local_raster
     :param points: Shapefile of points.
     :return: Dict of coords, row/cols, and values of raster at that point.
@@ -180,7 +190,7 @@ if __name__ == '__main__':
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'pick.pickle')
     nlcd = os.path.join(montana, 'nlcd_Z12.tif')
-    flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_Irrigation_Z12.shp')
+    flu = os.path.join(montana, 'OE_Shapefiles', 'FLU_2017_Irrig.shp')
     data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
                                 target_shapefiles=flu)
 
