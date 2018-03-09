@@ -44,7 +44,7 @@ def softmax(data):
     y_validate = get_dummies(y_validate).values
     y_test = get_dummies(y_test).values
 
-    batch_size = int(np.floor(d.shape[0] / 10))
+    batch_size = int(np.floor(d.shape[0] / 3))
     graph = tf.Graph()
     with graph.as_default():
         tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, n))
