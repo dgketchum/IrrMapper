@@ -23,6 +23,9 @@ from fiona import open as fopen
 from rasterio import open as rasopen
 from shapely.geometry import shape
 
+from spatial.nlcd_map import map_nlcd_to_flu, nlcd_value
+
+
 '''
 This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
 function `compose_data_array` will return a numpy.ndarray object ready for a learning algorithm.  
@@ -55,10 +58,12 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
                 band_series = point_raster_extract(r, df)
                 df = df.join(band_series, how='outer')
 
-
-    target_values = Series(df.LTYPE).values
+    target_series = Series(df.LTYPE)
+    map_nlcd_to_flu(target_series)
+    target_values = target_series.values
     df.drop(['X', 'Y', 'ID', 'ITYPE', 'LTYPE'], inplace=True, axis=1)
-    data = {'classes': df.columns.values, 'data': df.values,
+
+    data = {'features': df.columns.values, 'data': df.values,
             'target_values': target_values}
 
     if pickle_path:
@@ -99,48 +104,43 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
             # point_crs = src.profile['crs']['init']
 
     for pt_id, val in point_data.items():
-        if 5792 < int(pt_id) < 5810:
-            pt = shape(val['point'])
-            with fopen(target_shapefile, 'r') as target_src:
-                has_attr = False
-                for t_feature in target_src:
-                    polygon = t_feature['geometry']
-                    if pt.within(shape(polygon)):
-                        print('bingo: pt id {}, poly id: {} props: {}'
-                              .format(pt_id, t_feature['id'], t_feature['properties']))
-                        props = t_feature['properties']
-                        point_data[pt_id]['properties'] = {'IType': props['IType'],
-                                                           'LType': props['LType']}
+        pt = shape(val['point'])
+        with fopen(target_shapefile, 'r') as target_src:
+            has_attr = False
+            for t_feature in target_src:
+                polygon = t_feature['geometry']
+                if pt.within(shape(polygon)):
+                    print('bingo: pt id {}, poly id: {} props: {}'
+                          .format(pt_id, t_feature['id'], t_feature['properties']))
+                    props = t_feature['properties']
+                    point_data[pt_id]['properties'] = {'IType': props['IType'],
+                                                       'LType': props['LType']}
 
-                        has_attr = True
-                        break
+                    has_attr = True
+                    break
 
-                if not has_attr:
-                    print('id {} has no FLU attr'.format(pt_id))
-                    with rasopen(nlcd_path, 'r') as rsrc:
-                        rass_arr = rsrc.read()
-                        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-                        affine = rsrc.affine
+            if not has_attr:
+                with rasopen(nlcd_path, 'r') as rsrc:
+                    rass_arr = rsrc.read()
+                    rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+                    affine = rsrc.affine
 
-                        x, y = val['coords']
-                        col, row = ~affine * (x, y)
-                        raster_val = rass_arr[int(row), int(col)]
-                        point_data[pt_id]['properties'] = {'IType': None,
-                                                           'LType': str(raster_val)}
-    pt_d = {}
-    for pt_id, val in point_data.items():
-        try:
-            x = val['properties']
-            pt_d[pt_id] = val
-        except KeyError:
-            pass
+                    x, y = val['coords']
+                    col, row = ~affine * (x, y)
+                    raster_val = rass_arr[int(row), int(col)]
+                    ltype_dct = {'IType': None,
+                                 'LType': str(raster_val)}
+                    point_data[pt_id]['properties'] = ltype_dct
+                    print('id {} has no FLU, '
+                          'nlcd {}'.format(pt_id,
+                                           nlcd_value(ltype_dct['LType'])))
 
     idd = []
     ltype = []
     itype = []
     x = []
     y = []
-    for pt_id, val in pt_d.items():
+    for pt_id, val in point_data.items():
         idd.append(pt_id)
         ltype.append(val['properties']['LType'])
         itype.append(val['properties']['IType'])
@@ -148,9 +148,9 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
         y.append(val['coords'][1])
     dct = dict(zip(['ID', 'LTYPE', 'ITYPE', 'X', 'Y'],
                    [idd, ltype, itype, x, y]))
-    data = DataFrame(data=dct)
+    df = DataFrame(data=dct)
 
-    return data
+    return df
 
 
 def point_raster_extract(raster, points):

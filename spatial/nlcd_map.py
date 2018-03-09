@@ -15,7 +15,6 @@
 # =============================================================================================
 
 import os
-from pandas import DataFrame
 
 NLCD_KEY = {'11': 'water',
             '12': 'ice_snow',
@@ -62,6 +61,10 @@ NLCD_MAP = {'11': 'W',  # 'water',
 
 def nlcd_key():
     return NLCD_MAP
+
+
+def nlcd_value(key):
+    return NLCD_KEY[key]
 
 
 def map_nlcd_to_flu(dataframe):

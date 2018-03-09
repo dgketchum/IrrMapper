@@ -52,7 +52,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'Sun_test.pickle')
+    p_path = os.path.join(spatial, 'P39R27_Quarter_Test.pkl')
     classify(alg='softmax', path_to_pickled=p_path)
 
 
