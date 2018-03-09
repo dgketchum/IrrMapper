@@ -16,7 +16,7 @@
 
 import os
 import numpy as np
-from pandas import DataFrame, get_dummies
+from pandas import get_dummies
 
 
 class StructuredData(object):
@@ -26,8 +26,8 @@ class StructuredData(object):
         self.x = self.data['data'].astype(np.float32)
         y_strings = self.data['target_values']
 
-        self.classes = self.data['features']
         unique, self.y = np.unique(y_strings, return_inverse=True)
+        self.classes = unique
         self.class_counts = {x: list(y_strings).count(x) for x in self.classes}
         print('Class counts: {}'.format(self.class_counts))
         self.class_map = dict(zip(list(unique), list(range(len(unique)))))
