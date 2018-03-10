@@ -203,7 +203,7 @@ if __name__ == '__main__':
     flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
 
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'P39R27_Test_KD.pkl')
+    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
 
     data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
                                 target_shapefiles=flu)
