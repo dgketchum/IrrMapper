@@ -46,7 +46,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
 
     except KeyError:
         print('Invalid satellite key: "{}". available keys = {}'.format
-              (alg, ','.join(mapping.keys())))
+              (alg, ', '.join(mapping.keys())))
 
 
 if __name__ == '__main__':
