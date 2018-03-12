@@ -19,6 +19,7 @@ import numpy as np
 import tensorflow as tf
 from pandas import get_dummies
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import minmax_scale
 
 
 def neural_net(data):
@@ -29,29 +30,30 @@ def neural_net(data):
 
     N = len(data.classes)
     x = data.x
+    x = minmax_scale(x)
     m = data.x.shape[0]
     n = data.x.shape[1]
     y = data.y
     eta = 0.05
     epochs = 10000
 
-    d, d_test, y, y_test = train_test_split(x, y, test_size=0.50,
+    x, x_test, y, y_test = train_test_split(x, y, test_size=0.50,
                                             random_state=None)
-    d_test, d_validate, y_test, y_validate = train_test_split(d_test, y_test, test_size=0.50,
+    x_test, x_validate, y_test, y_validate = train_test_split(x_test, y_test, test_size=0.50,
                                                               random_state=None)
 
     y = get_dummies(y).values
     y_validate = get_dummies(y_validate).values
     y_test = get_dummies(y_test).values
 
-    batch_size = int(np.floor(d.shape[0] / 10))
+    batch_size = int(np.floor(x.shape[0] / 10))
     graph = tf.Graph()
 
     with graph.as_default():
         tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, n))
         tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, N))
-        tf_valid_dataset = tf.constant(d_validate)
-        tf_test_dataset = tf.constant(d_test)
+        tf_valid_dataset = tf.constant(x_validate)
+        tf_test_dataset = tf.constant(x_test)
 
         weights = tf.Variable(tf.truncated_normal([n, N]))
         biases = tf.Variable(tf.zeros([N]))
@@ -76,7 +78,7 @@ def neural_net(data):
             offset = np.random.randint(0, y.shape[0] - batch_size - 1)
 
             # Generate a minibatch.
-            batch_data = d[offset:(offset + batch_size), :]
+            batch_data = x[offset:(offset + batch_size), :]
             batch_labels = y[offset:(offset + batch_size), :]
 
             # Prepare the feed dict
