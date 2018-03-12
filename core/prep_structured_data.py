@@ -27,15 +27,22 @@ class StructuredData(object):
         y_strings = self.data['target_values']
 
         unique, self.y = np.unique(y_strings, return_inverse=True)
-        self.classes = unique
-        self.class_counts = {x: list(y_strings).count(x) for x in self.classes}
-        print('Class counts: {}'.format(self.class_counts))
-        self.class_map = dict(zip(list(unique), list(range(len(unique)))))
-        print('Class integer map: {}'.format(self.class_map))
 
         if binary_true:
+
             self.y[y_strings == binary_true] = 1
             self.y[y_strings != binary_true] = 0
+            y_strings[y_strings != binary_true] = '{}{}'.format('N', binary_true)
+            unique, _ = np.unique(y_strings, return_inverse=True)
+            self.classes = unique
+            self.class_counts = {x: list(y_strings).count(x) for x in self.classes}
+
+        else:
+            self.classes = unique
+            self.class_counts = {x: list(y_strings).count(x) for x in self.classes}
+            print('Class counts: {}'.format(self.class_counts))
+            self.class_map = dict(zip(list(unique), list(range(len(unique)))))
+            print('Class integer map: {}'.format(self.class_map))
 
         self.one_hot = get_dummies(self.y).values
 
