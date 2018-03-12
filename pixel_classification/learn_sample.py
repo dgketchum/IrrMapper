@@ -17,9 +17,9 @@
 import os
 import pickle
 
-from core.tf_softmax import softmax
-from core.tf_neural_network import neural_net
-from core.prep_structured_data import StructuredData
+from pixel_classification.tf_softmax import softmax
+from pixel_classification.tf_neural_network import neural_net
+from pixel_classification.prep_structured_data import StructuredData
 
 
 def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
