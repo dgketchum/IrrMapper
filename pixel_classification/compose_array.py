@@ -25,7 +25,7 @@ from shapely.geometry import shape
 
 import sys
 cwd = os.getcwd()
-sys.path.append(cwd.replace('core', 'spatial'))
+sys.path.append(cwd.replace('pixel_classification', 'spatial'))
 sys.path.append(cwd)
 from nlcd_map import map_nlcd_to_flu, nlcd_value
 
