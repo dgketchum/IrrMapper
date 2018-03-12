@@ -18,11 +18,11 @@ import os
 import pickle
 
 from core.tf_softmax import softmax
-from core.neural_network import neural_net
+from core.tf_neural_network import neural_net
 from core.prep_structured_data import StructuredData
 
 
-def classify(alg='softmax', data=None, path_to_pickled=None):
+def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
     if data:
         pass
     elif path_to_pickled:
@@ -35,7 +35,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None):
                          'This can \neither be a dict or '
                          'pickled dict of form:\n{}'.format(dct_form))
 
-    data = StructuredData(data)
+    data = StructuredData(data, binary_true=binary)
 
     mapping = {'softmax': softmax,
                'neural_net': neural_net}
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'P39R27_Quarter_Test.pkl')
-    classify(alg='softmax', path_to_pickled=p_path)
+    classify(alg='softmax', path_to_pickled=p_path, binary='I')
 
 
 # ========================= EOF ====================================================================
