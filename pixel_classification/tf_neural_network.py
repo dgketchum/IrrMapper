@@ -34,12 +34,15 @@ def neural_net(data):
     m = data.x.shape[0]
     n = data.x.shape[1]
     y = data.y
+    nodes = 500
     eta = 0.05
     epochs = 10000
+    seed = 128
 
     x, x_test, y, y_test = train_test_split(x, y, test_size=0.50,
                                             random_state=None)
-    x_test, x_validate, y_test, y_validate = train_test_split(x_test, y_test, test_size=0.50,
+    x_test, x_validate, y_test, y_validate = train_test_split(x_test, y_test,
+                                                              test_size=0.50,
                                                               random_state=None)
 
     y = get_dummies(y).values
@@ -55,20 +58,26 @@ def neural_net(data):
         tf_valid_dataset = tf.constant(x_validate)
         tf_test_dataset = tf.constant(x_test)
 
-        weights = tf.Variable(tf.truncated_normal([n, N]))
-        biases = tf.Variable(tf.zeros([N]))
+        weights = {
+            'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed)),
+            'output': tf.Variable(tf.random_normal([nodes, N], seed=seed))}
+        biases = {
+            'hidden': tf.Variable(tf.random_normal([nodes], seed=seed)),
+            'output': tf.Variable(tf.random_normal([N], seed=seed))}
 
-        logits = tf.matmul(tf_train_dataset, weights) + biases
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-            labels=tf_train_labels, logits=logits))
+        hidden_layer = tf.add(tf.matmul(x, weights['hidden']), biases['hidden'])
+        hidden_layer = tf.nn.relu(hidden_layer)
+        output_layer = tf.matmul(hidden_layer, weights['output']) + biases['output']
 
-        optimizer = tf.train.GradientDescentOptimizer(eta).minimize(loss)
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer,
+                                                                      labels=y))
+        optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(cost)
 
-        train_prediction = tf.nn.softmax(logits)
-        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights) + biases)
-        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights) + biases)
+        train_prediction = tf.nn.softmax(output_layer)
+        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights['output']) + biases)
+        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights['output']) + biases)
 
-    with tf.Session(graph=graph) as session:
+    with tf.Session(graph=graph) as sess:
         # initialize weights and biases
         tf.global_variables_initializer().run()
         print("Initialized")
@@ -86,8 +95,8 @@ def neural_net(data):
                          tf_train_labels: batch_labels}
 
             # run one step of computation
-            _, l, predictions = session.run([optimizer, loss, train_prediction],
-                                            feed_dict=feed_dict)
+            _, l, predictions = sess.run([optimizer, cost, train_prediction],
+                                         feed_dict=feed_dict)
 
             if step % 1000 == 0:
                 print("Minibatch loss at step {0}: {1}".format(step, l))
