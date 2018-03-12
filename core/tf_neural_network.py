@@ -66,6 +66,43 @@ def neural_net(data):
         valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights) + biases)
         test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights) + biases)
 
+    with tf.Session(graph=graph) as session:
+        # initialize weights and biases
+        tf.global_variables_initializer().run()
+        print("Initialized")
+
+        for step in range(epochs):
+            # pick a randomized offset
+            offset = np.random.randint(0, y.shape[0] - batch_size - 1)
+
+            # Generate a minibatch.
+            batch_data = d[offset:(offset + batch_size), :]
+            batch_labels = y[offset:(offset + batch_size), :]
+
+            # Prepare the feed dict
+            feed_dict = {tf_train_dataset: batch_data,
+                         tf_train_labels: batch_labels}
+
+            # run one step of computation
+            _, l, predictions = session.run([optimizer, loss, train_prediction],
+                                            feed_dict=feed_dict)
+
+            if step % 1000 == 0:
+                print("Minibatch loss at step {0}: {1}".format(step, l))
+                print("Minibatch accuracy: {:.1f}%".format(
+                    accuracy(predictions, batch_labels)))
+                print("Validation accuracy: {:.1f}%".format(
+                    accuracy(valid_prediction.eval(), y_validate)))
+
+        print("\nTest accuracy: {:.1f}%".format(
+            accuracy(test_prediction.eval(), y_test)))
+
+
+def accuracy(predictions, labels):
+    correctly_predicted = np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
+    accu = (100.0 * correctly_predicted) / predictions.shape[0]
+    return accu
+
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
