@@ -18,7 +18,7 @@ import os
 import pickle
 
 from pixel_classification.tf_softmax import softmax
-from pixel_classification.tf_neural_network import neural_net
+from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.prep_structured_data import StructuredData
 
 
@@ -38,7 +38,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
     data = StructuredData(data, binary_true=binary)
 
     mapping = {'softmax': softmax,
-               'neural_net': neural_net}
+               'neural_net': mlp}
 
     try:
         cls = mapping[alg]
