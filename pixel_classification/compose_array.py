@@ -23,11 +23,12 @@ from fiona import open as fopen
 from rasterio import open as rasopen
 from shapely.geometry import shape
 
-import sys
-cwd = os.getcwd()
-sys.path.append(cwd.replace('pixel_classification', 'spatial'))
-sys.path.append(cwd)
-from nlcd_map import map_nlcd_to_flu, nlcd_value
+# import sys
+# cwd = os.getcwd()
+# sys.path.append(cwd.replace('pixel_classification', 'spatial'))
+# sys.path.append(cwd)
+
+from spatial.nlcd_map import map_nlcd_to_flu, nlcd_value
 
 
 '''
