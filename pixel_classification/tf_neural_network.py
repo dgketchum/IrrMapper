@@ -29,93 +29,70 @@ def neural_net(data):
     """
 
     N = len(data.classes)
-    x = data.x
-    x = minmax_scale(x)
-    m = data.x.shape[0]
+    data.x = minmax_scale(data.x)
     n = data.x.shape[1]
-    y = data.y
     nodes = 500
     eta = 0.05
-    epochs = 10000
+    epochs = 300
     seed = 128
 
-    x, x_test, y, y_test = train_test_split(x, y, test_size=0.50,
-                                            random_state=None)
-    x_test, x_validate, y_test, y_validate = train_test_split(x_test, y_test,
-                                                              test_size=0.50,
-                                                              random_state=None)
+    data.x, x_test, data.y, y_test = train_test_split(data.x, data.y, test_size=0.33,
+                                                      random_state=None)
 
-    y = get_dummies(y).values
-    y_validate = get_dummies(y_validate).values
-    y_test = get_dummies(y_test).values
+    data.y = get_dummies(data.y).values
+    X = tf.placeholder("float", [None, n])
+    Y = tf.placeholder("float", [None, N])
 
-    batch_size = int(np.floor(x.shape[0] / 10))
-    graph = tf.Graph()
+    batch_size = 10
 
-    with graph.as_default():
-        tf_train_dataset = tf.placeholder(tf.float32, shape=(batch_size, n))
-        tf_train_labels = tf.placeholder(tf.float32, shape=(batch_size, N))
-        tf_valid_dataset = tf.constant(x_validate)
-        tf_test_dataset = tf.constant(x_test)
+    weights = {
+        'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed)),
+        'output': tf.Variable(tf.random_normal([nodes, N], seed=seed))}
+    biases = {
+        'hidden': tf.Variable(tf.random_normal([nodes], seed=seed)),
+        'output': tf.Variable(tf.random_normal([N], seed=seed))}
 
-        weights = {
-            'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed)),
-            'output': tf.Variable(tf.random_normal([nodes, N], seed=seed))}
-        biases = {
-            'hidden': tf.Variable(tf.random_normal([nodes], seed=seed)),
-            'output': tf.Variable(tf.random_normal([N], seed=seed))}
+    y_pred = tf.add(tf.matmul(multilayer_perceptron(X, weights['hidden'], biases['hidden']),
+                              weights['output']), biases['output'])
 
-        hidden_layer = tf.add(tf.matmul(x, weights['hidden']), biases['hidden'])
-        hidden_layer = tf.nn.relu(hidden_layer)
-        output_layer = tf.matmul(hidden_layer, weights['output']) + biases['output']
-        logits = tf.matmul(tf_train_dataset, weights['hidden']) + biases
+    loss_op = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=Y))
 
-        cost = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer,
-                                                                     labels=y))
-        optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(cost)
+    optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
-        train_prediction = tf.nn.softmax(logits)
-        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset,
-                                                   weights['hidden']) + biases['hidden'])
-        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset,
-                                                  weights['hidden']) + biases['hidden'])
+    sess = tf.InteractiveSession()
+    init = tf.global_variables_initializer().run()
+    loss = None
 
-    with tf.Session(graph=graph) as sess:
-        # initialize weights and biases
-        tf.global_variables_initializer().run()
-        print("Initialized")
+    for step in range(epochs):
 
-        for step in range(epochs):
-            # pick a randomized offset
-            offset = np.random.randint(0, y.shape[0] - batch_size - 1)
+        offset = np.random.randint(0, data.y.shape[0] - batch_size - 1)
 
-            # Generate a minibatch.
-            batch_data = x[offset:(offset + batch_size), :]
-            batch_labels = y[offset:(offset + batch_size), :]
+        batch_data = data.x[offset:(offset + batch_size), :]
+        batch_labels = data.y[offset:(offset + batch_size), :]
 
-            # Prepare the feed dict
-            feed_dict = {tf_train_dataset: batch_data,
-                         tf_train_labels: batch_labels}
+        feed_dict = {X: batch_data, Y: batch_labels}
 
-            # run one step of computation
-            _, loss, predictions = sess.run([optimizer, cost, train_prediction],
-                                            feed_dict=feed_dict)
+        _, loss = sess.run([optimizer, loss_op],
+                           feed_dict=feed_dict)
 
-            if step % 10 == 0:
-                print("Minibatch loss at step {0}: {1}".format(step, loss))
-                print("Minibatch accuracy: {:.1f}%".format(
-                    tf.metrics.accuracy(batch_labels, predictions)))
-                print("Validation accuracy: {:.1f}%".format(
-                    tf.metrics.accuracy(y_validate, valid_prediction.eval())))
+        if step % 100 == 0:
+            print("Minibatch loss at step {0}: {1}".format(step, loss))
+            print("Minibatch accuracy: {:.1f}%".format(
+                tf.metrics.accuracy(batch_labels, data.y)))
 
-        print("\nTest accuracy: {:.1f}%".format(
-            tf.metrics.accuracy(y_test, test_prediction.eval())))
+    pred = tf.nn.softmax(y_test)
+    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y_test, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    print("Accuracy:", accuracy.eval({X: x_test, Y: y_test}), loss)
+    print("\nTest accuracy: {:.1f}%".format(
+        tf.metrics.accuracy(y_test, pred)))
 
 
-def accuracy(predictions, labels):
-    correctly_predicted = np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))
-    accu = (100.0 * correctly_predicted) / predictions.shape[0]
-    return accu
+# Create neural network
+def multilayer_perceptron(x, weights, biases):
+    out_layer = tf.add(tf.matmul(x, weights), biases)
+    out_layer = tf.nn.sigmoid(out_layer)
+    return out_layer
 
 
 if __name__ == '__main__':
