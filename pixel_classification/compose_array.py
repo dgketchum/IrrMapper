@@ -37,7 +37,7 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 
 
 def load_irrigation_data(shapefile, rasters, pickle_path=None,
-                         nlcd_path=None, target_shapefiles=None, count=None):
+                         nlcd_path=None, target_shapefiles=None, count=100000):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
@@ -218,10 +218,10 @@ if __name__ == '__main__':
     flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
 
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'P39R27_Test_100.pkl')
+    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
 
     data = load_irrigation_data(centroids, images, pickle_path=p_path,
                                 nlcd_path=nlcd, target_shapefiles=flu,
-                                count=10)
+                                )
 
 # ========================= EOF ====================================================================
