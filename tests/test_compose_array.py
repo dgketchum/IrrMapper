@@ -19,8 +19,6 @@ import unittest
 from fiona import open as fopen
 from rasterio import open as rasopen
 
-from pixel_classification.compose_array import point_raster_extract
-
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
@@ -44,11 +42,11 @@ class TestPointExtract(unittest.TestCase):
 # ----------------------------------ANCILLARY FUNCTIONS-----------------------
 
 def raster_point_extract(raster, points):
-    """ Get point values from a raster.
+    """ Get point values from a pixel_prep.
     
     :param raster: local_raster
     :param points: Shapefile of points.
-    :return: Dict of coords, row/cols, and values of raster at that point.
+    :return: Dict of coords, row/cols, and values of pixel_prep at that point.
     """
     point_data = {}
 
