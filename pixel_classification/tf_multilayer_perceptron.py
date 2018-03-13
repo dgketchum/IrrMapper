@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import minmax_scale
 
 
-def neural_net(data):
+def mlp(data):
     """
     :param data: Use the prep_structured_data.StructuredData class.
     :return:
