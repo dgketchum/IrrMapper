@@ -38,7 +38,7 @@ def fmask(directory):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    top_level = os.path.join(home, 'images', 'irrigation',
+    top_level = os.path.join(home, 'pixel_prep', 'irrigation',
                              'MT', 'landsat', 'LC8_39_27')
     fmask(top_level)
 
