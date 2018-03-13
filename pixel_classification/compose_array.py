@@ -37,11 +37,12 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 
 
 def load_irrigation_data(shapefile, rasters, pickle_path=None,
-                         nlcd_path=None, target_shapefiles=None):
+                         nlcd_path=None, target_shapefiles=None, count=None):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
     Keyword Arguments:
+    :param count: 
     :param target_shapefiles: 
     :param nlcd_path: 
     :param pickle_path: 
@@ -53,7 +54,9 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     :return: numpy.ndarray
     """
 
-    df = point_target_extract(points=shapefile, nlcd_path=nlcd_path, target_shapefile=target_shapefiles)
+    df = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
+                              target_shapefile=target_shapefiles,
+                              count_limit=count)
 
     rasters = raster_paths(rasters)
     for r in rasters:
@@ -97,7 +100,8 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_target_extract(points, nlcd_path, target_shapefile=None):
+def point_target_extract(points, nlcd_path, target_shapefile=None,
+                         count_limit=None):
     point_data = {}
     with fopen(points, 'r') as src:
         for feature in src:
@@ -106,50 +110,57 @@ def point_target_extract(points, nlcd_path, target_shapefile=None):
             point_data[name] = {'point': feature['geometry'],
                                 'coords': proj_coords}
             # point_crs = src.profile['crs']['init']
-
+    pt_ct = 0
     for pt_id, val in point_data.items():
-        pt = shape(val['point'])
-        with fopen(target_shapefile, 'r') as target_src:
-            has_attr = False
-            for t_feature in target_src:
-                polygon = t_feature['geometry']
-                if pt.within(shape(polygon)):
-                    print('bingo: pt id {}, poly id: {} props: {}'
-                          .format(pt_id, t_feature['id'], t_feature['properties']))
-                    props = t_feature['properties']
-                    point_data[pt_id]['properties'] = {'IType': props['IType'],
-                                                       'LType': props['LType']}
+        pt_ct += 1
+        if pt_ct < count_limit:
+            pt = shape(val['point'])
+            with fopen(target_shapefile, 'r') as target_src:
+                has_attr = False
+                for t_feature in target_src:
+                    polygon = t_feature['geometry']
+                    if pt.within(shape(polygon)):
+                        print('pt id {}, props: {}'
+                              .format(pt_id, t_feature['properties']))
+                        props = t_feature['properties']
+                        point_data[pt_id]['properties'] = {'IType': props['IType'],
+                                                           'LType': props['LType']}
 
-                    has_attr = True
-                    break
+                        has_attr = True
+                        break
 
-            if not has_attr:
-                with rasopen(nlcd_path, 'r') as rsrc:
-                    rass_arr = rsrc.read()
-                    rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-                    affine = rsrc.affine
+                if not has_attr:
+                    with rasopen(nlcd_path, 'r') as rsrc:
+                        rass_arr = rsrc.read()
+                        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+                        affine = rsrc.affine
 
-                    x, y = val['coords']
-                    col, row = ~affine * (x, y)
-                    raster_val = rass_arr[int(row), int(col)]
-                    ltype_dct = {'IType': None,
-                                 'LType': str(raster_val)}
-                    point_data[pt_id]['properties'] = ltype_dct
-                    print('id {} has no FLU, '
-                          'nlcd {}'.format(pt_id,
-                                           nlcd_value(ltype_dct['LType'])))
+                        x, y = val['coords']
+                        col, row = ~affine * (x, y)
+                        raster_val = rass_arr[int(row), int(col)]
+                        ltype_dct = {'IType': None,
+                                     'LType': str(raster_val)}
+                        point_data[pt_id]['properties'] = ltype_dct
+                        print('id {} has no FLU, '
+                              'nlcd {}'.format(pt_id,
+                                               nlcd_value(ltype_dct['LType'])))
 
     idd = []
     ltype = []
     itype = []
     x = []
     y = []
+    ct = 0
     for pt_id, val in point_data.items():
-        idd.append(pt_id)
-        ltype.append(val['properties']['LType'])
-        itype.append(val['properties']['IType'])
-        x.append(val['coords'][0])
-        y.append(val['coords'][1])
+        ct += 1
+        if ct < count_limit:
+            idd.append(pt_id)
+            ltype.append(val['properties']['LType'])
+            itype.append(val['properties']['IType'])
+            x.append(val['coords'][0])
+            y.append(val['coords'][1])
+        else:
+            break
     dct = dict(zip(['ID', 'LTYPE', 'ITYPE', 'X', 'Y'],
                    [idd, ltype, itype, x, y]))
     df = DataFrame(data=dct)
@@ -207,9 +218,10 @@ if __name__ == '__main__':
     flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
 
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
+    p_path = os.path.join(spatial, 'P39R27_Test_100.pkl')
 
-    data = load_irrigation_data(centroids, images, pickle_path=p_path, nlcd_path=nlcd,
-                                target_shapefiles=flu)
+    data = load_irrigation_data(centroids, images, pickle_path=p_path,
+                                nlcd_path=nlcd, target_shapefiles=flu,
+                                count=10)
 
 # ========================= EOF ====================================================================
