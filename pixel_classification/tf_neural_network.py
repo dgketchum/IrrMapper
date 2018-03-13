@@ -68,14 +68,17 @@ def neural_net(data):
         hidden_layer = tf.add(tf.matmul(x, weights['hidden']), biases['hidden'])
         hidden_layer = tf.nn.relu(hidden_layer)
         output_layer = tf.matmul(hidden_layer, weights['output']) + biases['output']
+        logits = tf.matmul(tf_train_dataset, weights['hidden']) + biases
 
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer,
-                                                                      labels=y))
+        cost = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(logits=output_layer,
+                                                                     labels=y))
         optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(cost)
 
-        train_prediction = tf.nn.softmax(output_layer)
-        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset, weights['output']) + biases)
-        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset, weights['output']) + biases)
+        train_prediction = tf.nn.softmax(logits)
+        valid_prediction = tf.nn.softmax(tf.matmul(tf_valid_dataset,
+                                                   weights['hidden']) + biases['hidden'])
+        test_prediction = tf.nn.softmax(tf.matmul(tf_test_dataset,
+                                                  weights['hidden']) + biases['hidden'])
 
     with tf.Session(graph=graph) as sess:
         # initialize weights and biases
@@ -95,18 +98,18 @@ def neural_net(data):
                          tf_train_labels: batch_labels}
 
             # run one step of computation
-            _, l, predictions = sess.run([optimizer, cost, train_prediction],
-                                         feed_dict=feed_dict)
+            _, loss, predictions = sess.run([optimizer, cost, train_prediction],
+                                            feed_dict=feed_dict)
 
-            if step % 1000 == 0:
-                print("Minibatch loss at step {0}: {1}".format(step, l))
+            if step % 10 == 0:
+                print("Minibatch loss at step {0}: {1}".format(step, loss))
                 print("Minibatch accuracy: {:.1f}%".format(
-                    accuracy(predictions, batch_labels)))
+                    tf.metrics.accuracy(batch_labels, predictions)))
                 print("Validation accuracy: {:.1f}%".format(
-                    accuracy(valid_prediction.eval(), y_validate)))
+                    tf.metrics.accuracy(y_validate, valid_prediction.eval())))
 
         print("\nTest accuracy: {:.1f}%".format(
-            accuracy(test_prediction.eval(), y_test)))
+            tf.metrics.accuracy(y_test, test_prediction.eval())))
 
 
 def accuracy(predictions, labels):
