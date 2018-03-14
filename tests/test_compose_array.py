@@ -16,17 +16,20 @@
 
 import os
 import unittest
+from numpy import array
 
 from fiona import open as fopen
 from rasterio import open as rasopen
 
-from pixel_prep.compose_array import point_target_extract
+from pixel_prep.compose_array import load_irrigation_data
 
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        self.shapefile = 'data/extract_test_attributed_Z12.shp'
-        self.raster = 'data/LE07_L1TP_039027_20130726_20160907_01_T1_B3_clip.tif'
+        self.shapefile = 'data/extract_no_attrs_z12.shp'
+        self.raster = 'data/LE07_clip_L1TP_039027_20130726_20160907_01_T1_B3.TIF'
+        self.nlcd = 'data/nlcd_clip_test.tif'
+        self.target_polys = 'data/flu_test_z12.shp'
         if not os.path.isfile(self.shapefile):
             raise ValueError('Path to shapefile is invalid')
 
@@ -38,12 +41,13 @@ class TestPointExtract(unittest.TestCase):
         :return: 
         """
 
-        points = point_target_extract(self.shapefile, nlcd_path=None,
-                                      )
+        points = load_irrigation_data(self.shapefile, self.raster,
+                                      nlcd_path=self.nlcd,
+                                      target_shapefiles=self.target_polys)
 
-        for key, val in points.items():
-            self.assertEqual(val['raster_val'], val['extract_value'])
-
+        self.assertEqual(points['target_values'][0], ['I', 'I', 'I', 'F', 'I'][0])
+        self.assertEqual(points['data'][0], [63, 51, 54, 82, 0][0])
+        self.assertEqual(points['features'][0], '039027_T1')
 
 
 if __name__ == '__main__':
