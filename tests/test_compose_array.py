@@ -14,16 +14,21 @@
 # limitations under the License.
 # ===============================================================================
 
+import os
 import unittest
 
 from fiona import open as fopen
 from rasterio import open as rasopen
 
+from pixel_prep.compose_array import point_target_extract
+
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        self.shapefile = 'tests/data/extract_test_attributed_Z12.shp'
-        self.raster = 'tests/data/LE07_L1TP_039027_20130726_20160907_01_T1_B3_clip.tif'
+        self.shapefile = 'data/extract_test_attributed_Z12.shp'
+        self.raster = 'data/LE07_L1TP_039027_20130726_20160907_01_T1_B3_clip.tif'
+        if not os.path.isfile(self.shapefile):
+            raise ValueError('Path to shapefile is invalid')
 
     def tearDown(self):
         pass
@@ -33,44 +38,12 @@ class TestPointExtract(unittest.TestCase):
         :return: 
         """
 
-        points = raster_point_extract(self.raster, self.shapefile)
+        points = point_target_extract(self.shapefile, nlcd_path=None,
+                                      )
 
         for key, val in points.items():
             self.assertEqual(val['raster_val'], val['extract_value'])
 
-
-# ----------------------------------ANCILLARY FUNCTIONS-----------------------
-
-def raster_point_extract(raster, points):
-    """ Get point values from a pixel_prep.
-    
-    :param raster: local_raster
-    :param points: Shapefile of points.
-    :return: Dict of coords, row/cols, and values of pixel_prep at that point.
-    """
-    point_data = {}
-
-    with fopen(points, 'r') as src:
-        for feature in src:
-            name = feature['id']
-            proj_coords = feature['geometry']['coordinates']
-
-            point_data[name] = {'coords': proj_coords,
-                                'label': feature['properties']['LType'],
-                                'raster_val': int(feature['properties']['LE07_L1TP_'])}
-
-    with rasopen(raster, 'r') as rsrc:
-        rass_arr = rsrc.read()
-        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-        affine = rsrc.affine
-
-    for key, val in point_data.items():
-        x, y = val['coords']
-        col, row = ~affine * (x, y)
-        raster_val = rass_arr[int(row), int(col)]
-        val['extract_value'] = raster_val
-
-    return point_data
 
 
 if __name__ == '__main__':
