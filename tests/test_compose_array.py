@@ -36,7 +36,7 @@ class TestPointExtract(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def test_raster_extract_by_point(self):
+    def test_compose_array(self):
         """ Test native pet rasters vs. xarray netcdf point extract.
         :return: 
         """
