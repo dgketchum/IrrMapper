@@ -1,5 +1,5 @@
 # =============================================================================================
-# Copyright 2017 dgketchum
+# Copyright 2018 dgketchum
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,17 +17,17 @@
 import os
 import pickle
 
-from pandas import DataFrame, Series
-
 from fiona import open as fopen
+from pandas import DataFrame, Series
 from rasterio import open as rasopen
 from shapely.geometry import shape
 
-import sys
-cwd = os.getcwd()
-sys.path.append(cwd.replace('pixel_classification', 'spatial'))
-sys.path.append(cwd)
-from nlcd_map import map_nlcd_to_flu, nlcd_value
+from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
+
+# import sys
+# cwd = os.getcwd()
+# sys.path.append(cwd.replace('pixel_classification', 'spatial'))
+# sys.path.append(cwd)
 
 
 '''
@@ -48,7 +48,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     :param pickle_path: 
     :param rasters: 
     :param shapefile: .shp file from which point locations will be taken.
-    :param rasters: Single raster file path, list of file paths, or a dir, from which all
+    :param rasters: Single pixel_prep file path, list of file paths, or a dir, from which all
     /*.tif files will be used.
     # :param transform: i.e., 'normalize', 'scale' data of real-number (continuous) variable
     :return: numpy.ndarray
@@ -81,7 +81,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
 
 
 def raster_paths(rasters):
-    """ Return list of rasters from single raster, list of rasters, or a dir.    """
+    """ Return list of rasters from single pixel_prep, list of rasters, or a dir.    """
     if os.path.isfile(rasters):
         return [rasters]
     elif os.path.isfile(rasters[0]):
@@ -169,11 +169,11 @@ def point_target_extract(points, nlcd_path, target_shapefile=None,
 
 
 def point_raster_extract(raster, points):
-    """ Get point values from a raster.
+    """ Get point values from a pixel_prep.
 
     :param raster: local_raster
     :param points: Shapefile of points.
-    :return: Dict of coords, row/cols, and values of raster at that point.
+    :return: Dict of coords, row/cols, and values of pixel_prep at that point.
     """
 
     basename = os.path.basename(raster)
@@ -181,7 +181,7 @@ def point_raster_extract(raster, points):
     band = name_split[7].split(sep='.')[0]
     date_string = name_split[3]
     column_name = '{}_{}'.format(date_string, band)
-    print('raster {}'.format(column_name))
+    print('pixel_prep {}'.format(column_name))
 
     with rasopen(raster, 'r') as rsrc:
         rass_arr = rsrc.read()
@@ -211,7 +211,7 @@ def _point_attrs(pt_data, index):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-    montana = os.path.join(home, 'images', 'irrigation', 'MT')
+    montana = os.path.join(home, 'pixel_prep', 'irrigation', 'MT')
     images = os.path.join(montana, 'landsat', 'LC8_39_27')
     centroids = os.path.join(montana, 'P39R27_Test', 'centroids_Z12.shp')
     nlcd = os.path.join(montana, 'nlcd_Z12.tif')

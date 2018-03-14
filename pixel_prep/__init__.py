@@ -16,31 +16,8 @@
 
 import os
 
-from sat_image.image import Landsat8
-from sat_image.fmask import Fmask
-
-
-def fmask(directory):
-    dirs = [os.path.join(directory, x) for x in os.listdir(directory)]
-    tif_name = 'cloud_mask.tif'
-    for d in dirs:
-        if tif_name in os.listdir(d):
-            print('Looks like {} already has a {}'.format(d, tif_name))
-        else:
-            print('Processing {}'.format(d))
-            l = Landsat8(d)
-            f = Fmask(l)
-            combo = f.cloud_mask(combined=True)
-            f.save_array(combo, outfile=os.path.join(d, tif_name))
-
-    return None
-
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    top_level = os.path.join(home, 'images', 'irrigation',
-                             'MT', 'landsat', 'LC8_39_27')
-    fmask(top_level)
-
 
 # ========================= EOF ====================================================================
