@@ -16,10 +16,6 @@
 
 import os
 import unittest
-from numpy import array
-
-from fiona import open as fopen
-from rasterio import open as rasopen
 
 from pixel_prep.compose_array import load_irrigation_data
 
@@ -43,7 +39,8 @@ class TestPointExtract(unittest.TestCase):
 
         points = load_irrigation_data(self.shapefile, self.raster,
                                       nlcd_path=self.nlcd,
-                                      target_shapefiles=self.target_polys)
+                                      target_shapefiles=self.target_polys,
+                                      )
 
         self.assertEqual(points['target_values'][0], ['I', 'I', 'I', 'F', 'I'][0])
         self.assertEqual(points['data'][0], [63, 51, 54, 82, 0][0])

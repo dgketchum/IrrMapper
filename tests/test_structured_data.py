@@ -15,29 +15,38 @@
 # =============================================================================================
 
 import unittest
-
-from sklearn.datasets import load_iris
-
+import pickle
+from numpy import array, any
 from pixel_prep.prep_structured_data import StructuredData
 
 
 class StructuredDataTest(unittest.TestCase):
     def setUp(self):
-        self.test_data = load_iris()
-        self.input = {'features': self.test_data.target_names, 'data': self.test_data.data,
-                      'target_values': self.test_data.target}
-        self.struct = StructuredData(self.input)
+        path_to_pickled = 'data/test.pkl'
+        with open(path_to_pickled, 'rb') as p:
+            data = pickle.load(p)
 
-    def test_data_structure(self):
+        self.struct = StructuredData(data)
+
+    def test_data_instant(self):
         self.assertIsInstance(self.struct, StructuredData)
-        self.assertEquals(self.struct.class_counts[0], 50)
+        self.assertEquals(self.struct.class_counts['I'], 4)
+
+    def test_data_pca(self):
         classes = self.struct.classes
-        pca = self.struct.principal_components(return_percentile=0.95)
-        self.assertEquals(classes[0], 0)
-        self.assertAlmostEqual(pca.explained_variance_[0], 4.2248406)
+        pca = self.struct.principal_components(n_components=1)
+        self.assertEquals(classes[0], 'F')
+        self.assertAlmostEqual(pca.mean_[0], 50.)
 
+    def test_data_binary(self):
+        self.struct.make_binary('I', inplace=True)
+        assert (self.struct.one_hot == array([[0, 1],
+                                             [0, 1],
+                                             [0, 1],
+                                             [1, 0],
+                                             [0, 1], ])).any()
 
-if __name__ == '__main__':
-    unittest.main()
+    if __name__ == '__main__':
+        unittest.main()
 
-# ========================= EOF ====================================================================
+    # ========================= EOF ====================================================================
