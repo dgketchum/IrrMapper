@@ -56,7 +56,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
-    classify(alg='neural_net', path_to_pickled=p_path, binary='I')
+    classify(alg='neural_net', path_to_pickled=p_path, binary='F')
 
 
 # ========================= EOF ====================================================================

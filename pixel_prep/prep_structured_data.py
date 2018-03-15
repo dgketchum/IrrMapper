@@ -31,7 +31,7 @@ class StructuredData(object):
         :param data: dict object like {'features': }
 
         """
-
+        # TODO add functionality that allows the creation of binary data using more than one True class
 
         self.lamda = None
         self.v = None
