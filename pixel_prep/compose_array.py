@@ -54,8 +54,7 @@ def load_irrigation_data(shapefile, rasters, pickle_path=None,
     :return: numpy.ndarray
     """
 
-    df = point_target_extract(points=shapefile, nlcd_path=nlcd_path,
-                              target_shapefile=target_shapefiles,
+    df = point_target_extract(points=shapefile, nlcd_path=nlcd_path, target_shapefile=target_shapefiles,
                               count_limit=count)
 
     rasters = raster_paths(rasters)
@@ -100,8 +99,8 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_target_extract(points, nlcd_path, target_shapefile=None,
-                         count_limit=None):
+def point_target_extract(points, nlcd_path,
+                         target_shapefile=None, count_limit=None):
     point_data = {}
     with fopen(points, 'r') as src:
         for feature in src:
@@ -130,20 +129,25 @@ def point_target_extract(points, nlcd_path, target_shapefile=None,
                         break
 
                 if not has_attr:
-                    with rasopen(nlcd_path, 'r') as rsrc:
-                        rass_arr = rsrc.read()
-                        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-                        affine = rsrc.affine
+                    if nlcd_path:
+                        with rasopen(nlcd_path, 'r') as rsrc:
+                            rass_arr = rsrc.read()
+                            rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+                            affine = rsrc.affine
 
-                        x, y = val['coords']
-                        col, row = ~affine * (x, y)
-                        raster_val = rass_arr[int(row), int(col)]
+                            x, y = val['coords']
+                            col, row = ~affine * (x, y)
+                            raster_val = rass_arr[int(row), int(col)]
+                            ltype_dct = {'IType': None,
+                                         'LType': str(raster_val)}
+                            point_data[pt_id]['properties'] = ltype_dct
+                            print('id {} has no FLU, '
+                                  'nlcd {}'.format(pt_id,
+                                                   nlcd_value(ltype_dct['LType'])))
+                    else:
                         ltype_dct = {'IType': None,
-                                     'LType': str(raster_val)}
+                                     'LType': None}
                         point_data[pt_id]['properties'] = ltype_dct
-                        print('id {} has no FLU, '
-                              'nlcd {}'.format(pt_id,
-                                               nlcd_value(ltype_dct['LType'])))
 
     idd = []
     ltype = []
