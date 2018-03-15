@@ -14,63 +14,37 @@
 # limitations under the License.
 # ===============================================================================
 
+import os
 import unittest
 
-from fiona import open as fopen
-from rasterio import open as rasopen
+from pixel_prep.compose_array import load_irrigation_data
 
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        self.shapefile = 'tests/data/extract_test_attributed_Z12.shp'
-        self.raster = 'tests/data/LE07_L1TP_039027_20130726_20160907_01_T1_B3_clip.tif'
+        self.shapefile = 'data/extract_no_attrs_z12.shp'
+        self.raster = 'data/LE07_clip_L1TP_039027_20130726_20160907_01_T1_B3.TIF'
+        self.nlcd = 'data/nlcd_clip_test.tif'
+        self.target_polys = 'data/flu_test_z12.shp'
+        if not os.path.isfile(self.shapefile):
+            raise ValueError('Path to shapefile is invalid')
 
     def tearDown(self):
         pass
 
-    def test_raster_extract_by_point(self):
+    def test_compose_array(self):
         """ Test native pet rasters vs. xarray netcdf point extract.
         :return: 
         """
 
-        points = raster_point_extract(self.raster, self.shapefile)
+        points = load_irrigation_data(self.shapefile, self.raster,
+                                      nlcd_path=self.nlcd,
+                                      target_shapefiles=self.target_polys,
+                                      )
 
-        for key, val in points.items():
-            self.assertEqual(val['raster_val'], val['extract_value'])
-
-
-# ----------------------------------ANCILLARY FUNCTIONS-----------------------
-
-def raster_point_extract(raster, points):
-    """ Get point values from a pixel_prep.
-    
-    :param raster: local_raster
-    :param points: Shapefile of points.
-    :return: Dict of coords, row/cols, and values of pixel_prep at that point.
-    """
-    point_data = {}
-
-    with fopen(points, 'r') as src:
-        for feature in src:
-            name = feature['id']
-            proj_coords = feature['geometry']['coordinates']
-
-            point_data[name] = {'coords': proj_coords,
-                                'label': feature['properties']['LType'],
-                                'raster_val': int(feature['properties']['LE07_L1TP_'])}
-
-    with rasopen(raster, 'r') as rsrc:
-        rass_arr = rsrc.read()
-        rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-        affine = rsrc.affine
-
-    for key, val in point_data.items():
-        x, y = val['coords']
-        col, row = ~affine * (x, y)
-        raster_val = rass_arr[int(row), int(col)]
-        val['extract_value'] = raster_val
-
-    return point_data
+        self.assertEqual(points['target_values'][0], ['I', 'I', 'I', 'F', 'I'][0])
+        self.assertEqual(points['data'][0], [63, 51, 54, 82, 0][0])
+        self.assertEqual(points['features'][0], '039027_T1')
 
 
 if __name__ == '__main__':

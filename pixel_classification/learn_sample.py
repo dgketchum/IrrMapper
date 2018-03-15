@@ -37,7 +37,8 @@ def classify(alg='softmax', data=None, path_to_pickled=None,
                          'pickled dict of form:\n{}'.format(dct_form))
 
     data = StructuredData(data)
-    pca = data.principal_components(return_percentile=95.)
+    data.make_binary(binary_true=binary, inplace=True)
+    data.principal_components(return_percentile=95.)
 
     mapping = {'softmax': softmax,
                'neural_net': mlp}

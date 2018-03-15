@@ -19,12 +19,20 @@ import copy
 import numpy as np
 from pandas import get_dummies
 from sklearn import decomposition
+from sklearn.utils import Bunch
 
 
 class StructuredData(object):
-    """ Structured data object for ML training, not unlike a sklearn.dataset.load_dataset object"""
+    """ Structured data object for ML training, based on sklearn.utils.Bunch object"""
 
     def __init__(self, data):
+        """
+
+        :param data: dict object like {'features': }
+
+        """
+
+
         self.lamda = None
         self.v = None
 
@@ -73,7 +81,7 @@ class StructuredData(object):
             pca = decomposition.PCA(0.95, copy=True, whiten=False)
             pca.fit(self.x)
 
-        print (np.cumsum(pca.explained_variance_ratio_))
+            print(np.cumsum(pca.explained_variance_ratio_))
         return pca
 
 
