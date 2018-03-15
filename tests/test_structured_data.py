@@ -29,24 +29,39 @@ class StructuredDataTest(unittest.TestCase):
         self.struct = StructuredData(data)
 
     def test_data_instant(self):
-        self.assertIsInstance(self.struct, StructuredData)
+        # this assertion is really a test of the test which in general is not done
+        # self.assertIsInstance(self.struct, StructuredData)
         self.assertEquals(self.struct.class_counts['I'], 4)
 
-    def test_data_pca(self):
+    def test_class_zero(self):
         classes = self.struct.classes
-        pca = self.struct.principal_components(n_components=1)
         self.assertEquals(classes[0], 'F')
+        # i try to only do one assert per test
+        # self.assertAlmostEqual(pca.mean_[0], 50.)
+
+    def test_data_pca_mean(self):
+        pca = self.struct.principal_components(n_components=1)
         self.assertAlmostEqual(pca.mean_[0], 50.)
 
     def test_data_binary(self):
         self.struct.make_binary('I', inplace=True)
-        assert (self.struct.one_hot == array([[0, 1],
-                                             [0, 1],
-                                             [0, 1],
-                                             [1, 0],
-                                             [0, 1], ])).any()
 
-    if __name__ == '__main__':
-        unittest.main()
+        # use self.assert...?
+        # assert (self.struct.one_hot == array([[0, 1],
+        #                                       [0, 1],
+        #                                       [0, 1],
+        #                                       [1, 0],
+        #                                       [0, 1], ])).any()
+        expected = array([[0, 1],
+                          [0, 1],
+                          [0, 1],
+                          [1, 0],
+                          [0, 1]])
 
-    # ========================= EOF ====================================================================
+        self.assertListEqual(list(self.struct.one_hot), expected)
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+# ========================= EOF ====================================================================

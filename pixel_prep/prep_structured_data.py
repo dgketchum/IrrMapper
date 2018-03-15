@@ -25,21 +25,33 @@ from sklearn.utils import Bunch
 class StructuredData(object):
     """ Structured data object for ML training, based on sklearn.utils.Bunch object"""
 
-    def __init__(self, data):
+    # is passing in a dict required?
+    # especially for just two values
+    # also consider this
+    # what happens in this case
+    #  data = {'foo'}
+    #  sd =StructuredData(data)
+    # since 'data' and 'target_values' are required make them positional arguments
+
+    def __init__(self, data, target_values):
         """
 
         :param data: dict object like {'features': }
 
         """
 
-
         self.lamda = None
         self.v = None
 
-        self.data = data
+        # saving data to this object is not necessary.
+        # just use it.
+        # The data dict is never referenced outside of this method
+        # self.data = data
 
-        self.x = self.data['data'].astype(np.float32)
-        self.y_strs = self.data['target_values']
+        # self.x = self.data['data'].astype(np.float32)
+        # self.y_strs = self.data['target_values']
+        self.x = data.astype(np.float32)
+        self.y_strs = target_values
 
         unique, self.y = np.unique(self.y_strs, return_inverse=True)
 
@@ -51,24 +63,26 @@ class StructuredData(object):
 
         self.one_hot = get_dummies(self.y).values
 
-    def make_binary(self, binary_true, inplace=False):
+    # def make_binary(self, binary_true, inplace=False):
+    def make_binary(self, binary_true):
         """ Use a key value that will equate to True (1), all others to 0."""
         """
         :param binary_true: 
         :return: 
         """
-        if inplace:
-            self.y[self.y_strs == binary_true] = 1
-            self.y[self.y_strs != binary_true] = 0
-            self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
-            unique, _ = np.unique(self.y_strs, return_inverse=True)
-            self.classes = unique
-            self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
-            self.one_hot = get_dummies(self.y).values
-        else:
-            new = copy.deepcopy(self)
-            self.make_binary(binary_true, inplace=True)
-            return new
+        self.y[self.y_strs == binary_true] = 1
+        self.y[self.y_strs != binary_true] = 0
+        self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
+        unique, _ = np.unique(self.y_strs, return_inverse=True)
+        self.classes = unique
+        self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
+        self.one_hot = get_dummies(self.y).values
+
+        # not advisable
+        # else:
+        #     new = copy.deepcopy(self)
+        #     self.make_binary(binary_true, inplace=True)
+        #     return new
 
     def principal_components(self, return_percentile=None, n_components=None):
         """ Extract eigenvectors and eigenvalue, return desired PCAs""
@@ -87,6 +101,5 @@ class StructuredData(object):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-
 
 # ========================= EOF ================================================================
