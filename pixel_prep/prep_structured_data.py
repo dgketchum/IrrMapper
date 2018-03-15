@@ -33,7 +33,7 @@ class StructuredData(object):
     #  sd =StructuredData(data)
     # since 'data' and 'target_values' are required make them positional arguments
 
-    def __init__(self, data, target_values):
+    def __init__(self, data, target_values, binary=None):
         """
 
         :param data: dict object like {'features': }
@@ -58,31 +58,40 @@ class StructuredData(object):
         self.classes = unique
         self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
         print('Class counts: {}'.format(self.class_counts))
-        self.class_map = dict(zip(list(unique), list(range(len(unique)))))
+
+        # self.class_map = dict(zip(list(unique), list(range(len(unique)))))
+        # this is more consice than above
+        self.class_map = {u: i for i, u in enumerate(unique)}
+
         print('Class integer map: {}'.format(self.class_map))
 
+        if binary:
+            self.y[self.y_strs == binary] = 1
+            self.y[self.y_strs != binary] = 0
+            self.y_strs[self.y_strs != binary] = '{}{}'.format('N', binary)
+
         self.one_hot = get_dummies(self.y).values
 
-    # def make_binary(self, binary_true, inplace=False):
-    def make_binary(self, binary_true):
-        """ Use a key value that will equate to True (1), all others to 0."""
-        """
-        :param binary_true: 
-        :return: 
-        """
-        self.y[self.y_strs == binary_true] = 1
-        self.y[self.y_strs != binary_true] = 0
-        self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
-        unique, _ = np.unique(self.y_strs, return_inverse=True)
-        self.classes = unique
-        self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
-        self.one_hot = get_dummies(self.y).values
-
-        # not advisable
-        # else:
-        #     new = copy.deepcopy(self)
-        #     self.make_binary(binary_true, inplace=True)
-        #     return new
+    # # def make_binary(self, binary_true, inplace=False):
+    # def make_binary(self, binary_true):
+    #     """ Use a key value that will equate to True (1), all others to 0."""
+    #     """
+    #     :param binary_true:
+    #     :return:
+    #     """
+    #     self.y[self.y_strs == binary_true] = 1
+    #     self.y[self.y_strs != binary_true] = 0
+    #     self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
+    #     unique, _ = np.unique(self.y_strs, return_inverse=True)
+    #     self.classes = unique
+    #     self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
+    #     self.one_hot = get_dummies(self.y).values
+    #
+    #     # not advisable
+    #     # else:
+    #     #     new = copy.deepcopy(self)
+    #     #     self.make_binary(binary_true, inplace=True)
+    #     #     return new
 
     def principal_components(self, return_percentile=None, n_components=None):
         """ Extract eigenvectors and eigenvalue, return desired PCAs""
