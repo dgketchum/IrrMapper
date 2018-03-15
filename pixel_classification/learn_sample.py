@@ -22,7 +22,8 @@ from pixel_classification.tf_softmax import softmax
 from pixel_prep.prep_structured_data import StructuredData
 
 
-def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
+def classify(alg='softmax', data=None, path_to_pickled=None,
+             binary=None):
     if data:
         pass
     elif path_to_pickled:
@@ -53,7 +54,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None, binary=None):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
-    p_path = os.path.join(spatial, 'P39R27_Quarter_Test.pkl')
+    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
     classify(alg='neural_net', path_to_pickled=p_path, binary='I')
 
 
