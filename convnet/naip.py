@@ -16,11 +16,11 @@
 
 import os
 from requests import get
+from rasterio import band
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
-from numpy import float32, empty
-from copy import deepcopy
+from numpy import float32, ones, uint8, zeros
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
@@ -30,24 +30,59 @@ class BadCoordinatesError(ValueError):
     pass
 
 
+class MissingArgumentError(ValueError):
+    pass
+
+
 class NaipImage(object):
     def __init__(self):
-
         self.profile = None
         self.array = None
         self.web_mercator_bounds = None
 
         self.temp_file = os.path.join(os.getcwd(), 'temp', 'tile.tif')
+        self.temp_proj_file = os.path.join(os.getcwd(), 'temp', 'tile_projected.tif')
 
-    @staticmethod
-    def save(array, geometry, output_filename):
+    def save(self, array, geometry, output_filename, crs=None):
         array = array.reshape(geometry['count'], array.shape[1], array.shape[2])
         geometry['dtype'] = float32
+
+        if crs:
+            if geometry['crs'] != CRS({'init': 'epsg:{}'.format(crs)}):
+                self.reproject()
+                with rasopen(self.temp_proj_file, 'r') as src:
+                    array = src.read()
+                    geometry = src.profile
 
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)
 
         return None
+
+    def reproject(self):
+        if isinstance(self, ApfoNaip):
+            source_crs = 3857
+        with rasopen(self.temp_file) as src:
+            transform, width, height = calculate_default_transform(
+                source_crs, self.dst_crs, src.width, src.height, *src.bounds)
+            kwargs = src.meta.copy()
+            kwargs.update({
+                'crs': self.dst_crs,
+                'transform': transform,
+                'width': width,
+                'height': height
+            })
+
+            with rasopen(self.temp_proj_file, 'w', **kwargs) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=band(src, i),
+                        destination=band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=source_crs,
+                        dst_transform=transform,
+                        dst_crs=self.dst_crs,
+                        resampling=Resampling.nearest)
 
 
 class ApfoNaip(NaipImage):
@@ -83,24 +118,22 @@ class ApfoNaip(NaipImage):
         NaipImage.__init__(self)
 
         self.bbox = bbox
-        self.bboxSR = None
-        self.imageSR = None
+        self.dst_crs = None
 
         if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
             raise BadCoordinatesError
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
-        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR=' \
-                              '&bboxSR=&format=tiff&pixelType=F32&size=' \
+        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
+                              '&format=tiff&pixelType=F32' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
-        self.query_kwargs = ''
+
         for key, val in kwargs.items():
             self.__setattr__(key, val)
-            self.query_kwargs += '&{}={}'.format(key, val)
 
         self.bounds_fmt = '{w},{s},{e},{n}'
 
-    def get_image(self, state, size=(512, 512)):
+    def get_image(self, state):
         """ Get NAIP imagery from states excluding Hawaii and Alaska
 
         Current hack in this method and in GeoBounds is hard-coded epsg: 3857 'web mercator',
@@ -117,11 +150,9 @@ class ApfoNaip(NaipImage):
         self.web_mercator_bounds = (w, s, e, n)
 
         bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
-        nh, nv = size
 
         naip_str = get_naip_key(state)
-        query = self.usda_query_str.format(naip_str, bbox_str,
-                                           nh, nv)
+        query = self.usda_query_str.format(naip_str, bbox_str)
         url = '{}{}'.format(self.naip_base_url, query)
 
         req = get(url, verify=False, stream=True)
@@ -130,11 +161,18 @@ class ApfoNaip(NaipImage):
 
         with open(self.temp_file, 'wb') as f:
             f.write(req.content)
-        with rasopen(self.temp_file, 'r') as src:
-            self.array = src.read()
-            self.profile = src.profile
 
-        os.remove(self.temp_file)
+        with rasopen(self.temp_file, 'r') as src:
+            array = src.read()
+            profile = src.profile
+
+        return array, profile
+
+    def close(self):
+        if os.path.isfile(self.temp_file):
+            os.remove(self.temp_file)
+        if os.path.isfile(self.temp_proj_file):
+            os.remove(self.temp_proj_file)
 
 
 if __name__ == '__main__':
@@ -142,6 +180,6 @@ if __name__ == '__main__':
     tile_size = (512, 512)
     box = (-109.9849, 46.46738, -109.93647, 46.498625)
     naip = ApfoNaip(box)
-    naip.get_image('montana', tile_size)
+    naip.get_image('montana')
 
 # ========================= EOF ================================================================
