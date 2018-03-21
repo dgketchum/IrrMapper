@@ -18,9 +18,15 @@ import os
 from requests import get
 from rasterio import open as rasopen
 from rasterio.crs import CRS
+from numpy import float32
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
+
+
+class BadCoordinatesError(ValueError):
+    print('Provided coordinates appear to be in a projected reference system, '
+          'please use geographic coordinates, i.e. latitude and longitude (WGS 84).')
 
 
 class NaipImage(object):
@@ -29,15 +35,15 @@ class NaipImage(object):
 
     @staticmethod
     def save(array, geometry, output_filename, crs=None):
-        try:
-            array = array.reshape(1, array.shape[1], array.shape[2])
-        except IndexError:
-            array = array.reshape(1, array.shape[0], array.shape[1])
-        geometry['dtype'] = array.dtype
+        array = array.reshape(geometry['count'], array.shape[1], array.shape[2])
+        geometry['dtype'] = float32
+
         if crs:
-            geometry['crs'] = CRS({'init': crs})
+            geometry['crs'] = CRS({'init': 'epsg:{}'.format(crs)})
+
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)
+
         return None
 
 
@@ -64,15 +70,25 @@ class ApfoNaip(NaipImage):
 
     """
 
-    def __init__(self, bbox=None, **kwargs):
+    def __init__(self, bbox, **kwargs):
         """
             :param bbox: (west, south, east, north) tuple in geographic coordinates
-            """
+        """
+
+        # TODO un-hardcode pixelType, bboxSR, etc
+
         NaipImage.__init__(self)
+
         self.bbox = bbox
+        self.bboxSR = None
+        self.imageSR = None
+
+        if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
+            raise BadCoordinatesError
+
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
-        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR={a}' \
-                              '&bboxSR={a}&format=tiff&pixelType=U8&size={a},{a}' \
+        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR=' \
+                              '&bboxSR=&format=tiff&pixelType=F32&size={a},{a}' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
         self.query_kwargs = ''
         for key, val in kwargs.items():
@@ -92,26 +108,34 @@ class ApfoNaip(NaipImage):
         :return:
         """
         coords = {x: y for x, y in zip(['west', 'south', 'east', 'north'], self.bbox)}
-        srs = 102100
 
         w, s, e, n = GeoBounds(**coords).to_web_mercator()
         bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
         nh, nv = size
 
         naip_str = get_naip_key(state)
-        query = self.usda_query_str.format(naip_str, bbox_str, srs, srs, nh, nv)
+        query = self.usda_query_str.format(naip_str, bbox_str,
+                                           nh, nv)
         url = '{}{}'.format(self.naip_base_url, query)
+
         req = get(url, verify=False, stream=True)
         if req.status_code != 200:
             raise ValueError('Bad response from NAIP API request.')
-        temp = os.path.join(os.getcwd(), 'temp', 'tile.tif')
-        with open(temp, 'wb') as f:
+
+        temp_file = os.path.join(os.getcwd(), 'temp', 'tile.tif')
+
+        with open(temp_file, 'wb') as f:
             f.write(req.content)
-        with rasopen(temp, 'r') as src:
+        with rasopen(temp_file, 'r') as src:
             array = src.read()
             profile = src.profile
-        os.remove(temp)
-        pass
+
+        os.remove(temp_file)
+
+        self.__setattr__('array', array)
+        self.__setattr__('profile', profile)
+
+        return array, profile
 
 
 if __name__ == '__main__':
