@@ -25,13 +25,12 @@ class AfpoNaipTestCase(unittest.TestCase):
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
         self.test_tif = 'data/test_apfonaip.tif'
         self.dst_srs = 26912
-        self.dstsrs_str = str(self.dst_srs)
-        self.profile = dict([('bboxSR', 4326), ('imageSR', self.dst_srs)])
+        self.profile = dict([('dst_crs', 26912)])
 
     def test_image_reference(self):
         naip = ApfoNaip(self.box, **self.profile)
-        array, profile = naip.get_image('montana', self.tile_size)
-        naip.save(array, profile, self.test_tif)
+        array, profile = naip.get_image('montana')
+        naip.save(array, profile, self.test_tif, crs=self.dst_srs)
         pass
 
 
