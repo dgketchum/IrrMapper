@@ -18,28 +18,31 @@ import os
 from requests import get
 from rasterio import open as rasopen
 from rasterio.crs import CRS
-from numpy import float32
+from rasterio.warp import reproject, Resampling, calculate_default_transform
+from numpy import float32, empty
+from copy import deepcopy
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
 
 
 class BadCoordinatesError(ValueError):
-    print('Provided coordinates appear to be in a projected reference system, '
-          'please use geographic coordinates, i.e. latitude and longitude (WGS 84).')
+    pass
 
 
 class NaipImage(object):
     def __init__(self):
-        pass
+
+        self.profile = None
+        self.array = None
+        self.web_mercator_bounds = None
+
+        self.temp_file = os.path.join(os.getcwd(), 'temp', 'tile.tif')
 
     @staticmethod
-    def save(array, geometry, output_filename, crs=None):
+    def save(array, geometry, output_filename):
         array = array.reshape(geometry['count'], array.shape[1], array.shape[2])
         geometry['dtype'] = float32
-
-        if crs:
-            geometry['crs'] = CRS({'init': 'epsg:{}'.format(crs)})
 
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)
@@ -88,7 +91,7 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR=' \
-                              '&bboxSR=&format=tiff&pixelType=F32&size={a},{a}' \
+                              '&bboxSR=&format=tiff&pixelType=F32&size=' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
         self.query_kwargs = ''
         for key, val in kwargs.items():
@@ -104,12 +107,15 @@ class ApfoNaip(NaipImage):
         though the NAIP service provides epsg: 102100 a deprecated ESRI SRS'
 
         :param state: lower case state str, e.g. 'south_dakota'
-        :param size: tuple of horizontal by vertical size in pixels, e.g., (526, 525)
+        :param size: tuple of horizontal by vertical size in pixels, e.g., (512, 512)
         :return:
         """
+
         coords = {x: y for x, y in zip(['west', 'south', 'east', 'north'], self.bbox)}
 
         w, s, e, n = GeoBounds(**coords).to_web_mercator()
+        self.web_mercator_bounds = (w, s, e, n)
+
         bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
         nh, nv = size
 
@@ -122,26 +128,19 @@ class ApfoNaip(NaipImage):
         if req.status_code != 200:
             raise ValueError('Bad response from NAIP API request.')
 
-        temp_file = os.path.join(os.getcwd(), 'temp', 'tile.tif')
-
-        with open(temp_file, 'wb') as f:
+        with open(self.temp_file, 'wb') as f:
             f.write(req.content)
-        with rasopen(temp_file, 'r') as src:
-            array = src.read()
-            profile = src.profile
+        with rasopen(self.temp_file, 'r') as src:
+            self.array = src.read()
+            self.profile = src.profile
 
-        os.remove(temp_file)
-
-        self.__setattr__('array', array)
-        self.__setattr__('profile', profile)
-
-        return array, profile
+        os.remove(self.temp_file)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     tile_size = (512, 512)
-    box = (-110.08, 46.256, -109.61, 46.584)
+    box = (-109.9849, 46.46738, -109.93647, 46.498625)
     naip = ApfoNaip(box)
     naip.get_image('montana', tile_size)
 
