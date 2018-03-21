@@ -16,52 +16,109 @@
 
 import os
 from requests import get
-from tempfile import mkdtemp
+from rasterio import open as rasopen
+from rasterio.crs import CRS
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
 
-NAIP_BASE = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
-USDA_NAIP = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR={a}' \
-            '&bboxSR={a}&size={a},{a}'.format(a='{}')
-BBOX_fmt = '{w},{s},{e},{n}'
 
-arc_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/Montana_2015_1m/ImageServer/' \
-          'exportImage?f=image' \
-          '&bbox=-12255105.148460371%2C5843797.028192342%2C-12249706.783337737%2C5849682.679370292' \
-          '&imageSR=102100&bboxSR=102100&size=565%2C616'
+class NaipImage(object):
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def save(array, geometry, output_filename, crs=None):
+        try:
+            array = array.reshape(1, array.shape[1], array.shape[2])
+        except IndexError:
+            array = array.reshape(1, array.shape[0], array.shape[1])
+        geometry['dtype'] = array.dtype
+        if crs:
+            geometry['crs'] = CRS({'init': crs})
+        with rasopen(output_filename, 'w', **geometry) as dst:
+            dst.write(array)
+        return None
 
 
-def get_naip_image(state, bbox, size=(512, 512)):
-    """ Get NAIP imagery from states excluding Hawaii and Alaska
+class ApfoNaip(NaipImage):
+    """  APFO web service NAIP image object.
 
-    :param state: lower case state str, e.g. 'south_dakota'
-    :param bbox: (west, south, east, north) tuple in geographic coordinates
-    :param size: tuple of horizontal by vertical size in pixels, e.g., (526, 525)
-    :param spatial_ref:
-    :param input: input coordinate reference system epsg code
-    :return:
+    See query options, pass kwargs dict with following keys:
+
+    '&bboxSR='
+    '&size='
+    '&imageSR='
+    '&time='
+    '&format=tiff'
+    '&pixelType=U8'
+    '&noData='
+    '&noDataInterpretation=esriNoDataMatchAny'
+    '&interpolation=+RSP_BilinearInterpolation'
+    '&compression='
+    '&compressionQuality='
+    '&bandIds='
+    '&mosaicRule='
+    '&renderingRule='
+    '&f=html'
+
     """
-    coords = {x: y for x, y in zip(['west', 'south', 'east', 'north'], bbox)}
-    srs = 102100
-    w, s, e, n = GeoBounds(**coords).to_web_mercator()
-    nh, nv = size
-    naip_str = get_naip_key(state)
-    bbox_str = BBOX_fmt.format(w=w, s=s, e=e, n=n)
-    query = USDA_NAIP.format(naip_str, bbox_str, srs, srs, nh, nv)
-    url = '{}{}'.format(NAIP_BASE, query)
-    req = get(url, verify=False, stream=True)
-    if req.status_code != 200:
-        raise ValueError('Bad response from Mapzen API request.')
-    temp = os.path.join(os.getcwd(), 'tile.tif')
-    with open(temp, 'wb') as f:
-        f.write(req.content)
+
+    def __init__(self, bbox=None, **kwargs):
+        """
+            :param bbox: (west, south, east, north) tuple in geographic coordinates
+            """
+        NaipImage.__init__(self)
+        self.bbox = bbox
+        self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
+        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}&imageSR={a}' \
+                              '&bboxSR={a}&format=tiff&pixelType=U8&size={a},{a}' \
+                              '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
+        self.query_kwargs = ''
+        for key, val in kwargs.items():
+            self.__setattr__(key, val)
+            self.query_kwargs += '&{}={}'.format(key, val)
+
+        self.bounds_fmt = '{w},{s},{e},{n}'
+
+    def get_image(self, state, size=(512, 512)):
+        """ Get NAIP imagery from states excluding Hawaii and Alaska
+
+        Current hack in this method and in GeoBounds is hard-coded epsg: 3857 'web mercator',
+        though the NAIP service provides epsg: 102100 a deprecated ESRI SRS'
+
+        :param state: lower case state str, e.g. 'south_dakota'
+        :param size: tuple of horizontal by vertical size in pixels, e.g., (526, 525)
+        :return:
+        """
+        coords = {x: y for x, y in zip(['west', 'south', 'east', 'north'], self.bbox)}
+        srs = 102100
+
+        w, s, e, n = GeoBounds(**coords).to_web_mercator()
+        bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
+        nh, nv = size
+
+        naip_str = get_naip_key(state)
+        query = self.usda_query_str.format(naip_str, bbox_str, srs, srs, nh, nv)
+        url = '{}{}'.format(self.naip_base_url, query)
+        req = get(url, verify=False, stream=True)
+        if req.status_code != 200:
+            raise ValueError('Bad response from NAIP API request.')
+        temp = os.path.join(os.getcwd(), 'temp', 'tile.tif')
+        with open(temp, 'wb') as f:
+            f.write(req.content)
+        with rasopen(temp, 'r') as src:
+            array = src.read()
+            profile = src.profile
+        os.remove(temp)
+        pass
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     tile_size = (512, 512)
     box = (-110.08, 46.256, -109.61, 46.584)
-    get_naip_image('montana', box, tile_size)
+    naip = ApfoNaip(box)
+    naip.get_image('montana', tile_size)
 
 # ========================= EOF ================================================================
