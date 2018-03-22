@@ -22,7 +22,6 @@ from convnet.naip import ApfoNaip
 
 class AfpoNaipTestCase(unittest.TestCase):
     def setUp(self):
-        self.tile_size = (512, 512)
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
         self.dst_srs = '26912'
         self.kwargs = dict([('dst_crs', self.dst_srs)])
