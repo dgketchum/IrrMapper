@@ -15,6 +15,7 @@
 # =============================================================================================
 
 import unittest
+from rasterio import open as rasopen
 
 from convnet.naip import ApfoNaip
 
@@ -23,15 +24,17 @@ class AfpoNaipTestCase(unittest.TestCase):
     def setUp(self):
         self.tile_size = (512, 512)
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
-        self.test_tif = 'data/test_apfonaip.tif'
-        self.dst_srs = 26912
-        self.profile = dict([('dst_crs', 26912)])
+        self.dst_srs = '26912'
+        self.kwargs = dict([('dst_crs', self.dst_srs)])
+        with rasopen('data/wheatland_tile.tif', 'r') as src:
+            self.profile = src.profile
+            self.array = src.read()
 
     def test_image_reference(self):
-        naip = ApfoNaip(self.box, **self.profile)
+        naip = ApfoNaip(self.box, **self.kwargs)
         array, profile = naip.get_image('montana')
-        naip.save(array, profile, self.test_tif, crs=self.dst_srs)
-        pass
+        self.assertAlmostEqual(array.mean(), self.array.mean(), delta=3.)
+        naip.close()
 
 
 if __name__ == '__main__':
