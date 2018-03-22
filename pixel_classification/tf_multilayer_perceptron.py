@@ -29,7 +29,6 @@ def mlp(data):
     """
 
     N = len(data.classes)
-    data.x = minmax_scale(data.x)
     n = data.x.shape[1]
     nodes = 500
     eta = 0.05
@@ -81,7 +80,7 @@ def mlp(data):
             pred = tf.nn.softmax(y_pred)
             correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            print("Accuracy:", accuracy.eval({X: x_test, Y: y_test}), loss)
+            print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
 
 # Create neural network

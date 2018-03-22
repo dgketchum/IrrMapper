@@ -38,7 +38,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None,
 
     data = StructuredData(data)
     data.make_binary(binary_true=binary, inplace=True)
-    data.principal_components(return_percentile=95.)
+    data.principal_components(return_percentile=0.90)
 
     mapping = {'softmax': softmax,
                'neural_net': mlp}
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
-    classify(alg='neural_net', path_to_pickled=p_path, binary='F')
+    classify(alg='neural_net', path_to_pickled=p_path, binary='I')
 
 
 # ========================= EOF ====================================================================

@@ -19,7 +19,7 @@ import copy
 import numpy as np
 from pandas import get_dummies
 from sklearn import decomposition
-from sklearn.utils import Bunch
+from sklearn.preprocessing import minmax_scale
 
 
 class StructuredData(object):
@@ -37,8 +37,8 @@ class StructuredData(object):
         self.v = None
 
         self.data = data
-
-        self.x = self.data['data'].astype(np.float32)
+        self.x = minmax_scale(self.data['data'].astype(np.float32),
+                              feature_range=(-1, 1), axis=1)
         self.y_strs = self.data['target_values']
 
         unique, self.y = np.unique(self.y_strs, return_inverse=True)
@@ -77,11 +77,15 @@ class StructuredData(object):
         if n_components:
             pca = decomposition.PCA(n_components=n_components, copy=True, whiten=False)
             pca.fit(self.x)
+            self.x = pca.transform(self.x)
         elif return_percentile:
-            pca = decomposition.PCA(0.95, copy=True, whiten=False)
+            pca = decomposition.PCA(return_percentile, copy=True, whiten=False)
             pca.fit(self.x)
-
-            print(np.cumsum(pca.explained_variance_ratio_))
+            self.x = pca.transform(self.x)
+            print('Cumulative sum principal components: {}\n '
+                  '{} features \n {}'"%"' explained variance'.format(np.cumsum(pca.explained_variance_ratio_),
+                                                                     pca.n_components_,
+                                                                     pca.n_components * 100))
         return pca
 
 

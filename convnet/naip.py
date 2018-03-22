@@ -20,7 +20,7 @@ from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
-from numpy import empty, uint8
+from numpy import empty, uint8, float32
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
@@ -131,7 +131,7 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
-                              '&imageSR=102100&bboxSR=102100&size=3000,3000' \
+                              '&imageSR=102100&bboxSR=102100&size=1000,1000' \
                               '&format=tiff&pixelType=U8' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
 
