@@ -15,15 +15,17 @@
 # =============================================================================================
 
 import os
+from affine import Affine
 from requests import get
-from rasterio import band
+from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
-from numpy import float32, ones, uint8, zeros
+from numpy import float32, empty
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
+from spatial.reproj import reproject_multiband
 
 
 class BadCoordinatesError(ValueError):
@@ -48,41 +50,46 @@ class NaipImage(object):
         geometry['dtype'] = float32
 
         if crs:
-            if geometry['crs'] != CRS({'init': 'epsg:{}'.format(crs)}):
-                self.reproject()
-                with rasopen(self.temp_proj_file, 'r') as src:
-                    array = src.read()
-                    geometry = src.profile
+            dst_crs = CRS({'init': 'epsg:{}'.format(crs)})
+            if geometry['crs'] != dst_crs:
+                reproject_multiband(self.temp_file, self.temp_proj_file, dst_crs)
 
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)
 
         return None
 
-    def reproject(self):
-        if isinstance(self, ApfoNaip):
-            source_crs = 3857
-        with rasopen(self.temp_file) as src:
-            transform, width, height = calculate_default_transform(
-                source_crs, self.dst_crs, src.width, src.height, *src.bounds)
-            kwargs = src.meta.copy()
-            kwargs.update({
-                'crs': self.dst_crs,
-                'transform': transform,
-                'width': width,
-                'height': height
-            })
+    def reproject_multiband(self, dst_crs):
+        with Env(CHECK_WITH_INVERT_PROJ=True):
+            with rasopen(self.temp_file) as src:
+                profile = src.profile
 
-            with rasopen(self.temp_proj_file, 'w', **kwargs) as dst:
-                for i in range(1, src.count + 1):
-                    reproject(
-                        source=band(src, i),
-                        destination=band(dst, i),
-                        src_transform=src.transform,
-                        src_crs=source_crs,
-                        dst_transform=transform,
-                        dst_crs=self.dst_crs,
-                        resampling=Resampling.nearest)
+                dst_affine, dst_width, dst_height = calculate_default_transform(
+                    src.crs, dst_crs, src.width, src.height, *src.bounds)
+
+                profile.update({
+                    'crs': dst_crs,
+                    'transform': dst_affine,
+                    'affine': dst_affine,
+                    'width': dst_width,
+                    'height': dst_height
+                })
+
+                with rasopen(self.temp_proj_file, 'w', **profile) as dst:
+                    for i in range(1, src.count + 1):
+                        src_array = src.read(i)
+                        dst_array = empty((dst_height, dst_width), dtype=float32)
+
+                        reproject(src_array,
+                                  src_crs=src.crs,
+                                  src_transform=src.affine,
+                                  destination=dst_array,
+                                  dst_transform=dst_affine,
+                                  dst_crs=dst_crs,
+                                  resampling=Resampling.nearest,
+                                  num_threads=2)
+
+                        dst.write(dst_array, i)
 
 
 class ApfoNaip(NaipImage):
@@ -117,6 +124,13 @@ class ApfoNaip(NaipImage):
 
         NaipImage.__init__(self)
 
+        self.target_profile = {'driver': 'GTiff', 'dtype': 'uint8', 'nodata': 0.0,
+                               'width': 3520, 'height': 3520,
+                               'count': 1, 'crs': CRS({'init': 'epsg:26912'}),
+                               'transform': (577932.0, 1.0, 0.0, 5150000.0, 0.0, -1.0),
+                               'affine': Affine(1.0, 0.0, 577932.0,
+                                                0.0, -1.0, 5150000.0), 'tiled': False, 'interleave': 'band'}
+
         self.bbox = bbox
         self.dst_crs = None
 
@@ -125,6 +139,7 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
+                              '&imageSR=102100&bboxSR=102100' \
                               '&format=tiff&pixelType=F32' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
 
