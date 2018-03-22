@@ -20,7 +20,7 @@ from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
-from numpy import float32, empty
+from numpy import empty, uint8
 
 from spatial.naip_services import get_naip_key
 from spatial.bounds import GeoBounds
@@ -77,7 +77,7 @@ class NaipImage(object):
                 with rasopen(self.temp_proj_file, 'w', **profile) as dst:
                     for i in range(1, src.count + 1):
                         src_array = src.read(i)
-                        dst_array = empty((dst_height, dst_width), dtype=float32)
+                        dst_array = empty((dst_height, dst_width), dtype=uint8)
 
                         reproject(src_array,
                                   src_crs=src.crs,
@@ -131,8 +131,8 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
-                              '&imageSR=102100&bboxSR=102100&size=1000,1000' \
-                              '&format=tiff&pixelType=F32' \
+                              '&imageSR=102100&bboxSR=102100&size=3000,3000' \
+                              '&format=tiff&pixelType=U8' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
 
         for key, val in kwargs.items():
@@ -164,10 +164,15 @@ class ApfoNaip(NaipImage):
 
         req = get(url, verify=False, stream=True)
         if req.status_code != 200:
-            raise ValueError('Bad response from NAIP API request.')
+            raise ValueError('Bad response {} from NAIP API request.'.format(req.status_code))
+
+        # with open(self.temp_file, 'wb') as f:
+        #     f.write(req.content)
 
         with open(self.temp_file, 'wb') as f:
-            f.write(req.content)
+            for chunk in req.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
 
         with rasopen(self.temp_file, 'r') as src:
             array = src.read()
