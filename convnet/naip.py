@@ -15,7 +15,6 @@
 # =============================================================================================
 
 import os
-from affine import Affine
 from requests import get
 from rasterio import Env
 from rasterio import open as rasopen
@@ -124,13 +123,6 @@ class ApfoNaip(NaipImage):
 
         NaipImage.__init__(self)
 
-        self.target_profile = {'driver': 'GTiff', 'dtype': 'uint8', 'nodata': 0.0,
-                               'width': 3520, 'height': 3520,
-                               'count': 1, 'crs': CRS({'init': 'epsg:26912'}),
-                               'transform': (577932.0, 1.0, 0.0, 5150000.0, 0.0, -1.0),
-                               'affine': Affine(1.0, 0.0, 577932.0,
-                                                0.0, -1.0, 5150000.0), 'tiled': False, 'interleave': 'band'}
-
         self.bbox = bbox
         self.dst_crs = None
 
@@ -139,7 +131,7 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
-                              '&imageSR=102100&bboxSR=102100' \
+                              '&imageSR=102100&bboxSR=102100&size=1000,1000' \
                               '&format=tiff&pixelType=F32' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
 
@@ -192,7 +184,6 @@ class ApfoNaip(NaipImage):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    tile_size = (512, 512)
     box = (-109.9849, 46.46738, -109.93647, 46.498625)
     naip = ApfoNaip(box)
     naip.get_image('montana')
