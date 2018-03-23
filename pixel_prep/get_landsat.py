@@ -51,7 +51,10 @@ def get_image(path, row, start='2015-05-01', end='2015-10-30', usgs_credentials=
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
+    creds = os.path.join(home, 'usgs.txt')
+    out = os.path.join(home, 'landsat_images')
     get_image(39, 27, '2015-05-01', '2015-10-30',
-              output_path='pixel_prep/temp', satellite='all')
+              output_path=out, satellite='all',
+              usgs_credentials=creds)
 
 # ========================= EOF ====================================================================
