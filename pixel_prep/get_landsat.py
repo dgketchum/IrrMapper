@@ -14,14 +14,44 @@
 # limitations under the License.
 # =============================================================================================
 
+
 import os
+from datetime import datetime
 
-import landsat
+from landsat import download_composer
 
 
+def get_image(path, row, start='2015-05-01', end='2015-10-30', usgs_credentials=None,
+              output_path=None, satellite='all'):
+
+    """ Get Landsat data from USGS site.
+
+    :param path: int path from WRS2 reference system
+    :param row: Row
+    :param start: start date of image search; ftm = 'YYY-MM-DD'
+    :param end: end date of image search
+    :param usgs_credentials: path to .txt file with <username> <password> separated by one space
+    :param output_path: location
+    :param satellite: 'all' will result in search of LT5, LE7, and LC8, otherwise choose one of the three
+    :return: None
+    """
+
+    start = datetime.strptime(start, '%Y-%m-%d')
+    end = datetime.strptime(end, '%Y-%m-%d')
+    if satellite == 'all':
+        for sat in ['LT5', 'LE7', 'LC8']:
+            download_composer.download_landsat(start, end, sat, path=path,
+                                               row=row, output_path=output_path,
+                                               usgs_creds=usgs_credentials)
+    else:
+        download_composer.download_landsat(start, end, satellite, path=path,
+                                           row=row, output_path=output_path,
+                                           usgs_creds=usgs_credentials)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
+    get_image(39, 27, '2015-05-01', '2015-10-30',
+              output_path='pixel_prep/temp', satellite='all')
 
 # ========================= EOF ====================================================================
