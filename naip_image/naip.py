@@ -41,7 +41,11 @@ class NaipImage(object):
         self.array = None
         self.web_mercator_bounds = None
 
-        self.temp_file = os.path.join(os.getcwd(), 'temp', 'tile.tif')
+        temp_dir = os.path.join(os.getcwd(), 'temp')
+        if not os.path.isdir(temp_dir):
+            os.mkdir(temp_dir)
+
+        self.temp_file = os.path.join(temp_dir, 'tile.tif')
         self.temp_proj_file = os.path.join(os.getcwd(), 'temp', 'tile_projected.tif')
 
     def save(self, array, geometry, output_filename, crs=None):
