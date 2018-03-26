@@ -15,9 +15,10 @@
 # =============================================================================================
 
 import unittest
+
 from rasterio import open as rasopen
 
-from convnet.naip import ApfoNaip
+from naip_image.naip import ApfoNaip
 
 
 class AfpoNaipTestCase(unittest.TestCase):

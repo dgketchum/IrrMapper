@@ -54,7 +54,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None,
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
+    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
     classify(alg='neural_net', path_to_pickled=p_path, binary='I')
 
