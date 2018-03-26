@@ -15,32 +15,23 @@
 # =============================================================================================
 
 import os
+from shapely.geometry import mapping, shape
+from fiona import open as fopen
+from fiona import collection
 
-from sat_image.image import Landsat8
-from sat_image.fmask import Fmask
 
+def get_bounded_features(shapefile, bbox):
 
-def fmask(directory):
-    dirs = [os.path.join(directory, x) for x in os.listdir(directory)]
-    tif_name = 'cloud_mask.tif'
-    for d in dirs:
-        if tif_name in os.listdir(d):
-            print('Looks like {} already has a {}'.format(d, tif_name))
-        else:
-            print('Processing {}'.format(d))
-            l = Landsat8(d)
-            f = Fmask(l)
-            combo = f.cloud_mask(combined=True)
-            f.save_array(combo, outfile=os.path.join(d, tif_name))
-
-    return None
+    with fopen(shapefile, 'r') as src:
+        clipped = src.filter(bbox=bbox)
+        clipped_schema = src.schema.copy()
+        with collection('clipped.shp', 'w', 'ESRI Shapefile', clipped_schema) as output:
+            for elem in clipped:
+                output.write({'properties': elem['properties'], 'geometry': mapping(shape(elem['geometry']))})
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    top_level = os.path.join(home, 'pixel_prep', 'irrigation',
-                             'MT', 'landsat', 'LC8_39_27')
-    fmask(top_level)
 
 
-# ========================= EOF ====================================================================
+# ========================= EOF ================================================================
