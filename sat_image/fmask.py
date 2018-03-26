@@ -607,11 +607,22 @@ class Fmask(object):
         return pcloud, pshadow, water
 
     def save_array(self, array, outfile):
+
+        print('Writing {}'.format(outfile))
         georeference = self.image.rasterio_geometry
-        georeference['dtype'] = array.dtype
-        array = array.reshape(1, array.shape[0], array.shape[1])
-        with rasterio.open(outfile, 'w', **georeference) as dst:
-            dst.write(array)
+
+        if array.dtype == bool:
+            georeference['dtype'] = rasterio.uint8
+            array = array.reshape(1, array.shape[0], array.shape[1])
+            with rasterio.open(outfile, 'w', **georeference) as dst:
+                dst.write(array.astype(rasterio.uint8))
+
+        else:
+            georeference['dtype'] = array.dtype
+            array = array.reshape(1, array.shape[0], array.shape[1])
+            with rasterio.open(outfile, 'w', **georeference) as dst:
+                dst.write(array.astype(georeference['dtype']))
+
         return None
 
     @staticmethod
