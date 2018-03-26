@@ -57,6 +57,9 @@ class LandsatImage(object):
         self.tif_list = [x for x in os.listdir(obj) if x.endswith('.TIF')]
         self.tif_list.sort()
 
+        self.sun_elevation = None
+        self.date_acquired = None
+
         # parse metadata file into attributes
         # structure: {HEADER: {SUBHEADER: {key(attribute), val(attribute value)}}}
         self.mtl = mtl.parsemeta(obj)
@@ -101,7 +104,6 @@ class LandsatImage(object):
         self.solar_zenith_rad = self.solar_zenith * pi / 180
         self.sun_elevation_rad = self.sun_elevation * pi / 180
         self.earth_sun_dist = self.earth_sun_d(self.date_acquired)
-
 
     def _get_band(self, band_str):
         path = self.tif_dict[band_str]
