@@ -19,11 +19,12 @@ import os
 from datetime import datetime
 
 from landsat import download_composer
+from sat_image.image import Landsat5, Landsat7, Landsat8
+from sat_image.fmask import Fmask
 
 
 def get_image(path, row, start='2015-05-01', end='2015-10-30', usgs_credentials=None,
               output_path=None, satellite='all'):
-
     """ Get Landsat data from USGS site.
 
     :param path: int path from WRS2 reference system
@@ -49,12 +50,31 @@ def get_image(path, row, start='2015-05-01', end='2015-10-30', usgs_credentials=
                                            usgs_creds=usgs_credentials)
 
 
+def make_fmask(image_dir, sat='LC8'):
+
+    mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+
+    lst_image = mapping[sat](image_dir)
+
+    f = Fmask(lst_image)
+    cloud, shadow, water = f.cloud_mask()
+    combo = f.cloud_mask(combined=True)
+
+    f.save_array(cloud, os.path.join(outdir, 'cloud_mask_l7.tif'))
+    f.save_array(shadow, os.path.join(outdir, 'shadow_mask_l7.tif'))
+    f.save_array(water, os.path.join(outdir, 'water_mask_l7.tif'))
+    f.save_array(combo, os.path.join(outdir, 'combo_mask_l7.tif'))
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     creds = os.path.join(home, 'usgs.txt')
-    out = os.path.join(home, 'landsat_images')
-    get_image(39, 27, '2015-05-01', '2015-10-30',
-              output_path=out, satellite='LC8',
-              usgs_credentials=creds)
+    images = os.path.join(home, 'landsat_images', 'LC8_39_27')
+    dirs = os.listdir(images)
+    for image in dirs:
+        make_fmask(image_dir=image)
+        # get_image(39, 27, '2015-05-01', '2015-10-30',
+        #           output_path=out, satellite='LC8',
+        #           usgs_credentials=creds)
 
 # ========================= EOF ====================================================================
