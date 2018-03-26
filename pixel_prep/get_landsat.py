@@ -54,7 +54,7 @@ if __name__ == '__main__':
     creds = os.path.join(home, 'usgs.txt')
     out = os.path.join(home, 'landsat_images')
     get_image(39, 27, '2015-05-01', '2015-10-30',
-              output_path=out, satellite='all',
+              output_path=out, satellite='LC8',
               usgs_credentials=creds)
 
 # ========================= EOF ====================================================================
