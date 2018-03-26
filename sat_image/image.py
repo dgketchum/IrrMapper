@@ -77,7 +77,7 @@ class LandsatImage(object):
         for i, tif in enumerate(self.tif_list):
             raster = os.path.join(self.obj, tif)
             with rasopen(raster) as src:
-                transform = src.transform
+                transform = src.affine
                 profile = src.profile
             # set all lower case attributes
             tif = tif.lower()

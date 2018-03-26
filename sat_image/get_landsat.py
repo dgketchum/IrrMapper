@@ -57,13 +57,9 @@ def make_fmask(image_dir, sat='LC8'):
     lst_image = mapping[sat](image_dir)
 
     f = Fmask(lst_image)
-    cloud, shadow, water = f.cloud_mask()
     combo = f.cloud_mask(combined=True)
 
-    f.save_array(cloud, os.path.join(outdir, 'cloud_mask_l7.tif'))
-    f.save_array(shadow, os.path.join(outdir, 'shadow_mask_l7.tif'))
-    f.save_array(water, os.path.join(outdir, 'water_mask_l7.tif'))
-    f.save_array(combo, os.path.join(outdir, 'combo_mask_l7.tif'))
+    f.save_array(combo, os.path.join(image_dir, 'combo_mask.tif'))
 
 
 if __name__ == '__main__':
@@ -72,7 +68,9 @@ if __name__ == '__main__':
     images = os.path.join(home, 'landsat_images', 'LC8_39_27')
     dirs = os.listdir(images)
     for image in dirs:
-        make_fmask(image_dir=image)
+        path = os.path.join(images, image)
+        make_fmask(image_dir=path)
+        break
         # get_image(39, 27, '2015-05-01', '2015-10-30',
         #           output_path=out, satellite='LC8',
         #           usgs_credentials=creds)
