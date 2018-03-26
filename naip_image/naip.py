@@ -15,16 +15,16 @@
 # =============================================================================================
 
 import os
-from requests import get
+
+from numpy import empty, uint8, float32
 from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
-from numpy import empty, uint8, float32
+from requests import get
 
-from spatial.naip_services import get_naip_key
-from spatial.bounds import GeoBounds
-from spatial.reproj import reproject_multiband
+from naip_image.naip_services import get_naip_key
+from sat_image.bounds import GeoBounds
 
 
 class BadCoordinatesError(ValueError):
@@ -51,7 +51,7 @@ class NaipImage(object):
         if crs:
             dst_crs = CRS({'init': 'epsg:{}'.format(crs)})
             if geometry['crs'] != dst_crs:
-                reproject_multiband(self.temp_file, self.temp_proj_file, dst_crs)
+                self.reproject_multiband(dst_crs)
 
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)

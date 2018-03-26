@@ -74,7 +74,6 @@ class Fmask(object):
             self.tirs1 = image.brightness_temp(10, 'C')
             self.tirs2 = image.brightness_temp(11, 'C')
 
-
         else:
             raise ValueError('Must provide satellite sat_image from LT5, LE7, LC8')
 

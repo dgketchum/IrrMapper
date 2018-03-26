@@ -26,7 +26,7 @@ from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
 # import sys
 # cwd = os.getcwd()
-# sys.path.append(cwd.replace('pixel_classification', 'spatial'))
+# sys.path.append(cwd.replace('pixel_classification', 'spatial_data'))
 # sys.path.append(cwd)
 
 
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     nlcd = os.path.join(montana, 'nlcd_Z12.tif')
     flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
 
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial')
+    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
 
     data = load_irrigation_data(centroids, images, pickle_path=p_path,
