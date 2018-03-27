@@ -18,66 +18,50 @@ from __future__ import division
 
 import os
 
-import affine
-
 import rasterio
-from rasterio.crs import CRS
 from rasterio.enums import Resampling
+from rasterio.vrt import WarpedVRT
+from rasterio import shutil as rio_shutil
+
+from sat_image.image import Landsat5, Landsat7, Landsat8
 
 
-input_files = (
-    # This file is in EPSG:32618
-    'tests/data/RGB.byte.tif',
-    # This file is in EPSG:4326
-    'tests/data/WGS84-RGB.byte.tif'
-)
+def warp_vrt(directory, sat):
 
-# Destination CRS is Web Mercator
-dst_crs = CRS.from_epsg(3857)
+    list_dir = os.listdir(directory)
+    first = True
 
-# These coordiantes are in Web Mercator
-dst_bounds = -8744355, 2768114, -8559167, 2908677
+    for d in list_dir:
+        if first:
 
-# Output image dimensions
-dst_height = dst_width = 100
+            mapping = {'LC8': Landsat8, 'LE7': Landsat7, 'LT5': Landsat5}
 
-# Output image transform
-left, bottom, right, top = dst_bounds
-xres = (right - left) / dst_width
-yres = (top - bottom) / dst_height
-dst_transform = affine.Affine(xres, 0.0, left,
-                              0.0, -yres, top)
+            landsat = mapping[sat](d)
+            vrt_options = landsat.rasterio_geometry
 
-vrt_options = {
-    'resampling': Resampling.cubic,
-    'dst_crs': dst_crs,
-    'dst_transform': dst_transform,
-    'dst_height': dst_height,
-    'dst_width': dst_width,
-}
+            vrt_options['resampling'] = Resampling.cubic
+            first = False
 
-for path in input_files:
+        else:
+            paths = []
+            band_mapping = {'LC8': [3, 4, 5, 10], 'LE7': [2, 3, 4, 6]}
+            for x in os.listdir(d):
+                for y in band_mapping[sat]:
+                    if x.endswith('B{}.TIF'.format(y)):
+                        paths.append(os.path.join(d, x))
 
-    with rasterio.open(path) as src:
+            for path in paths:
 
-        with WarpedVRT(src, **vrt_options) as vrt:
+                with rasterio.open(path) as src:
 
-            # At this point 'vrt' is a full dataset with dimensions,
-            # CRS, and spatial extent matching 'vrt_options'.
+                    with WarpedVRT(src, **vrt_options) as vrt:
 
-            # Read all data into memory.
-            data = vrt.read()
+                        data = vrt.read()
 
-            # Process the dataset in chunks.  Likely not very efficient.
-            for _, window in vrt.block_windows():
-                data = vrt.read(window=window)
+                        directory, name = os.path.split(path)
+                        outfile = os.path.join(directory, 'aligned-{}'.format(name))
+                        rio_shutil.copy(vrt, outfile, driver='GTiff')
 
-            # Dump the aligned data into a new file.  A VRT representing
-            # this transformation can also be produced by switching
-            # to the VRT driver.
-            directory, name = os.path.split(path)
-            outfile = os.path.join(directory, 'aligned-{}'.format(name))
-            rio_shutil.copy(vrt, outfile, driver='GTiff')
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
