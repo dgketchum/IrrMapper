@@ -1,7 +1,7 @@
 # ===============================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -23,7 +23,7 @@ from pixel_prep.compose_array import load_irrigation_data
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
         self.shapefile = 'data/extract_no_attrs_z12.shp'
-        self.raster = 'data/LE07_clip_L1TP_039027_20130726_20160907_01_T1_B3.TIF'
+        self.raster = 'data/LE07_clip_32612_L1TP_039027_20130726_20160907_01_T1_B3.TIF'
         self.nlcd = 'data/nlcd_clip_test.tif'
         self.target_polys = 'data/flu_test_z12.shp'
         if not os.path.isfile(self.shapefile):

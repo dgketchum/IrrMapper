@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -52,7 +52,7 @@ class StructuredData(object):
         self.one_hot = get_dummies(self.y).values
 
     def make_binary(self, binary_true, inplace=False):
-        """ Use a key value that will equate to True (1), all others to 0."""
+        """ Use a key value that will equate to True (1), all others to LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF."""
         """
         :param binary_true: 
         :return: 
