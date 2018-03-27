@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -17,19 +17,33 @@
 from __future__ import division
 
 import os
+from datetime import datetime
 
-import rasterio
 from rasterio.enums import Resampling
 from rasterio.vrt import WarpedVRT
-from rasterio import shutil as rio_shutil
 from rasterio import open as rasopen
 
 from sat_image.image import Landsat5, Landsat7, Landsat8
 
 
-def warp_vrt(directory, sat):
+def warp_vrt(directory, sat, delete_extras=False):
+    """ Read in image geometry, resample subsequent images to same grid.
+
+    The purpose of this function is to snap many Landsat images to one geometry. Use Landsat578
+    to download and unzip them, then run them through this to get identical geometries for analysis.
+    Files
+    :param directory: A directory containing sub-directories of Landsat images.
+    :param sat: Landsat satellite; 'LT5', 'LE7', 'LC8'
+    :param delete_extras: Remove all but targeted bands and the .MTL file.
+    :return: None
+    """
+    vrt_options = {}
     list_dir = os.listdir(directory)
     first = True
+
+    band_mapping = {'LC8': ['3', '4', '5', '10'],
+                    'LE7': ['2', '3', '4', '6_VCID_2'],
+                    'LT5': ['2', '3', '4', '6']}
 
     for d in list_dir:
         if first:
@@ -47,34 +61,39 @@ def warp_vrt(directory, sat):
 
             print('geometry: {} \n {}'.format(d, vrt_options))
             print('shape: {}'.format(landsat.shape))
-
+            message = """
+            This directory has been resampled to same grid.
+            Master grid is {}.
+            {}
+            """.format(d, datetime.now())
+            with open(os.path.join(directory, 'resample_meta.txt'), 'w') as f:
+                f.write(message)
             first = False
 
         else:
             paths = []
-            band_mapping = {'LC8': ['3', '4', '5', '10'],
-                            'LE7': ['2', '3', '4', '6_VCID_2']}
+
             for x in os.listdir(os.path.join(directory, d)):
                 for y in band_mapping[sat]:
                     if x.endswith('B{}.TIF'.format(y)):
                         paths.append(os.path.join(directory, d, x))
 
-            for path in paths:
-                print(path)
-                with rasopen(path, 'r+') as src:
-                    src.crs = dst['crs']
+            for tif_path in paths:
+                print('warping {}'.format(os.path.basename(tif_path)))
+                with rasopen(tif_path, 'r') as src:
                     with WarpedVRT(src, **vrt_options) as vrt:
                         data = vrt.read()
-
-                        dst_dir, name = os.path.split(path)
-                        print(dst_dir, name)
-                        outfile = os.path.join(dst_dir, name.replace('_T', '_TA'))
-                        rio_shutil.copy(vrt, outfile, driver='GTiff')
+                        dst_dir, name = os.path.split(tif_path)
+                        outfile = os.path.join(dst_dir, name)
+                        meta = vrt.meta.copy()
+                        meta['driver'] = 'GTiff'
+                        with rasopen(outfile, 'w', **meta) as dst:
+                            dst.write(data)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    images = os.path.join(home, 'landsat_images', 'LE7_39_27')
-    warp_vrt(images, 'LE7')
+    images = os.path.join(home, 'landsat_images', 'LC8_39_27_test')
+    warp_vrt(images, 'LC8', False)
 
 # ========================= EOF ================================================================

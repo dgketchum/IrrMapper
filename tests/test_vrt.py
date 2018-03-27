@@ -13,28 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # =============================================================================================
-
+import os
 import unittest
+import shutil
 
 from rasterio import open as rasopen
 
-from naip_image.naip import ApfoNaip
+from sat_image import warped_vrt
 
 
-class AfpoNaipTestCase(unittest.TestCase):
+class MyTestCase(unittest.TestCase):
     def setUp(self):
-        self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
-        self.dst_srs = '26912'
-        self.kwargs = dict([('dst_crs', self.dst_srs)])
-        with rasopen('data/wheatland_tile.tif', 'r') as src:
-            self.profile = src.profile
-            self.array = src.read()
+        self.origin = os.path.join('data', 'vrt_test')
+        self.satellite = 'LC8'
+        self.directory = os.path.join('data', 'vrt_test_copy')
+        shutil.copytree(self.origin, self.directory)
 
-    def test_image_reference(self):
-        naip = ApfoNaip(self.box, **self.kwargs)
-        array, profile = naip.get_image('montana')
-        self.assertAlmostEqual(array.mean(), self.array.mean(), delta=3.)
-        naip.close()
+    def test_warped_vrt(self):
+        warped_vrt.warp_vrt(self.directory, self.satellite, delete_extras=False)
+        shapes = []
+        dirs = [_ for _ in os.listdir(self.directory) if not _.endswith('.txt')]
+        for d in dirs:
+            lst = [_ for _ in os.listdir(os.path.join(self.directory, d)) if _.endswith('.TIF')]
+            for l in lst:
+                tif = os.path.join(self.directory, d, l)
+                with rasopen(tif, 'r') as src:
+                    shapes.append(src.shape)
+
+        shutil.rmtree(self.directory)
+        self.assertEqual(shapes[0], shapes[1])
 
 
 if __name__ == '__main__':
