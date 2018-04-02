@@ -30,7 +30,7 @@ class MyTestCase(unittest.TestCase):
         shutil.copytree(self.origin, self.directory)
 
     def test_warped_vrt(self):
-        warped_vrt.warp_vrt(self.directory, self.satellite, delete_extras=False)
+        warped_vrt.warp_vrt(self.directory, self.satellite)
         shapes = []
         dirs = [_ for _ in os.listdir(self.directory) if not _.endswith('.txt')]
         for d in dirs:
