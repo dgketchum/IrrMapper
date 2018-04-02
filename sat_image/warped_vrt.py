@@ -26,15 +26,15 @@ from rasterio import open as rasopen
 from sat_image.image import Landsat5, Landsat7, Landsat8
 
 
-def warp_vrt(directory, sat, delete_extras=False):
+def warp_vrt(directory, sat, delete_extra=False):
     """ Read in image geometry, resample subsequent images to same grid.
 
     The purpose of this function is to snap many Landsat images to one geometry. Use Landsat578
     to download and unzip them, then run them through this to get identical geometries for analysis.
     Files
+    :param delete_extra:
     :param directory: A directory containing sub-directories of Landsat images.
     :param sat: Landsat satellite; 'LT5', 'LE7', 'LC8'
-    :param delete_extras: Remove all but targeted bands and the .MTL file.
     :return: None
     """
     vrt_options = {}
@@ -42,10 +42,18 @@ def warp_vrt(directory, sat, delete_extras=False):
     first = True
 
     band_mapping = {'LC8': ['3', '4', '5', '10'],
-                    'LE7': ['2', '3', '4', '6_VCID_2'],
+                    'LE7': ['2', '3', '4', '6_VCID_1'],
                     'LT5': ['2', '3', '4', '6']}
 
     for d in list_dir:
+
+        paths = []
+
+        for x in os.listdir(os.path.join(directory, d)):
+            for y in band_mapping[sat]:
+                if x.endswith('B{}.TIF'.format(y)):
+                    paths.append(os.path.join(directory, d, x))
+
         if first:
 
             mapping = {'LC8': Landsat8, 'LE7': Landsat7, 'LT5': Landsat5}
@@ -71,12 +79,6 @@ def warp_vrt(directory, sat, delete_extras=False):
             first = False
 
         else:
-            paths = []
-
-            for x in os.listdir(os.path.join(directory, d)):
-                for y in band_mapping[sat]:
-                    if x.endswith('B{}.TIF'.format(y)):
-                        paths.append(os.path.join(directory, d, x))
 
             for tif_path in paths:
                 print('warping {}'.format(os.path.basename(tif_path)))
@@ -90,10 +92,16 @@ def warp_vrt(directory, sat, delete_extras=False):
                         with rasopen(outfile, 'w', **meta) as dst:
                             dst.write(data)
 
+        if delete_extra:
+            for x in os.listdir(os.path.join(directory, d)):
+                if os.path.join(directory, d, x) not in paths:
+                    if not x.endswith('fmask.tif') and not x.endswith('MTL.txt'):
+                        os.remove(os.path.join(directory, d, x))
+
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     images = os.path.join(home, 'landsat_images', 'LC8_39_27_test')
-    warp_vrt(images, 'LC8', False)
+    warp_vrt(images, 'LC8', delete_extra=True)
 
 # ========================= EOF ================================================================
