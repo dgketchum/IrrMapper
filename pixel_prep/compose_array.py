@@ -16,19 +16,18 @@
 
 import os
 import pickle
+import pkg_resources
 
 from fiona import open as fopen
-from pandas import DataFrame, Series
+from fiona import collection
 from rasterio import open as rasopen
-from shapely.geometry import shape
+from shapely.geometry import mapping, shape
+
+from pandas import DataFrame, Series
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
-# import sys
-# cwd = os.getcwd()
-# sys.path.append(cwd.replace('pixel_classification', 'spatial_data'))
-# sys.path.append(cwd)
-
+WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
 '''
 This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
@@ -36,8 +35,25 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def load_irrigation_data(shapefile, rasters, pickle_path=None,
-                         nlcd_path=None, target_shapefiles=None, count=100000):
+def clip_training_to_path_row(path, row, training_shape):
+
+    with fopen(WRS_2, 'r') as wrs:
+        for feature in wrs:
+            if feature['properties']['PATH'] == path:
+                if feature['properties']['ROW'] == row:
+                    bbox = feature['geometry']
+
+    with fopen(training_shape, 'r') as src:
+        clipped = src.filter(mask=bbox)
+        clipped_schema = src.schema.copy()
+
+        with collection('clipped.shp', 'w', 'ESRI Shapefile', clipped_schema) as output:
+            for elem in clipped:
+                output.write({'properties': elem['properties'], 'geometry': mapping(shape(elem['geometry']))})
+
+
+def make_data_array(shapefile, rasters, pickle_path=None,
+                    nlcd_path=None, target_shapefiles=None, count=100000):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
@@ -224,8 +240,10 @@ if __name__ == '__main__':
     spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
 
-    data = load_irrigation_data(centroids, images, pickle_path=p_path,
-                                nlcd_path=nlcd, target_shapefiles=flu,
-                                )
-
+    # data = make_data_array(centroids, images, pickle_path=p_path, nlcd_path=nlcd, target_shapefiles=flu)
+    path = 39
+    row = 27
+    train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
+                                                  'FLU_Final_Irrig_All.shp'))
+    clip_training_to_path_row(path, row, train_shape)
 # ========================= EOF ====================================================================

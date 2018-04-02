@@ -19,18 +19,6 @@ from shapely.geometry import mapping, shape
 from fiona import open as fopen
 from fiona import collection
 
-WRS_2 = 'spatial_data/wrs2_descending.shp'
-
-
-def clip_training_to_path_row(path, row, training_shape):
-    bbox = None
-    with fopen(training_shape, 'r') as src:
-        clipped = src.filter(bbox=bbox)
-        clipped_schema = src.schema.copy()
-        with collection('clipped.shp', 'w', 'ESRI Shapefile', clipped_schema) as output:
-            for elem in clipped:
-                output.write({'properties': elem['properties'], 'geometry': mapping(shape(elem['geometry']))})
-
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
