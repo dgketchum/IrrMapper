@@ -21,7 +21,8 @@ import pkg_resources
 from fiona import open as fopen
 from fiona import collection
 from rasterio import open as rasopen
-from shapely.geometry import mapping, shape
+from shapely.geometry import mapping, shape, Polygon
+from collections import OrderedDict
 
 from pandas import DataFrame, Series
 
@@ -30,13 +31,19 @@ from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
 '''
-This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
+This script contains functions meant to gather data from rasters using a polygon shapefile.  The high-level 
 function `compose_data_array` will return a numpy.ndarray object ready for a learning algorithm.  
 '''
 
 
 def clip_training_to_path_row(path, row, training_shape):
-
+    """ Create a clipped training set and inverse training set from polygon shapefiles.
+    :param path: Landsat path, int
+    :param row: Landsat row, int
+    :param training_shape: Positive training examples
+    :return:
+    """
+    bbox = None
     with fopen(WRS_2, 'r') as wrs:
         for feature in wrs:
             if feature['properties']['PATH'] == path:
@@ -44,12 +51,37 @@ def clip_training_to_path_row(path, row, training_shape):
                     bbox = feature['geometry']
 
     with fopen(training_shape, 'r') as src:
-        clipped = src.filter(mask=bbox)
+        clipped = src.filter(bbox=bbox)
         clipped_schema = src.schema.copy()
 
-        with collection('clipped.shp', 'w', 'ESRI Shapefile', clipped_schema) as output:
+        area = 0.
+        polygons = []
+        parent_dir = os.getcwd()
+        with collection(os.path.join(parent_dir, 'clipped.shp'),
+                        'w', 'ESRI Shapefile', clipped_schema) as output:
             for elem in clipped:
-                output.write({'properties': elem['properties'], 'geometry': mapping(shape(elem['geometry']))})
+                geo = shape(elem['geometry'])
+                polygons.append(geo.exterior.coords)
+                area += elem['properties']['Shape_Area']
+                output.write({'properties': elem['properties'],
+                              'geometry': mapping(geo)})
+
+    shell = bbox['coordinates'][0]
+    inverse = Polygon(shell=shell, holes=polygons)
+
+    inverse_schema = {'properties': OrderedDict(
+        [('OBJECTID', 'int:10'), ('Shape_Area', 'float:19.11'), ('Shape_Length', 'float:19.11')]),
+                      'geometry': 'Polygon'}
+
+    props = OrderedDict([('OBJECTID', 1), ('Shape_Area', inverse.area),
+                         ('Shape_Length', inverse.length)])
+
+    with collection(os.path.join(parent_dir, 'inverse.shp'),
+                    'w', 'ESRI Shapefile', inverse_schema) as output:
+        output.write({'properties': props,
+                      'geometry': mapping(inverse)})
+
+    return area
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
@@ -231,19 +263,10 @@ def _point_attrs(pt_data, index):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-    montana = os.path.join(home, 'pixel_prep', 'irrigation', 'MT')
-    images = os.path.join(montana, 'landsat', 'LC8_39_27')
-    centroids = os.path.join(montana, 'P39R27_Test', 'centroids_Z12.shp')
-    nlcd = os.path.join(montana, 'nlcd_Z12.tif')
-    flu = os.path.join(montana, 'P39R27_Test', 'FLU_2017_All_clip.shp')
-
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data')
-    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
-
     # data = make_data_array(centroids, images, pickle_path=p_path, nlcd_path=nlcd, target_shapefiles=flu)
     path = 39
     row = 27
     train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
-                                                  'FLU_Final_Irrig_All.shp'))
-    clip_training_to_path_row(path, row, train_shape)
+                                                                               'FLU_2017_Irrig.shp'))
+    area = clip_training_to_path_row(path, row, train_shape)
 # ========================= EOF ====================================================================
