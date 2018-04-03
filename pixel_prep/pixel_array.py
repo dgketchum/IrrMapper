@@ -35,10 +35,11 @@ from sat_image.image import LandsatImage
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
+# TODO: move all pixel prep functionality into one class!
 
 # class PixelTrainingArray(LandsatImage):
 #
-#     def __init__(self, training_shapefile):
+#     def __init__(self, training_shapefile, year):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')

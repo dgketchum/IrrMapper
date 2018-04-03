@@ -28,6 +28,7 @@ from shapely.geometry import shape, Polygon, Point, mapping
 from shapely.ops import unary_union
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
+from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 temp_points = pkg_resources.resource_filename('pixel_prep', os.path.join('temp', 'sample_points.shp'))
@@ -38,118 +39,125 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def sample_coverage(path, row, training_shape, points=10000,
-                    save_points=False):
-    """ Create a clipped training set and inverse training set from polygon shapefiles.
+class PixelTrainingArray(object):
+    def __init__(self, training_shape, images, **kwargs):
+        mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+        dirs = [os.path.join(images, x) for x in os.listdir(images) if os.path.isdir(os.path.join(images, x))]
+        objs = [LandsatImage(os.path.join(images, x)).satellite for x in dirs]
+        self.images = [mapping[x](y) for x, y in zip(objs, dirs)]
 
-    This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
-    to the path row provided, gets the bounding box and profile (aka meta) from
-    compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
-    union to reduce the number of polygon objects.
-    :param save_points:
-    :param path: Landsat path, int
-    :param row: Landsat row, int
-    :param training_shape: Positive training examples
-    :return: None
-    """
+        self.landsat = self.images[0]
+        self.vectors = training_shape
 
-    time = datetime.now()
-    bbox, meta = get_tile_geometry(path, row)
+    def sample_coverage(self, points=10000, save_points=False):
+        """ Create a clipped training set and inverse training set from polygon shapefiles.
 
-    with fopen(training_shape, 'r') as src:
-        clipped = src.filter(mask=bbox)
-        polys = []
-        total_area = 0.
-        for feat in clipped:
-            geo = shape(feat['geometry'])
-            polys.append(geo)
-            total_area += geo.area
+        This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
+        to the path row provided, gets the bounding box and profile (aka meta) from
+        compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
+        union to reduce the number of polygon objects.
+        :param points:
+        :param save_points:
+        :return: None
+        """
 
-    union = unary_union(polys)
-    point_collection = {}
-    interior_rings_dissolved = []
-    obj_id = 1
-    for poly in union:
-        interior_rings_dissolved.append(poly.exterior.coords)
-        fractional_area = poly.area / total_area
-        required_points = round(fractional_area * points * 0.5)
-        min_x, max_x = min(poly.bounds[0]), max(poly.bounds[2])
-        min_y, max_y = min(poly.bounds[1]), max(poly.bounds[3])
-        x_range = linspace(min_x, max_x, num=100)
-        y_range = linspace(min_y, max_y, num=100)
+        time = datetime.now()
+        bbox, meta = get_tile_geometry(self.path, self.row)
+
+        with fopen(self.training_shape, 'r') as src:
+            clipped = src.filter(mask=bbox)
+            polys = []
+            total_area = 0.
+            for feat in clipped:
+                geo = shape(feat['geometry'])
+                polys.append(geo)
+                total_area += geo.area
+
+        union = unary_union(polys)
+        point_collection = {}
+        interior_rings_dissolved = []
+        obj_id = 1
+        for poly in union:
+            interior_rings_dissolved.append(poly.exterior.coords)
+            fractional_area = poly.area / total_area
+            required_points = round(fractional_area * points * 0.5)
+            min_x, max_x = min(poly.bounds[0]), max(poly.bounds[2])
+            min_y, max_y = min(poly.bounds[1]), max(poly.bounds[3])
+            x_range = linspace(min_x, max_x, num=100)
+            y_range = linspace(min_y, max_y, num=100)
+            shuffle(x_range), shuffle(y_range)
+            count = 0
+            for coord in zip(x_range, y_range):
+                if count < required_points:
+                    if Point(coord[0], coord[1]).within(poly):
+                        point_collection[obj_id] = {}
+                        point_collection[obj_id]['OBJECTID'] = obj_id
+                        point_collection[obj_id]['COORDS'] = coord
+                        point_collection[obj_id]['POINT_TYPE'] = 1
+                        count += 1
+                        obj_id += 1
+                else:
+                    break
+
+        shell = bbox['coordinates'][0]
+        inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
+        inverse_polygon = inverse_polygon.buffer(0)
+        inverse_polygon = unary_union(inverse_polygon)
+        coords = inverse_polygon.bounds
+        min_x, max_x = coords[0], coords[2]
+        min_y, max_y = coords[1], coords[3]
+        x_range = linspace(min_x, max_x, num=2 * points)
+        y_range = linspace(min_y, max_y, num=2 * points)
         shuffle(x_range), shuffle(y_range)
+        required_points = round(points * 0.5)
         count = 0
+        time = datetime.now()
         for coord in zip(x_range, y_range):
             if count < required_points:
-                if Point(coord[0], coord[1]).within(poly):
+                if Point(coord[0], coord[1]).within(inverse_polygon):
                     point_collection[obj_id] = {}
                     point_collection[obj_id]['OBJECTID'] = obj_id
                     point_collection[obj_id]['COORDS'] = coord
-                    point_collection[obj_id]['POINT_TYPE'] = 1
+                    point_collection[obj_id]['POINT_TYPE'] = 0
                     count += 1
                     obj_id += 1
+                    if count % 100 == 0:
+                        print('Count {} of {} in {} seconds'.format(count, required_points,
+                                                                    (datetime.now() - time).seconds))
             else:
                 break
 
-    shell = bbox['coordinates'][0]
-    inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
-    inverse_polygon = inverse_polygon.buffer(0)
-    inverse_polygon = unary_union(inverse_polygon)
-    coords = inverse_polygon.bounds
-    min_x, max_x = coords[0], coords[2]
-    min_y, max_y = coords[1], coords[3]
-    x_range = linspace(min_x, max_x, num=2 * points)
-    y_range = linspace(min_y, max_y, num=2 * points)
-    shuffle(x_range), shuffle(y_range)
-    required_points = round(points * 0.5)
-    count = 0
-    time = datetime.now()
-    for coord in zip(x_range, y_range):
-        if count < required_points:
-            if Point(coord[0], coord[1]).within(inverse_polygon):
-                point_collection[obj_id] = {}
-                point_collection[obj_id]['OBJECTID'] = obj_id
-                point_collection[obj_id]['COORDS'] = coord
-                point_collection[obj_id]['POINT_TYPE'] = 0
-                count += 1
-                obj_id += 1
-                if count % 100 == 0:
-                    print('Count {} of {} in {} seconds'.format(count, required_points,
-                                                                (datetime.now() - time).seconds))
-        else:
-            break
+        print('Total area in decimal degrees: {}\n'
+              'Area irrigated: {}\n'
+              'Fraction irrigated: {}'.format(shape(bbox).area, total_area,
+                                              total_area / shape(bbox).area))
+        if save_points:
 
-    print('Total area in decimal degrees: {}\n'
-          'Area irrigated: {}\n'
-          'Fraction irrigated: {}'.format(shape(bbox).area, total_area,
-                                          total_area / shape(bbox).area))
-    if save_points:
+            points_schema = {'properties': dict(
+                [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+                'geometry': 'Point'}
 
-        points_schema = {'properties': dict(
-            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-            'geometry': 'Point'}
+            meta['schema'] = points_schema
 
-        meta['schema'] = points_schema
+            with fopen(temp_points, 'w', **meta) as output:
+                for key, val in point_collection.items():
+                    props = dict([('OBJECTID', key), ('POINT_TYPE', val['POINT_TYPE'])])
+                    pt = Point(val['COORDS'][0], val['COORDS'][1])
+                    output.write({'properties': props,
+                                  'geometry': mapping(pt)})
 
-        with fopen(temp_points, 'w', **meta) as output:
-            for key, val in point_collection.items():
-                props = dict([('OBJECTID', key), ('POINT_TYPE', val['POINT_TYPE'])])
-                pt = Point(val['COORDS'][0], val['COORDS'][1])
-                output.write({'properties': props,
-                              'geometry': mapping(pt)})
+        print('sample operation on {} points in {} seconds'.format(points,
+                                                                   (datetime.now() - time).seconds))
 
-    print('sample operation on {} points in {} seconds'.format(points,
-                                                               (datetime.now() - time).seconds))
-
-
-def get_tile_geometry(path, row):
-    with fopen(WRS_2, 'r') as wrs:
-        wrs_meta = wrs.meta.copy()
-        for feature in wrs:
-            fp = feature['properties']
-            if fp['PATH'] == path and fp['ROW'] == row:
-                bbox = feature['geometry']
-                return bbox, wrs_meta
+    @property
+    def tile_geometry(self):
+        with fopen(WRS_2, 'r') as wrs:
+            wrs_meta = wrs.meta.copy()
+            for feature in wrs:
+                fp = feature['properties']
+                if fp['PATH'] == self.path and fp['ROW'] == self.row:
+                    bbox = feature['geometry']
+                    return bbox, wrs_meta
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
@@ -330,11 +338,8 @@ def _point_attrs(pt_data, index):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-
-    # data = make_data_array(centroids, images, pickle_path=p_path, nlcd_path=nlcd, target_shapefiles=flu)
-    path = 39
-    row = 27
+    image = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'landsat_data')
     train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
                                                                                'FLU_2017_Irrig.shp'))
-    sample_coverage(path, row, train_shape, save_points=True, points=1000)
+    PixelTrainingArray(training_shape=train_shape, images=image)
 # ========================= EOF ====================================================================

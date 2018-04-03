@@ -32,7 +32,7 @@ from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
 '''
 This script contains functions meant to gather data from rasters using a points shapefile.  The high-level 
-function `compose_data_array` will return a numpy.ndarray object ready for a learning algorithm.  
+function `compose_data_array` will return a dict of numpy.ndarray objects ready for a learning algorithm.  
 '''
 
 

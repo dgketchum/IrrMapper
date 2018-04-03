@@ -101,3 +101,8 @@ ENV/
 .mypy_cache/
 .idea/*
 /.idea
+
+
+landsat_data/
+pixel_prep/temp/
+tests/temp/
