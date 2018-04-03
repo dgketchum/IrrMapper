@@ -54,44 +54,41 @@ def sample_coverage(path, row, training_shape, points=10000,
 
     with fopen(training_shape, 'r') as src:
         clipped = src.filter(mask=bbox)
-
+        polys = []
         total_area = 0.
         for feat in clipped:
-            total_area += shape(feat['geometry']).area
+            geo = shape(feat['geometry'])
+            polys.append(geo)
+            total_area += geo.area
 
-    with fopen(training_shape, 'r') as src:
-        clipped = src.filter(mask=bbox)
-
-        polygons = []
-        point_collection = {}
-        obj_id = 1
-        for elem in clipped:
-            geo = shape(elem['geometry'])
-            coords = geo.exterior.coords
-            fractional_area = geo.area / total_area
-            required_points = round(fractional_area * points * 0.5)
-            min_x, max_x = min(coords.xy[0]), max(coords.xy[0])
-            min_y, max_y = min(coords.xy[1]), max(coords.xy[1])
-            x_range = linspace(min_x, max_x, num=100)
-            y_range = linspace(min_y, max_y, num=100)
-            shuffle(x_range), shuffle(y_range)
-            count = 0
-            for coord in zip(x_range, y_range):
-                if count < required_points:
-                    if Point(coord[0], coord[1]).within(geo):
-                        point_collection[obj_id] = {}
-                        point_collection[obj_id]['OBJECTID'] = obj_id
-                        point_collection[obj_id]['COORDS'] = coord
-                        point_collection[obj_id]['POINT_TYPE'] = 1
-                        count += 1
-                        obj_id += 1
-                else:
-                    break
-
-            polygons.append(coords)
+    union = cascaded_union(polys)
+    point_collection = {}
+    interior_rings_dissolved = []
+    obj_id = 1
+    for poly in union:
+        interior_rings_dissolved.append(poly.exterior.coords)
+        fractional_area = poly.area / total_area
+        required_points = round(fractional_area * points * 0.5)
+        min_x, max_x = min(poly.bounds[0]), max(poly.bounds[2])
+        min_y, max_y = min(poly.bounds[1]), max(poly.bounds[3])
+        x_range = linspace(min_x, max_x, num=100)
+        y_range = linspace(min_y, max_y, num=100)
+        shuffle(x_range), shuffle(y_range)
+        count = 0
+        for coord in zip(x_range, y_range):
+            if count < required_points:
+                if Point(coord[0], coord[1]).within(poly):
+                    point_collection[obj_id] = {}
+                    point_collection[obj_id]['OBJECTID'] = obj_id
+                    point_collection[obj_id]['COORDS'] = coord
+                    point_collection[obj_id]['POINT_TYPE'] = 1
+                    count += 1
+                    obj_id += 1
+            else:
+                break
 
     shell = bbox['coordinates'][0]
-    inverse_polygon = Polygon(shell=shell, holes=polygons)
+    inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
     inverse_polygon = inverse_polygon.buffer(0)
     inverse_polygon = cascaded_union(inverse_polygon)
     coords = inverse_polygon.bounds
@@ -112,7 +109,7 @@ def sample_coverage(path, row, training_shape, points=10000,
                 point_collection[obj_id]['POINT_TYPE'] = 0
                 count += 1
                 obj_id += 1
-                if count % 1000 == 0:
+                if count % 100 == 0:
                     print('Count {} of {} in {} seconds'.format(count, required_points,
                                                                 (datetime.now() - time).seconds))
         else:
@@ -126,16 +123,16 @@ def sample_coverage(path, row, training_shape, points=10000,
         parent_dir = os.getcwd()
 
         points_schema = {'properties': OrderedDict(
-            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'str')]),
+            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
             'geometry': 'Point'}
 
         with collection(os.path.join(parent_dir, 'temp/inverse.shp'), 'w',
                         'ESRI Shapefile', points_schema) as output:
+
             for key, val in point_collection.items():
                 props = OrderedDict([('OBJECTID', None)])
                 output.write({'properties': props,
                               'geometry': mapping(inverse_polygon)})
-
 
 
 def get_tile_geometry(path, row):
