@@ -36,12 +36,12 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def clip_training_to_path_row(path, row, training_shape):
+def clip_training_to_path_row(path, row, training_shape, points=10000):
     """ Create a clipped training set and inverse training set from polygon shapefiles.
     :param path: Landsat path, int
     :param row: Landsat row, int
     :param training_shape: Positive training examples
-    :return:
+    :return: None
     """
     bbox = None
     with fopen(WRS_2, 'r') as wrs:
@@ -51,18 +51,24 @@ def clip_training_to_path_row(path, row, training_shape):
                     bbox = feature['geometry']
 
     with fopen(training_shape, 'r') as src:
-        clipped = src.filter(bbox=bbox)
+        clipped = src.filter(mask=bbox)
         clipped_schema = src.schema.copy()
+        clipped_schema['properties']['fract_area'] = 'float:19.11'
 
-        area = 0.
+        tot_area = 0.
         polygons = []
         parent_dir = os.getcwd()
-        with collection(os.path.join(parent_dir, 'clipped.shp'),
+
+        for elem in clipped:
+            geo = shape(elem['geometry'])
+            tot_area += geo.area
+
+        with collection(os.path.join(parent_dir, 'temp/clipped.shp'),
                         'w', 'ESRI Shapefile', clipped_schema) as output:
             for elem in clipped:
                 geo = shape(elem['geometry'])
                 polygons.append(geo.exterior.coords)
-                area += elem['properties']['Shape_Area']
+                elem['properties']['fract_area'] = geo.area
                 output.write({'properties': elem['properties'],
                               'geometry': mapping(geo)})
 
@@ -70,22 +76,30 @@ def clip_training_to_path_row(path, row, training_shape):
     inverse = Polygon(shell=shell, holes=polygons)
 
     inverse_schema = {'properties': OrderedDict(
-        [('OBJECTID', 'int:10'), ('Shape_Area', 'float:19.11'), ('Shape_Length', 'float:19.11')]),
-                      'geometry': 'Polygon'}
+        [('OBJECTID', 'int:10'), ('Shape_Area', 'float:19.11'), ('Geo_Area', 'float:19.11'),
+         ('Shape_Length', 'float:19.11')]),
+        'geometry': 'Polygon'}
 
     props = OrderedDict([('OBJECTID', 1), ('Shape_Area', inverse.area),
+                         ('Geo_Area', shape(bbox).area),
                          ('Shape_Length', inverse.length)])
 
-    with collection(os.path.join(parent_dir, 'inverse.shp'),
+    print('Total area in decimal degrees: {}\n'
+          'Area irrigated: {}\n'
+          'Fraction irrigated: {}'.format(shape(bbox).area, tot_area,
+                                          tot_area/shape(bbox).area))
+
+    with collection(os.path.join(parent_dir, 'temp/inverse.shp'),
                     'w', 'ESRI Shapefile', inverse_schema) as output:
         output.write({'properties': props,
                       'geometry': mapping(inverse)})
 
-    return area
+
+
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
-                    nlcd_path=None, target_shapefiles=None, count=100000):
+                    nlcd_path=None, target_shapefiles=None, count=10000):
     """ Compose numpy.ndarray prepped for a learning algorithm.
     
     
@@ -147,8 +161,8 @@ def recursive_file_gen(mydir):
             yield os.path.join(root, file)
 
 
-def point_target_extract(points, nlcd_path,
-                         target_shapefile=None, count_limit=None):
+def point_target_extract(points, nlcd_path, target_shapefile=None,
+                         count_limit=None):
     point_data = {}
     with fopen(points, 'r') as src:
         for feature in src:
