@@ -17,17 +17,15 @@
 import os
 import pickle
 import pkg_resources
-from collections import OrderedDict
 from datetime import datetime
 from pandas import DataFrame, Series
 from numpy import linspace, round, min, max
 from numpy.random import shuffle
 
 from fiona import open as fopen
-from fiona import collection
 from rasterio import open as rasopen
 from shapely.geometry import shape, Polygon, Point, mapping
-from shapely.ops import unary_union, cascaded_union
+from shapely.ops import unary_union
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
@@ -43,6 +41,11 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 def sample_coverage(path, row, training_shape, points=10000,
                     save_points=False):
     """ Create a clipped training set and inverse training set from polygon shapefiles.
+
+    This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
+    to the path row provided, gets the bounding box and profile (aka meta) from
+    compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
+    union to reduce the number of polygon objects.
     :param save_points:
     :param path: Landsat path, int
     :param row: Landsat row, int
@@ -62,7 +65,7 @@ def sample_coverage(path, row, training_shape, points=10000,
             polys.append(geo)
             total_area += geo.area
 
-    union = cascaded_union(polys)
+    union = unary_union(polys)
     point_collection = {}
     interior_rings_dissolved = []
     obj_id = 1
@@ -91,7 +94,7 @@ def sample_coverage(path, row, training_shape, points=10000,
     shell = bbox['coordinates'][0]
     inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
     inverse_polygon = inverse_polygon.buffer(0)
-    inverse_polygon = cascaded_union(inverse_polygon)
+    inverse_polygon = unary_union(inverse_polygon)
     coords = inverse_polygon.bounds
     min_x, max_x = coords[0], coords[2]
     min_y, max_y = coords[1], coords[3]
@@ -135,8 +138,8 @@ def sample_coverage(path, row, training_shape, points=10000,
                 output.write({'properties': props,
                               'geometry': mapping(pt)})
 
-        print('sample operation on {} points in {} seconds'.format(points,
-                                                                   (datetime.now() - time).seconds))
+    print('sample operation on {} points in {} seconds'.format(points,
+                                                               (datetime.now() - time).seconds))
 
 
 def get_tile_geometry(path, row):
@@ -333,5 +336,5 @@ if __name__ == '__main__':
     row = 27
     train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
                                                                                'FLU_2017_Irrig.shp'))
-    sample_coverage(path, row, train_shape, save_points=True, points=100)
+    sample_coverage(path, row, train_shape, save_points=True, points=1000)
 # ========================= EOF ====================================================================

@@ -36,9 +36,9 @@ from sat_image.image import LandsatImage
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
 
-class PixelTrainingArray(LandsatImage):
-
-    def __init__(self, training_shapefile):
+# class PixelTrainingArray(LandsatImage):
+#
+#     def __init__(self, training_shapefile):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
