@@ -16,7 +16,6 @@
 
 import os
 import pickle
-import itertools
 import pkg_resources
 from collections import OrderedDict
 from datetime import datetime
@@ -33,6 +32,7 @@ from shapely.ops import unary_union, cascaded_union
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
+temp_points = pkg_resources.resource_filename('pixel_prep', os.path.join('temp', 'sample_points.shp'))
 
 '''
 This script contains functions meant to gather data from rasters using a polygon shapefile.  The high-level 
@@ -50,7 +50,8 @@ def sample_coverage(path, row, training_shape, points=10000,
     :return: None
     """
 
-    bbox = get_tile_geometry(path, row)
+    time = datetime.now()
+    bbox, meta = get_tile_geometry(path, row)
 
     with fopen(training_shape, 'r') as src:
         clipped = src.filter(mask=bbox)
@@ -120,28 +121,32 @@ def sample_coverage(path, row, training_shape, points=10000,
           'Fraction irrigated: {}'.format(shape(bbox).area, total_area,
                                           total_area / shape(bbox).area))
     if save_points:
-        parent_dir = os.getcwd()
 
-        points_schema = {'properties': OrderedDict(
+        points_schema = {'properties': dict(
             [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
             'geometry': 'Point'}
 
-        with collection(os.path.join(parent_dir, 'temp/inverse.shp'), 'w',
-                        'ESRI Shapefile', points_schema) as output:
+        meta['schema'] = points_schema
 
+        with fopen(temp_points, 'w', **meta) as output:
             for key, val in point_collection.items():
-                props = OrderedDict([('OBJECTID', None)])
+                props = dict([('OBJECTID', key), ('POINT_TYPE', val['POINT_TYPE'])])
+                pt = Point(val['COORDS'][0], val['COORDS'][1])
                 output.write({'properties': props,
-                              'geometry': mapping(inverse_polygon)})
+                              'geometry': mapping(pt)})
+
+        print('sample operation on {} points in {} seconds'.format(points,
+                                                                   (datetime.now() - time).seconds))
 
 
 def get_tile_geometry(path, row):
     with fopen(WRS_2, 'r') as wrs:
+        wrs_meta = wrs.meta.copy()
         for feature in wrs:
             fp = feature['properties']
             if fp['PATH'] == path and fp['ROW'] == row:
                 bbox = feature['geometry']
-                return bbox
+                return bbox, wrs_meta
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
@@ -328,5 +333,5 @@ if __name__ == '__main__':
     row = 27
     train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
                                                                                'FLU_2017_Irrig.shp'))
-    area = sample_coverage(path, row, train_shape)
+    sample_coverage(path, row, train_shape, save_points=True, points=100)
 # ========================= EOF ====================================================================
