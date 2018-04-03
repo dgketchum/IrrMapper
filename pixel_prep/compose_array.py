@@ -19,13 +19,13 @@ import pickle
 import pkg_resources
 
 from pandas import DataFrame, Series
-from numpy import linspace, round, vstack, min, max
+from numpy import linspace, round, min, max, ceil
 from numpy.random import shuffle
 
 from fiona import open as fopen
 from fiona import collection
 from rasterio import open as rasopen
-from shapely.geometry import mapping, shape, Polygon, Point
+from shapely.geometry import shape, Polygon, Point, mapping
 from collections import OrderedDict
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
@@ -38,8 +38,10 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def clip_training_to_path_row(path, row, training_shape, points=10000):
+def clip_training_to_path_row(path, row, training_shape, points=10000,
+                              save_points=False):
     """ Create a clipped training set and inverse training set from polygon shapefiles.
+    :param save_points:
     :param path: Landsat path, int
     :param row: Landsat row, int
     :param training_shape: Positive training examples
@@ -54,6 +56,7 @@ def clip_training_to_path_row(path, row, training_shape, points=10000):
 
     with fopen(training_shape, 'r') as src:
         clipped = src.filter(mask=bbox)
+
         total_area = 0.
         for feat in clipped:
             total_area += shape(feat['geometry']).area
@@ -62,51 +65,71 @@ def clip_training_to_path_row(path, row, training_shape, points=10000):
         clipped = src.filter(mask=bbox)
 
         polygons = []
-        parent_dir = os.getcwd()
-        extract_points = {}
+        point_collection = {}
+        obj_id = 1
         for elem in clipped:
             geo = shape(elem['geometry'])
             coords = geo.exterior.coords
             fractional_area = geo.area / total_area
-            required_points = round(fractional_area * points)
+            required_points = round(fractional_area * points * 0.5)
             min_x, max_x = min(coords.xy[0]), max(coords.xy[0])
             min_y, max_y = min(coords.xy[1]), max(coords.xy[1])
             x_range = linspace(min_x, max_x, num=100)
             y_range = linspace(min_y, max_y, num=100)
             shuffle(x_range), shuffle(y_range)
             count = 0
-            for i, coord in enumerate(zip(x_range, y_range)):
+            for coord in zip(x_range, y_range):
                 if count < required_points:
                     if Point(coord[0], coord[1]).within(geo):
-                        extract_points['id'] = i
-                        extract_points['coords'] = coord
+                        point_collection[obj_id] = {}
+                        point_collection[obj_id]['OBJECTID'] = obj_id
+                        point_collection[obj_id]['COORDS'] = coord
+                        point_collection[obj_id]['POINT_TYPE'] = 1
                         count += 1
+                        obj_id += 1
                 else:
                     break
 
-            polygons.append(geo.exterior.coords)
+            polygons.append(coords)
 
     shell = bbox['coordinates'][0]
     inverse = Polygon(shell=shell, holes=polygons)
-
-    inverse_schema = {'properties': OrderedDict(
-        [('OBJECTID', 'int:10'), ('Shape_Area', 'float:19.11'), ('Geo_Area', 'float:19.11'),
-         ('Shape_Length', 'float:19.11')]),
-        'geometry': 'Polygon'}
-
-    props = OrderedDict([('OBJECTID', 1), ('Shape_Area', inverse.area),
-                         ('Geo_Area', shape(bbox).area),
-                         ('Shape_Length', inverse.length)])
+    coords = inverse.exterior.coords
+    min_x, max_x = min(coords.xy[0]), max(coords.xy[0])
+    min_y, max_y = min(coords.xy[1]), max(coords.xy[1])
+    x_range = linspace(min_x, max_x, num=2 * points)
+    y_range = linspace(min_y, max_y, num=2 * points)
+    shuffle(x_range), shuffle(y_range)
+    required_points = round(points * 0.5)
+    count = 0
+    for coord in zip(x_range, y_range):
+        if count < required_points:
+            if Point(coord[0], coord[1]).within(inverse):
+                point_collection[obj_id] = {}
+                point_collection[obj_id]['OBJECTID'] = obj_id
+                point_collection[obj_id]['COORDS'] = coord
+                point_collection[obj_id]['POINT_TYPE'] = 0
+                count += 1
+                obj_id += 1
+        else:
+            break
 
     print('Total area in decimal degrees: {}\n'
           'Area irrigated: {}\n'
           'Fraction irrigated: {}'.format(shape(bbox).area, total_area,
                                           total_area / shape(bbox).area))
+    if save_points:
+        parent_dir = os.getcwd()
 
-    with collection(os.path.join(parent_dir, 'temp/inverse.shp'),
-                    'w', 'ESRI Shapefile', inverse_schema) as output:
-        output.write({'properties': props,
-                      'geometry': mapping(inverse)})
+        points_schema = {'properties': OrderedDict(
+            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'str')]),
+            'geometry': 'Point'}
+
+        with collection(os.path.join(parent_dir, 'temp/inverse.shp'), 'w', 'ESRI Shapefile', points_schema) as output:
+            for key, val in  point_collection.items():
+                props = OrderedDict([('OBJECTID', None)])
+                output.write({'properties': props,
+                              'geometry': mapping(inverse)})
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
