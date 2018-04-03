@@ -19,12 +19,13 @@ import pickle
 import pkg_resources
 
 from pandas import DataFrame, Series
-from numpy import linspace, round, vstack, random
+from numpy import linspace, round, vstack, min, max
+from numpy.random import shuffle
 
 from fiona import open as fopen
 from fiona import collection
 from rasterio import open as rasopen
-from shapely.geometry import mapping, shape, Polygon
+from shapely.geometry import mapping, shape, Polygon, Point
 from collections import OrderedDict
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
@@ -53,17 +54,16 @@ def clip_training_to_path_row(path, row, training_shape, points=10000):
 
     with fopen(training_shape, 'r') as src:
         clipped = src.filter(mask=bbox)
-        clipped_schema = src.schema.copy()
-        clipped_schema['properties']['fract_area'] = 'float:19.11'
-
         total_area = 0.
+        for feat in clipped:
+            total_area += shape(feat['geometry']).area
+
+    with fopen(training_shape, 'r') as src:
+        clipped = src.filter(mask=bbox)
+
         polygons = []
         parent_dir = os.getcwd()
-
-        for elem in clipped:
-            geo = shape(elem['geometry'])
-            total_area += geo.area
-
+        extract_points = {}
         for elem in clipped:
             geo = shape(elem['geometry'])
             coords = geo.exterior.coords
@@ -73,18 +73,18 @@ def clip_training_to_path_row(path, row, training_shape, points=10000):
             min_y, max_y = min(coords.xy[1]), max(coords.xy[1])
             x_range = linspace(min_x, max_x, num=100)
             y_range = linspace(min_y, max_y, num=100)
-            arr = vstack((x_range, y_range))
-            # TODO: shuffle vstack array, make while loop until req_points satisfied
-            choice = random.choice(arr, size=required_points)
+            shuffle(x_range), shuffle(y_range)
+            count = 0
+            for i, coord in enumerate(zip(x_range, y_range)):
+                if count < required_points:
+                    if Point(coord[0], coord[1]).within(geo):
+                        extract_points['id'] = i
+                        extract_points['coords'] = coord
+                        count += 1
+                else:
+                    break
 
-    with collection(os.path.join(parent_dir, 'temp/clipped.shp'),
-                    'w', 'ESRI Shapefile', clipped_schema) as output:
-        for elem in clipped:
-            geo = shape(elem['geometry'])
             polygons.append(geo.exterior.coords)
-            elem['properties']['fract_area'] = geo.area
-            output.write({'properties': elem['properties'],
-                          'geometry': mapping(geo)})
 
     shell = bbox['coordinates'][0]
     inverse = Polygon(shell=shell, holes=polygons)
@@ -101,7 +101,7 @@ def clip_training_to_path_row(path, row, training_shape, points=10000):
     print('Total area in decimal degrees: {}\n'
           'Area irrigated: {}\n'
           'Fraction irrigated: {}'.format(shape(bbox).area, total_area,
-                                          total_area/shape(bbox).area))
+                                          total_area / shape(bbox).area))
 
     with collection(os.path.join(parent_dir, 'temp/inverse.shp'),
                     'w', 'ESRI Shapefile', inverse_schema) as output:
