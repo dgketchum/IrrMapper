@@ -16,17 +16,19 @@
 
 import os
 import pickle
+import itertools
 import pkg_resources
-
+from collections import OrderedDict
+from datetime import datetime
 from pandas import DataFrame, Series
-from numpy import linspace, round, min, max, ceil
+from numpy import linspace, round, min, max
 from numpy.random import shuffle
 
 from fiona import open as fopen
 from fiona import collection
 from rasterio import open as rasopen
 from shapely.geometry import shape, Polygon, Point, mapping
-from collections import OrderedDict
+from shapely.ops import unary_union, cascaded_union
 
 from pixel_prep.nlcd_map import map_nlcd_to_flu, nlcd_value
 
@@ -38,8 +40,8 @@ function `compose_data_array` will return a numpy.ndarray object ready for a lea
 '''
 
 
-def clip_training_to_path_row(path, row, training_shape, points=10000,
-                              save_points=False):
+def sample_coverage(path, row, training_shape, points=10000,
+                    save_points=False):
     """ Create a clipped training set and inverse training set from polygon shapefiles.
     :param save_points:
     :param path: Landsat path, int
@@ -47,12 +49,8 @@ def clip_training_to_path_row(path, row, training_shape, points=10000,
     :param training_shape: Positive training examples
     :return: None
     """
-    bbox = None
-    with fopen(WRS_2, 'r') as wrs:
-        for feature in wrs:
-            fp = feature['properties']
-            if fp['PATH'] == path and fp['ROW'] == row:
-                bbox = feature['geometry']
+
+    bbox = get_tile_geometry(path, row)
 
     with fopen(training_shape, 'r') as src:
         clipped = src.filter(mask=bbox)
@@ -93,24 +91,30 @@ def clip_training_to_path_row(path, row, training_shape, points=10000,
             polygons.append(coords)
 
     shell = bbox['coordinates'][0]
-    inverse = Polygon(shell=shell, holes=polygons)
-    coords = inverse.exterior.coords
-    min_x, max_x = min(coords.xy[0]), max(coords.xy[0])
-    min_y, max_y = min(coords.xy[1]), max(coords.xy[1])
+    inverse_polygon = Polygon(shell=shell, holes=polygons)
+    inverse_polygon = inverse_polygon.buffer(0)
+    inverse_polygon = cascaded_union(inverse_polygon)
+    coords = inverse_polygon.bounds
+    min_x, max_x = coords[0], coords[2]
+    min_y, max_y = coords[1], coords[3]
     x_range = linspace(min_x, max_x, num=2 * points)
     y_range = linspace(min_y, max_y, num=2 * points)
     shuffle(x_range), shuffle(y_range)
     required_points = round(points * 0.5)
     count = 0
+    time = datetime.now()
     for coord in zip(x_range, y_range):
         if count < required_points:
-            if Point(coord[0], coord[1]).within(inverse):
+            if Point(coord[0], coord[1]).within(inverse_polygon):
                 point_collection[obj_id] = {}
                 point_collection[obj_id]['OBJECTID'] = obj_id
                 point_collection[obj_id]['COORDS'] = coord
                 point_collection[obj_id]['POINT_TYPE'] = 0
                 count += 1
                 obj_id += 1
+                if count % 1000 == 0:
+                    print('Count {} of {} in {} seconds'.format(count, required_points,
+                                                                (datetime.now() - time).seconds))
         else:
             break
 
@@ -125,11 +129,22 @@ def clip_training_to_path_row(path, row, training_shape, points=10000,
             [('OBJECTID', 'int:10'), ('POINT_TYPE', 'str')]),
             'geometry': 'Point'}
 
-        with collection(os.path.join(parent_dir, 'temp/inverse.shp'), 'w', 'ESRI Shapefile', points_schema) as output:
-            for key, val in  point_collection.items():
+        with collection(os.path.join(parent_dir, 'temp/inverse.shp'), 'w',
+                        'ESRI Shapefile', points_schema) as output:
+            for key, val in point_collection.items():
                 props = OrderedDict([('OBJECTID', None)])
                 output.write({'properties': props,
-                              'geometry': mapping(inverse)})
+                              'geometry': mapping(inverse_polygon)})
+
+
+
+def get_tile_geometry(path, row):
+    with fopen(WRS_2, 'r') as wrs:
+        for feature in wrs:
+            fp = feature['properties']
+            if fp['PATH'] == path and fp['ROW'] == row:
+                bbox = feature['geometry']
+                return bbox
 
 
 def make_data_array(shapefile, rasters, pickle_path=None,
@@ -316,5 +331,5 @@ if __name__ == '__main__':
     row = 27
     train_shape = pkg_resources.resource_filename('spatial_data', os.path.join('MT',
                                                                                'FLU_2017_Irrig.shp'))
-    area = clip_training_to_path_row(path, row, train_shape)
+    area = sample_coverage(path, row, train_shape)
 # ========================= EOF ====================================================================
