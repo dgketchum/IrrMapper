@@ -19,13 +19,14 @@ import pickle
 import pkg_resources
 from datetime import datetime
 from pandas import DataFrame, Series
-from numpy import linspace, round, ceil, asarray
-from numpy.random import shuffle, choice
+from numpy import linspace, round, max
+from numpy.random import shuffle
 
 from fiona import open as fopen
 from rasterio import open as rasopen
 from shapely.geometry import shape, Polygon, Point, mapping
 from shapely.ops import unary_union
+from pyproj import Proj, transform
 
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
@@ -34,7 +35,7 @@ temp_points = pkg_resources.resource_filename('pixel_prep', os.path.join('temp',
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  The high-level 
-function `compose_data_array` will return a numpy.ndarray object ready for a learning algorithm.  
+method `sample_coverage` will return a numpy.ndarray object ready for a learning algorithm.  
 '''
 
 
@@ -46,9 +47,8 @@ class PixelTrainingArray(object):
 
         self.save_points_shape = None
         self.m_instances = instances
-        self.extracted_points = {}
+        self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
         self.data_dict = None
-        self.dataframe = None
 
         self.object_id = None
 
@@ -60,8 +60,9 @@ class PixelTrainingArray(object):
         self.landsat = self.images[0]
         self.path, self.row = self.landsat.target_wrs_path, self.landsat.target_wrs_row
         self.vectors = training_shape
+        self.coord_system = self.landsat.rasterio_geometry['crs']
 
-        self.tile_bbox, self.tile_meta, self.tile_polys, self.tile_area = self.tile_geometry
+        self.tile_bbox, self.tile_meta, self.tile_polys, self.positive_area = self.tile_geometry
 
     def extract_to_sample(self, save_points=False):
         self.save_points_shape = save_points
@@ -84,12 +85,12 @@ class PixelTrainingArray(object):
 
         union = unary_union(self.tile_polys)
         interior_rings_dissolved = []
-        self.object_id = 1
+        self.object_id = 0
         pos_instance_ct = 0
         for poly in union:
             interior_rings_dissolved.append(poly.exterior.coords)
-            fractional_area = poly.area / self.tile_area
-            required_points = ceil(fractional_area * self.m_instances * 0.5)
+            fractional_area = poly.area / self.positive_area
+            required_points = max([1, fractional_area * self.m_instances * 0.5])
             x_range, y_range = self._random_points_array(poly.bounds)
             poly_pt_ct = 0
             for coord in zip(x_range, y_range):
@@ -100,12 +101,6 @@ class PixelTrainingArray(object):
                         pos_instance_ct += 1
                 else:
                     break
-        if pos_instance_ct > self.m_instances * 0.5:
-            over = round(pos_instance_ct - self.m_instances * 5)
-            keys = asarray(list(self.extracted_points.keys()))
-            cut = choice(keys, over, replace=False)
-            for key in cut:
-                del self.extracted_points[key]
 
         shell = self.tile_bbox['coordinates'][0]
         inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
@@ -128,23 +123,24 @@ class PixelTrainingArray(object):
             else:
                 break
 
+        self.extracted_points.convert_objects(convert_numeric=True)
         print('Total area in decimal degrees: {}\n'
               'Area irrigated: {}\n'
-              'Fraction irrigated: {}'.format(shape(self.tile_bbox).area, self.tile_area,
-                                              self.tile_area / shape(self.tile_bbox).area))
-
-        print('Sample operation on {} points in {} seconds'.format(self.m_instances,
-                                                                   (datetime.now() - time).seconds))
+              'Fraction irrigated: {}'.format(shape(self.tile_bbox).area, self.positive_area,
+                                              self.positive_area / shape(self.tile_bbox).area))
+        print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
+                                                                                     len(self.extracted_points)))
+        print('Sample operation completed in {} seconds'.format(self.m_instances,
+                                                                (datetime.now() - time).seconds))
         self.is_sampled = True
 
     def make_data_array(self):
 
-        self.dataframe = DataFrame(data=self.extracted_points, index=self.extracted_points.keys())
-
         for sat_image in self.images:
             for band, path in sat_image.tif_dict.items():
-                band_series = self._point_raster_extract(path, self.dataframe)
-                self.dataframe = self.dataframe.join(band_series, how='outer')
+                band_series = self._point_raster_extract(path)
+                self.extracted_points = self.extracted_points.join(band_series,
+                                                                   how='outer')
 
         target_series = Series(self.dataframe.LTYPE)
         target_values = target_series.values
@@ -158,7 +154,7 @@ class PixelTrainingArray(object):
 
         self.has_data = True
 
-    def save_sample_points(self, point_collection):
+    def save_sample_points(self):
 
         points_schema = {'properties': dict(
             [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
@@ -167,9 +163,9 @@ class PixelTrainingArray(object):
         meta['schema'] = points_schema
 
         with fopen(temp_points, 'w', **meta) as output:
-            for key, val in point_collection.items():
-                props = dict([('OBJECTID', key), ('POINT_TYPE', val['POINT_TYPE'])])
-                pt = Point(val['COORDS'][0], val['COORDS'][1])
+            for index, row in self.extracted_points.iterrows():
+                props = dict([('OBJECTID', row['OBJECTID']), ('POINT_TYPE', row['POINT_TYPE'])])
+                pt = Point(row['X'], row['Y'])
                 output.write({'properties': props,
                               'geometry': mapping(pt)})
 
@@ -187,9 +183,9 @@ class PixelTrainingArray(object):
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
             affine = rsrc.affine
 
-        s = Series(index=range(0, self.dataframe.shape[0]), name=column_name)
-        for ind, row in self.dataframe.iterrows():
-            x, y = row['X'], row['Y']
+        s = Series(index=range(0, self.extracted_points.shape[0]), name=column_name)
+        for ind, row in self.extracted_points.iterrows():
+            x, y = self._geo_point_to_projected_coords(row['X'], row['Y'])
             c, r = ~affine * (x, y)
             try:
                 raster_val = rass_arr[int(r), int(c)]
@@ -234,12 +230,18 @@ class PixelTrainingArray(object):
 
     def _add_entry(self, coord, val=0):
 
-        self.extracted_points[self.object_id] = {'OBJECTID': self.object_id,
-                                                 'COORDS': coord,
-                                                 'X': coord[0],
-                                                 'Y': coord[1],
-                                                 'POINT_TYPE': val}
+        self.extracted_points = self.extracted_points.append({'OBJECTID': int(self.object_id),
+                                                              'X': coord[0],
+                                                              'Y': coord[1],
+                                                              'POINT_TYPE': val}, ignore_index=True)
         self.object_id += 1
+
+    def _geo_point_to_projected_coords(self, x, y):
+
+        in_crs = Proj(init='epsg:4326')
+        out_crs = Proj(init=self.coord_system['init'])
+        x, y = transform(in_crs, out_crs, x, y)
+        return x, y
 
 
 if __name__ == '__main__':
