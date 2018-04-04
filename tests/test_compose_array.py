@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from pixel_prep.compose_array import make_data_array
+from pixel_classification.compose_array import make_data_array
 
 
 class TestPointExtract(unittest.TestCase):

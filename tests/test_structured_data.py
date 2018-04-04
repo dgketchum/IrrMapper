@@ -14,10 +14,12 @@
 # limitations under the License.
 # =============================================================================================
 
-import unittest
 import pickle
-from numpy import array, any
-from pixel_prep.prep_structured_data import StructuredData
+import unittest
+
+from numpy import array
+
+from pixel_classification.prep_structured_data import StructuredData
 
 
 class StructuredDataTest(unittest.TestCase):

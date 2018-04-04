@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -17,7 +17,15 @@
 import os
 
 
+def band_map():
+    band_mapping = {'LC8': ['3', '4', '5', '10'],
+                    'LE7': ['2', '3', '4', '6_VCID_1'],
+                    'LT5': ['2', '3', '4', '6']}
+    return band_mapping
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-# ========================= EOF ====================================================================
+
+# ========================= EOF ================================================================

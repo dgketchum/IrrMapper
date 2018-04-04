@@ -24,14 +24,16 @@ from rasterio.vrt import WarpedVRT
 from rasterio import open as rasopen
 
 from sat_image.image import Landsat5, Landsat7, Landsat8
+from pixel_classification.band_map import band_map
 
 
-def warp_vrt(directory, sat, delete_extra=False):
+def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
     """ Read in image geometry, resample subsequent images to same grid.
 
     The purpose of this function is to snap many Landsat images to one geometry. Use Landsat578
     to download and unzip them, then run them through this to get identical geometries for analysis.
     Files
+    :param use_band_map:
     :param delete_extra:
     :param directory: A directory containing sub-directories of Landsat images.
     :param sat: Landsat satellite; 'LT5', 'LE7', 'LC8'
@@ -41,16 +43,17 @@ def warp_vrt(directory, sat, delete_extra=False):
     list_dir = os.listdir(directory)
     first = True
 
-    band_mapping = {'LC8': ['3', '4', '5', '10'],
-                    'LE7': ['2', '3', '4', '6_VCID_1'],
-                    'LT5': ['2', '3', '4', '6']}
-
     for d in list_dir:
 
         paths = []
 
         for x in os.listdir(os.path.join(directory, d)):
-            for y in band_mapping[sat]:
+            if use_band_map:
+                bands = band_map()
+                for y in bands[sat]:
+                    if x.endswith('B{}.TIF'.format(y)):
+                        paths.append(os.path.join(directory, d, x))
+            else:
                 if x.endswith('B{}.TIF'.format(y)):
                     paths.append(os.path.join(directory, d, x))
 

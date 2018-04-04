@@ -17,9 +17,9 @@
 import os
 import pickle
 
+from pixel_classification.prep_structured_data import StructuredData
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.tf_softmax import softmax
-from pixel_prep.prep_structured_data import StructuredData
 
 
 def classify(alg='softmax', data=None, path_to_pickled=None,
