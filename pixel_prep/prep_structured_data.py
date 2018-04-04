@@ -52,7 +52,7 @@ class StructuredData(object):
         self.one_hot = get_dummies(self.y).values
 
     def make_binary(self, binary_true, inplace=False):
-        """ Use a key value that will equate to True (1), all others to LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF."""
+        """ Use a key value that will equate to True (1), all others to False (0)."""
         """
         :param binary_true: 
         :return: 
