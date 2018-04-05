@@ -26,7 +26,7 @@ class AfpoNaipTestCase(unittest.TestCase):
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
         self.dst_srs = '26912'
         self.kwargs = dict([('dst_crs', self.dst_srs)])
-        with rasopen('data/wheatland_tile.tif', 'r') as src:
+        with rasopen('data/naip_test/wheatland_tile.tif', 'r') as src:
             self.profile = src.profile
             self.array = src.read()
 

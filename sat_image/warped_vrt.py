@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2. (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -54,7 +54,7 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
                     if x.endswith('B{}.TIF'.format(y)):
                         paths.append(os.path.join(directory, d, x))
             else:
-                if x.endswith('B{}.TIF'.format(y)):
+                if x.endswith('.TIF'):
                     paths.append(os.path.join(directory, d, x))
 
         if first:

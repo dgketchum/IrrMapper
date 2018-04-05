@@ -1,7 +1,7 @@
 # ===============================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2.(the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -17,31 +17,28 @@
 import os
 import unittest
 
-from pixel_classification.compose_array import make_data_array
+from fiona import open as fopen
+
+
+from pixel_classification.compose_array import PixelTrainingArray
 
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        self.shapefile = 'data/extract_no_attrs_z12.shp'
-        self.raster = 'data/LE07_clip_32612_L1TP_039027_20130726_20160907_01_T1_B3.TIF'
-        self.nlcd = 'data/nlcd_clip_test.tif'
-        self.target_polys = 'data/flu_test_z12.shp'
-        if not os.path.isfile(self.shapefile):
-            raise ValueError('Path to shapefile is invalid')
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                'data', 'pixel_extract_test'))
 
-    def tearDown(self):
-        pass
+        self.image = os.path.join(data_dir, 'images')
+        self.shapefile = os.path.join(data_dir, 'flu_test_clip.shp')
 
-    def test_compose_array(self):
-        """ Test native pet rasters vs. xarray netcdf point extract.
-        :return: 
-        """
-
-        points = make_data_array(self.shapefile, self.raster, nlcd_path=self.nlcd, target_shapefiles=self.target_polys)
-
-        self.assertEqual(points['target_values'][0], ['I', 'I', 'I', 'F', 'I'][0])
-        self.assertEqual(points['data'][0], [63, 51, 54, 82, 0][0])
-        self.assertEqual(points['features'][0], '039027_T1')
+    def test_sample_points(self):
+        p = PixelTrainingArray(training_shape=self.shapefile, images=self.image, instances=100)
+        p.extract_sample(save_points=True)
+        with fopen(p.shapefile_path, 'r') as src:
+            points = [x for x in src]
+        self.assertGreater(len(points), 100)
+        self.assertGreater(p.extracted_points.shape[0], 100)
+        self.assertEqual(p.extracted_points.shape[1], 6)
 
 
 if __name__ == '__main__':

@@ -24,7 +24,7 @@ from pixel_classification.prep_structured_data import StructuredData
 
 class StructuredDataTest(unittest.TestCase):
     def setUp(self):
-        path_to_pickled = 'data/test.pkl'
+        path_to_pickled = 'data/structured_data_test/test.pkl'
         with open(path_to_pickled, 'rb') as p:
             data = pickle.load(p)
 

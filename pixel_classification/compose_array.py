@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2. (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -19,7 +19,7 @@ import pickle
 import pkg_resources
 from datetime import datetime
 from pandas import DataFrame, Series
-from numpy import linspace, round, max
+from numpy import linspace, round, max, nan
 from numpy.random import shuffle
 
 from fiona import open as fopen
@@ -29,23 +29,24 @@ from shapely.ops import unary_union
 from pyproj import Proj, transform
 
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
+from pixel_classification.band_map import band_map
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
-temp_points = pkg_resources.resource_filename('pixel_prep', os.path.join('temp', 'sample_points.shp'))
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  The high-level 
-method `sample_coverage` will return a numpy.ndarray object ready for a learning algorithm.  
+method `extract_sample` will return a numpy.ndarray object ready for a learning algorithm.  
 '''
 
 
 class PixelTrainingArray(object):
     def __init__(self, training_shape, images, instances):
 
+        self.image_directory = images
+
         self.is_sampled = False
         self.has_data = False
 
-        self.save_points_shape = None
         self.m_instances = instances
         self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
         self.data_dict = None
@@ -56,18 +57,19 @@ class PixelTrainingArray(object):
         dirs = [os.path.join(images, x) for x in os.listdir(images) if os.path.isdir(os.path.join(images, x))]
         objs = [LandsatImage(os.path.join(images, x)).satellite for x in dirs]
 
+        self.band_map = band_map()
+
         self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
         self.landsat = self.images[0]
         self.path, self.row = self.landsat.target_wrs_path, self.landsat.target_wrs_row
         self.vectors = training_shape
         self.coord_system = self.landsat.rasterio_geometry['crs']
 
-        self.tile_bbox, self.tile_meta, self.tile_polys, self.positive_area = self.tile_geometry
-
-    def extract_to_sample(self, save_points=False):
-        self.save_points_shape = save_points
+    def extract_sample(self, save_points=False):
         self.sample_coverage()
         self.make_data_array()
+        if save_points:
+            self.save_sample_points()
 
     def sample_coverage(self):
         """ Create a clipped training set and inverse training set from polygon shapefiles.
@@ -83,13 +85,14 @@ class PixelTrainingArray(object):
 
         time = datetime.now()
 
-        union = unary_union(self.tile_polys)
+        union = unary_union(self.polygons)
+        positive_area = sum([x.area for x in self.polygons])
         interior_rings_dissolved = []
         self.object_id = 0
         pos_instance_ct = 0
         for poly in union:
             interior_rings_dissolved.append(poly.exterior.coords)
-            fractional_area = poly.area / self.positive_area
+            fractional_area = poly.area / positive_area
             required_points = max([1, fractional_area * self.m_instances * 0.5])
             x_range, y_range = self._random_points_array(poly.bounds)
             poly_pt_ct = 0
@@ -123,11 +126,11 @@ class PixelTrainingArray(object):
             else:
                 break
 
-        self.extracted_points.convert_objects(convert_numeric=True)
+        self.extracted_points.infer_objects()
         print('Total area in decimal degrees: {}\n'
               'Area irrigated: {}\n'
-              'Fraction irrigated: {}'.format(shape(self.tile_bbox).area, self.positive_area,
-                                              self.positive_area / shape(self.tile_bbox).area))
+              'Fraction irrigated: {}'.format(shape(self.tile_bbox).area, positive_area,
+                                              positive_area / shape(self.tile_bbox).area))
         print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
                                                                                      len(self.extracted_points)))
         print('Sample operation completed in {} seconds'.format(self.m_instances,
@@ -138,19 +141,24 @@ class PixelTrainingArray(object):
 
         for sat_image in self.images:
             for band, path in sat_image.tif_dict.items():
-                band_series = self._point_raster_extract(path)
-                self.extracted_points = self.extracted_points.join(band_series,
-                                                                   how='outer')
+                if band.replace('b', '') in self.band_map[sat_image.satellite]:
+                    band_series = self._point_raster_extract(path)
+                    self.extracted_points = self.extracted_points.join(band_series,
+                                                                       how='outer')
 
-        target_series = Series(self.dataframe.LTYPE)
+        target_series = Series(self.extracted_points.POINT_TYPE)
         target_values = target_series.values
+        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'],
+                                                axis=1, inplace=False)
+        data_array[data_array < 1.] = nan
+        data_array.dropna(axis=0, inplace=True)
 
-        data = {'features': self.dataframe.columns.values, 'data': self.dataframe.values,
+        data = {'features': data_array.columns.values,
+                'data': data_array.values,
                 'target_values': target_values}
 
-        if pickle_path:
-            with open(pickle_path, 'wb') as handle:
-                pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(self.data_path, 'wb') as handle:
+            pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.has_data = True
 
@@ -159,10 +167,10 @@ class PixelTrainingArray(object):
         points_schema = {'properties': dict(
             [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
             'geometry': 'Point'}
-        meta = self.tile_meta.copy()
+        meta = self.tile_geometry.copy()
         meta['schema'] = points_schema
 
-        with fopen(temp_points, 'w', **meta) as output:
+        with fopen(self.shapefile_path, 'w', **meta) as output:
             for index, row in self.extracted_points.iterrows():
                 props = dict([('OBJECTID', row['OBJECTID']), ('POINT_TYPE', row['POINT_TYPE'])])
                 pt = Point(row['X'], row['Y'])
@@ -181,7 +189,7 @@ class PixelTrainingArray(object):
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-            affine = rsrc.affine
+            affine = rsrc.transform
 
         s = Series(index=range(0, self.extracted_points.shape[0]), name=column_name)
         for ind, row in self.extracted_points.iterrows():
@@ -194,31 +202,6 @@ class PixelTrainingArray(object):
                 s[ind] = None
 
         return s
-
-    @property
-    def tile_geometry(self):
-        with fopen(WRS_2, 'r') as wrs:
-            wrs_meta = wrs.meta.copy()
-            for feature in wrs:
-                fp = feature['properties']
-                if fp['PATH'] == self.path and fp['ROW'] == self.row:
-                    bbox = feature['geometry']
-
-        with fopen(self.vectors, 'r') as src:
-            clipped = src.filter(mask=bbox)
-            polys = []
-            total_area = 0.
-            for feat in clipped:
-                geo = shape(feat['geometry'])
-                polys.append(geo)
-                total_area += geo.area
-        return bbox, wrs_meta, polys, total_area
-
-    @staticmethod
-    def _recursive_file_gen(directory):
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                yield os.path.join(root, file)
 
     def _random_points_array(self, coords):
         min_x, max_x = coords[0], coords[2]
@@ -243,12 +226,52 @@ class PixelTrainingArray(object):
         x, y = transform(in_crs, out_crs, x, y)
         return x, y
 
+    @staticmethod
+    def _recursive_file_gen(directory):
+        for root, dirs, files in os.walk(directory):
+            for file in files:
+                yield os.path.join(root, file)
+
+    @property
+    def data_path(self):
+        return os.path.join(self.image_directory, 'data.pkl')
+
+    @property
+    def shapefile_path(self):
+        return os.path.join(self.image_directory, 'sample_points.shp')
+
+    @property
+    def model_path(self):
+        return os.path.join(self.image_directory, 'model.pkl')
+
+    @property
+    def polygons(self):
+        with fopen(self.vectors, 'r') as src:
+            clipped = src.filter(mask=self.tile_bbox)
+            polys = []
+            for feat in clipped:
+                geo = shape(feat['geometry'])
+                polys.append(geo)
+
+        return polys
+
+    @property
+    def tile_geometry(self):
+        with fopen(WRS_2, 'r') as wrs:
+            wrs_meta = wrs.meta.copy()
+        return wrs_meta
+
+    @property
+    def tile_bbox(self):
+        with fopen(WRS_2, 'r') as wrs:
+            for feature in wrs:
+                fp = feature['properties']
+                if fp['PATH'] == self.path and fp['ROW'] == self.row:
+                    bbox = feature['geometry']
+                    return bbox
+
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    image = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'landsat_data')
-    train_shape = pkg_resources.resource_filename('spatial_data',
-                                                  os.path.join('MT', 'FLU_2017_Irrig.shp'))
-    PixelTrainingArray(training_shape=train_shape, images=image, instances=100).extract_to_sample()
 
 # ========================= EOF ====================================================================

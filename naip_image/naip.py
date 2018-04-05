@@ -123,7 +123,7 @@ class ApfoNaip(NaipImage):
             :param bbox: (west, south, east, north) tuple in geographic coordinates
         """
 
-        # TODO un-hardcode pixelType, bboxSR, etc
+        # TODO un-hard-code pixelType, bboxSR, etc
 
         NaipImage.__init__(self)
 
