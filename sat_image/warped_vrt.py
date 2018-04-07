@@ -17,6 +17,7 @@
 from __future__ import division
 
 import os
+import shutil
 from datetime import datetime
 
 from rasterio.enums import Resampling
@@ -39,23 +40,28 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
     :param sat: Landsat satellite; 'LT5', 'LE7', 'LC8'
     :return: None
     """
+
     vrt_options = {}
     list_dir = os.listdir(directory)
+
     first = True
 
     for d in list_dir:
 
         paths = []
-
-        for x in os.listdir(os.path.join(directory, d)):
-            if use_band_map:
-                bands = band_map()
-                for y in bands[sat]:
-                    if x.endswith('B{}.TIF'.format(y)):
+        root = os.path.join(directory, d)
+        if os.path.isdir(root):
+            for x in os.listdir(root):
+                if use_band_map:
+                    bands = band_map()
+                    for y in bands[sat]:
+                        if x.endswith('B{}.TIF'.format(y)):
+                            paths.append(os.path.join(directory, d, x))
+                else:
+                    if x.endswith('.TIF'):
                         paths.append(os.path.join(directory, d, x))
-            else:
-                if x.endswith('.TIF'):
-                    paths.append(os.path.join(directory, d, x))
+                if x.endswith('MTL.txt'):
+                    mtl = os.path.join(directory, d, x)
 
         if first:
 
@@ -83,6 +89,8 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
 
         else:
 
+            os.rename(mtl, mtl.replace('.txt', 'copy.txt'))
+
             for tif_path in paths:
                 print('warping {}'.format(os.path.basename(tif_path)))
                 with rasopen(tif_path, 'r') as src:
@@ -95,16 +103,20 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
                         with rasopen(outfile, 'w', **meta) as dst:
                             dst.write(data)
 
+            os.rename(mtl.replace('.txt', 'copy.txt'), mtl)
+
         if delete_extra:
             for x in os.listdir(os.path.join(directory, d)):
-                if os.path.join(directory, d, x) not in paths:
-                    if not x.endswith('fmask.tif') and not x.endswith('MTL.txt'):
-                        os.remove(os.path.join(directory, d, x))
+                x_file = os.path.join(directory, d, x)
+                if x_file not in paths:
+                    if x[-7:] not in ['ask.tif', 'MTL.txt']:
+                        print('removing {}'.format(x_file))
+                        os.remove(x_file)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    images = os.path.join(home, 'landsat_images', 'LC8_39_27_test')
-    warp_vrt(images, 'LC8', delete_extra=True)
+    images = os.path.join(home, 'landsat_images', 'vrt_testing')
+    warp_vrt(images, 'LC8', delete_extra=True, use_band_map=True)
 
 # ========================= EOF ================================================================
