@@ -351,6 +351,7 @@ class PixelTrainingArray(object):
             if not self.overwrite:
                 return None
             else:
+                os.remove(os.path.join(self.image_directory, 'data.pkl'))
                 return os.path.join(self.image_directory, 'data.pkl')
         else:
             return os.path.join(self.image_directory, 'data.pkl')
