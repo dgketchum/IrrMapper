@@ -60,10 +60,10 @@ class PixelTrainingArray(object):
         self.band_map = band_map()
 
         self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
-        self.landsat = self.images[0]
-        self.path, self.row = self.landsat.target_wrs_path, self.landsat.target_wrs_row
+        self.current_img = self.images[0]
+        self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
         self.vectors = training_shape
-        self.coord_system = self.landsat.rasterio_geometry['crs']
+        self.coord_system = self.current_img.rasterio_geometry['crs']
 
     def extract_sample(self, save_points=False):
         self.sample_coverage()
@@ -140,11 +140,16 @@ class PixelTrainingArray(object):
     def make_data_array(self):
 
         for sat_image in self.images:
+            self.current_img = sat_image
             for band, path in sat_image.tif_dict.items():
                 if band.replace('b', '') in self.band_map[sat_image.satellite]:
                     band_series = self._point_raster_extract(path)
                     self.extracted_points = self.extracted_points.join(band_series,
                                                                        how='outer')
+            for path in sat_image.masks:
+                mask_series = self._point_raster_extract(path)
+                self.extracted_points = self.extracted_points.join(mask_series,
+                                                                   how='outer')
 
         target_series = Series(self.extracted_points.POINT_TYPE)
         target_values = target_series.values
@@ -181,11 +186,15 @@ class PixelTrainingArray(object):
 
         basename = os.path.basename(raster)
         name_split = basename.split(sep='_')
-        band = name_split[7].split(sep='.')[0]
-        date_string = name_split[3]
-        column_name = '{}_{}'.format(date_string, band)
+        try:
+            band = name_split[7].split(sep='.')[0]
+            date_string = name_split[3]
+        except IndexError:
+            band = name_split[0]
+            date_string = self.current_img.date_acquired_str
+        column_name = '{}_{}_{}'.format(self.current_img.satellite, date_string, band)
         print('Extracting {}'.format(column_name))
-
+        # TODO: drop masked values from array
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])

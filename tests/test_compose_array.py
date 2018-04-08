@@ -38,7 +38,7 @@ class TestPointExtract(unittest.TestCase):
             points = [x for x in src]
         self.assertGreater(len(points), 100)
         self.assertGreater(p.extracted_points.shape[0], 100)
-        self.assertEqual(p.extracted_points.shape[1], 6)
+        self.assertEqual(p.extracted_points.shape[1], 8)
 
 
 if __name__ == '__main__':

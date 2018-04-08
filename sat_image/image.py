@@ -23,6 +23,7 @@ from shapely.geometry import Polygon, mapping
 from fiona import open as fiopen
 from fiona.crs import from_epsg
 from tempfile import mkdtemp
+from datetime import date
 
 from sat_image.bounds import RasterBounds
 from sat_image import mtl
@@ -55,6 +56,7 @@ class LandsatImage(object):
 
         self.file_list = os.listdir(obj)
         self.tif_list = [x for x in os.listdir(obj) if x.endswith('.TIF')]
+        self.masks = [os.path.join(obj, x) for x in os.listdir(obj) if x.endswith('mask.tif')]
         self.tif_list.sort()
 
         self.sun_elevation = None
@@ -104,6 +106,8 @@ class LandsatImage(object):
         self.solar_zenith_rad = self.solar_zenith * pi / 180
         self.sun_elevation_rad = self.sun_elevation * pi / 180
         self.earth_sun_dist = self.earth_sun_d(self.date_acquired)
+
+        self.date_acquired_str = date.strftime(self.date_acquired, '%Y-%m-%d')
 
     def _get_band(self, band_str):
         path = self.tif_dict[band_str]
