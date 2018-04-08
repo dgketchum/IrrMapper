@@ -15,7 +15,6 @@
 # =============================================================================================
 
 import os
-import pickle
 
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.tf_softmax import softmax
@@ -29,8 +28,10 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
             raise TypeError('Classification requires a PixelTrainingArray object.')
 
     elif path_to_pickled:
-        with open(path_to_pickled, 'rb') as p:
-            data = pickle.load(p)
+        data = PixelTrainingArray(pickle_path=path_to_pickled)
+
+    else:
+        raise TypeError('Classification requires PixelTrainingArray object.')
 
     data.principal_components(return_percentile=0.90)
 
@@ -48,9 +49,9 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data')
+    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT')
     p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
-    classify(alg='neural_net', path_to_pickled=p_path)
+    classify(alg='mlp', path_to_pickled=p_path)
 
 
 # ========================= EOF ====================================================================
