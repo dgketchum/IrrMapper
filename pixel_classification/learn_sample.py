@@ -22,7 +22,7 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.tf_softmax import softmax
 
 
-def classify(alg='softmax', data=None, path_to_pickled=None,
+def classify(alg='mlp', data=None, path_to_pickled=None,
              binary=None):
     if data:
         pass
@@ -41,7 +41,7 @@ def classify(alg='softmax', data=None, path_to_pickled=None,
     data.principal_components(return_percentile=0.90)
 
     mapping = {'softmax': softmax,
-               'neural_net': mlp}
+               'mlp': mlp}
 
     try:
         cls = mapping[alg]

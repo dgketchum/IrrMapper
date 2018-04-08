@@ -22,6 +22,9 @@ from sklearn import decomposition
 from sklearn.preprocessing import minmax_scale
 
 
+from pixel_classification.compose_array import PixelTrainingArray
+
+
 class StructuredData(object):
     """ Structured data object for ML training, based on sklearn.utils.Bunch object"""
 
@@ -69,25 +72,6 @@ class StructuredData(object):
             new = copy.deepcopy(self)
             self.make_binary(binary_true, inplace=True)
             return new
-
-    def principal_components(self, return_percentile=None, n_components=None):
-        """ Extract eigenvectors and eigenvalue, return desired PCAs""
-        :return:
-        """
-        if n_components:
-            pca = decomposition.PCA(n_components=n_components, copy=True, whiten=False)
-            pca.fit(self.x)
-            self.x = pca.transform(self.x)
-        elif return_percentile:
-            pca = decomposition.PCA(return_percentile, copy=True, whiten=False)
-            pca.fit(self.x)
-            self.x = pca.transform(self.x)
-            print('Cumulative sum principal components: {}\n '
-                  '{} features \n {}'"%"' explained variance'.format(np.cumsum(pca.explained_variance_ratio_),
-                                                                     pca.n_components_,
-                                                                     pca.n_components * 100))
-        return pca
-
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')

@@ -18,9 +18,11 @@ import os
 import pickle
 import pkg_resources
 from datetime import datetime
+from warnings import warn
 from pandas import DataFrame, Series
-from numpy import linspace, round, max, nan
+from numpy import linspace, round, max, nan, unique, cumsum
 from numpy.random import shuffle
+from sklearn.decomposition import PCA
 
 from fiona import open as fopen
 from rasterio import open as rasopen
@@ -46,10 +48,14 @@ class PixelTrainingArray(object):
 
         self.is_sampled = False
         self.has_data = False
+        self.is_binary = None
+
+        self.features = None
+        self.data = None
+        self.target_values = None
 
         self.m_instances = instances
         self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
-        self.data_dict = None
 
         self.object_id = None
 
@@ -151,19 +157,45 @@ class PixelTrainingArray(object):
                 self.extracted_points = self.extracted_points.join(mask_series,
                                                                    how='outer')
 
-        target_series = Series(self.extracted_points.POINT_TYPE)
-        target_values = target_series.values
-
-        data_array = self._purge_array()
+        data_array, targets = self._purge_array()
 
         data = {'features': data_array.columns.values,
                 'data': data_array.values,
-                'target_values': target_values}
+                'target_values': targets}
+
+        for key, val in data.items():
+            setattr(self, key, val)
 
         with open(self.data_path, 'wb') as handle:
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+        self._check_targets(targets)
         self.has_data = True
+
+    def principal_components(self, return_percentile=None, n_components=None):
+        """ Extract eigenvectors and eigenvalue, return desired PCAs""
+        :return:
+        """
+
+        if not self.has_data:
+            warn('There is no data to perform PCA on.  Run make_data_array.')
+            return None
+
+        pca = None
+
+        if n_components:
+            pca = PCA(n_components=n_components, copy=True, whiten=False)
+            pca.fit(self.data)
+            self.data = pca.transform(self.data)
+        elif return_percentile:
+            pca = PCA(return_percentile, copy=True, whiten=False)
+            pca.fit(self.data)
+            self.data = pca.transform(self.data)
+            print('Cumulative sum principal components: {}\n '
+                  '{} features \n {}'"%"' explained variance'.format(cumsum(pca.explained_variance_ratio_),
+                                                                     pca.n_components_,
+                                                                     pca.n_components * 100))
+        return pca
 
     def _purge_array(self):
 
@@ -176,13 +208,34 @@ class PixelTrainingArray(object):
         for b in bands:
             xp[xp[b] == 0.] = nan
 
-        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'],
+        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID'],
                                                 axis=1, inplace=False)
         data_array.dropna(axis=0, inplace=True)
 
         data_array.drop(masks, axis=1, inplace=True)
 
-        return data_array
+        target_vals = data_array.POINT_TYPE.values
+
+        data_array = data_array.drop(['POINT_TYPE'],
+                                     axis=1, inplace=False)
+
+        return data_array, target_vals
+
+    def _check_targets(self, target_vals):
+
+        unique_targets = len(unique(target_vals))
+
+        if unique_targets == 2:
+            self.is_binary = True
+        elif unique_targets < 2:
+            warn('This dataset has fewer than two target classes,'
+                 'classification is meaningless.')
+        elif unique_targets > 2:
+            print('This dataset has {} unique target classes'.format(unique_targets))
+            self.is_binary = False
+        else:
+            warn('This dataset has {} target classes'.format(unique_targets))
+            self.is_binary = False
 
     def save_sample_points(self):
 
