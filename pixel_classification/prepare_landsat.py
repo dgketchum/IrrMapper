@@ -40,11 +40,11 @@ def prepare_image_stack(path, row, year, credentials, outpath, satellite='LC8'):
 
 
 def make_fmask(image_dir, sat='LC8'):
-    dst_path_combo = os.path.join(image_dir, 'combo_fmask.tif')
+    dst_path_cloud = os.path.join(image_dir, 'cloud_fmask.tif')
     dst_path_water = os.path.join(image_dir, 'water_fmask.tif')
 
-    if os.path.isfile(dst_path_combo) and os.path.isfile(dst_path_water):
-        print('{} and {} exist'.format(dst_path_combo, dst_path_water))
+    if os.path.isfile(dst_path_cloud) and os.path.isfile(dst_path_water):
+        print('{} and {} exist'.format(dst_path_cloud, dst_path_water))
 
     else:
         mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
@@ -54,9 +54,9 @@ def make_fmask(image_dir, sat='LC8'):
         f = Fmask(lst_image)
 
         cloud, shadow, water = f.cloud_mask()
-        combo = f.cloud_mask(combined=True)
+        cloud = f.cloud_mask(cloud_and_shadow=True)
 
-        f.save_array(combo, dst_path_combo)
+        f.save_array(cloud, dst_path_cloud)
         f.save_array(water, dst_path_water)
 
 

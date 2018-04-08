@@ -153,10 +153,8 @@ class PixelTrainingArray(object):
 
         target_series = Series(self.extracted_points.POINT_TYPE)
         target_values = target_series.values
-        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'],
-                                                axis=1, inplace=False)
-        data_array[data_array < 1.] = nan
-        data_array.dropna(axis=0, inplace=True)
+
+        data_array = self._purge_array()
 
         data = {'features': data_array.columns.values,
                 'data': data_array.values,
@@ -166,6 +164,25 @@ class PixelTrainingArray(object):
             pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         self.has_data = True
+
+    def _purge_array(self):
+
+        masks = [x for x in self.extracted_points.columns.tolist() if x.endswith('mask')]
+        bands = [x for x in self.extracted_points.columns.tolist() if not x.endswith('mask')]
+        xp = self.extracted_points
+        for m in masks:
+            xp[xp[m] == 1.] = nan
+
+        for b in bands:
+            xp[xp[b] == 0.] = nan
+
+        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'],
+                                                axis=1, inplace=False)
+        data_array.dropna(axis=0, inplace=True)
+
+        data_array.drop(masks, axis=1, inplace=True)
+
+        return data_array
 
     def save_sample_points(self):
 
@@ -182,19 +199,23 @@ class PixelTrainingArray(object):
                 output.write({'properties': props,
                               'geometry': mapping(pt)})
 
+        return None
+
     def _point_raster_extract(self, raster):
 
         basename = os.path.basename(raster)
         name_split = basename.split(sep='_')
+
         try:
             band = name_split[7].split(sep='.')[0]
             date_string = name_split[3]
         except IndexError:
-            band = name_split[0]
+            band = basename.replace('.tif', '')
             date_string = self.current_img.date_acquired_str
+
         column_name = '{}_{}_{}'.format(self.current_img.satellite, date_string, band)
         print('Extracting {}'.format(column_name))
-        # TODO: drop masked values from array
+
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])

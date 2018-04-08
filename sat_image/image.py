@@ -107,7 +107,7 @@ class LandsatImage(object):
         self.sun_elevation_rad = self.sun_elevation * pi / 180
         self.earth_sun_dist = self.earth_sun_d(self.date_acquired)
 
-        self.date_acquired_str = date.strftime(self.date_acquired, '%Y-%m-%d')
+        self.date_acquired_str = date.strftime(self.date_acquired, '%Y%m%d')
 
     def _get_band(self, band_str):
         path = self.tif_dict[band_str]

@@ -495,7 +495,7 @@ class Fmask(object):
         """
         return (self.ndsi > 0.15) & (self.tirs1 < 9.85) & (self.nir > 0.11) & (self.green > 0.1)
 
-    def cloud_mask(self, min_filter=(3, 3), max_filter=(10, 10), combined=False):
+    def cloud_mask(self, min_filter=(3, 3), max_filter=(10, 10), combined=False, cloud_and_shadow=False):
         """Calculate the potential cloud layer from source data
         *This is the high level function which ties together all
         the equations for generating potential clouds*
@@ -520,6 +520,7 @@ class Fmask(object):
             potential cloud layer; True = cloud
         ndarray, boolean
             potential cloud shadow layer; True = cloud shadow
+            :param cloud_and_shadow:
         """
         # logger.info("Running initial testsr")
         whiteness = self.whiteness_index()
@@ -602,6 +603,9 @@ class Fmask(object):
         # mystery test
         if combined:
             return pcloud | pshadow | water
+
+        if cloud_and_shadow:
+            return pcloud | pshadow
 
         return pcloud, pshadow, water
 
