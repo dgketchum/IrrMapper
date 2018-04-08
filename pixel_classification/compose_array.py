@@ -42,34 +42,40 @@ method `extract_sample` will return a numpy.ndarray object ready for a learning 
 
 
 class PixelTrainingArray(object):
-    def __init__(self, training_shape, images, instances):
+    def __init__(self, training_shape=None, images=None, instances=None, pickle_path=None,
+                 overwrite_existing=False):
 
-        self.image_directory = images
+        if pickle_path and not overwrite_existing:
+            self._from_pickle(pickle_path)
 
-        self.is_sampled = False
-        self.has_data = False
-        self.is_binary = None
+        else:
 
-        self.features = None
-        self.data = None
-        self.target_values = None
+            self.image_directory = images
 
-        self.m_instances = instances
-        self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
+            self.is_sampled = False
+            self.has_data = False
+            self.is_binary = None
+            self.overwrite = overwrite_existing
 
-        self.object_id = None
+            self.features = None
+            self.data = None
+            self.target_values = None
 
-        landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-        dirs = [os.path.join(images, x) for x in os.listdir(images) if os.path.isdir(os.path.join(images, x))]
-        objs = [LandsatImage(os.path.join(images, x)).satellite for x in dirs]
+            self.m_instances = instances
+            self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
 
-        self.band_map = band_map()
+            self.object_id = None
 
-        self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
-        self.current_img = self.images[0]
-        self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
-        self.vectors = training_shape
-        self.coord_system = self.current_img.rasterio_geometry['crs']
+            landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+            self.band_map = band_map()
+            dirs = [os.path.join(images, x) for x in os.listdir(images) if os.path.isdir(os.path.join(images, x))]
+            objs = [LandsatImage(x).satellite for x in dirs]
+            self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
+
+            self.current_img = self.images[0]
+            self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
+            self.vectors = training_shape
+            self.coord_system = self.current_img.rasterio_geometry['crs']
 
     def extract_sample(self, save_points=False):
         self.sample_coverage()
@@ -197,25 +203,46 @@ class PixelTrainingArray(object):
                                                                      pca.n_components * 100))
         return pca
 
-    def make_binary(self, binary_true, inplace=False):
-        """ Use a key value that will equate to True (1), all others to False (0)."""
-        """
-        :param binary_true: 
-        :return: 
-        """
-        pass
-        # if inplace:
-        #     self.y[self.y_strs == binary_true] = 1
-        #     self.y[self.y_strs != binary_true] = 0
-        #     self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
-        #     unique, _ = np.unique(self.y_strs, return_inverse=True)
-        #     self.classes = unique
-        #     self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
-        #     self.one_hot = get_dummies(self.y).values
-        # else:
-        #     new = copy.deepcopy(self)
-        #     self.make_binary(binary_true, inplace=True)
-        #     return new
+    def save_sample_points(self):
+
+        points_schema = {'properties': dict(
+            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+            'geometry': 'Point'}
+        meta = self.tile_geometry.copy()
+        meta['schema'] = points_schema
+
+        with fopen(self.shapefile_path, 'w', **meta) as output:
+            for index, row in self.extracted_points.iterrows():
+                props = dict([('OBJECTID', row['OBJECTID']), ('POINT_TYPE', row['POINT_TYPE'])])
+                pt = Point(row['X'], row['Y'])
+                output.write({'properties': props,
+                              'geometry': mapping(pt)})
+        return None
+
+    # def make_binary(self, binary_true, inplace=False):
+    #     """ Use a key value that will equate to True (1), all others to False (0)."""
+    #     """
+    #     :param binary_true:
+    #     :return:
+    #     """
+    #     pass
+    #     # if inplace:
+    #     #     self.y[self.y_strs == binary_true] = 1
+    #     #     self.y[self.y_strs != binary_true] = 0
+    #     #     self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
+    #     #     unique, _ = np.unique(self.y_strs, return_inverse=True)
+    #     #     self.classes = unique
+    #     #     self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
+    #     #     self.one_hot = get_dummies(self.y).values
+    #     # else:
+    #     #     new = copy.deepcopy(self)
+    #     #     self.make_binary(binary_true, inplace=True)
+    #     #     return new
+
+    def _from_pickle(self, path):
+        pkl = pickle.load(open(path, 'rb'))
+        for key, val in pkl.items():
+            setattr(self, key, val)
 
     def _purge_array(self):
 
@@ -256,23 +283,6 @@ class PixelTrainingArray(object):
         else:
             warn('This dataset has {} target classes'.format(unique_targets))
             self.is_binary = False
-
-    def save_sample_points(self):
-
-        points_schema = {'properties': dict(
-            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-            'geometry': 'Point'}
-        meta = self.tile_geometry.copy()
-        meta['schema'] = points_schema
-
-        with fopen(self.shapefile_path, 'w', **meta) as output:
-            for index, row in self.extracted_points.iterrows():
-                props = dict([('OBJECTID', row['OBJECTID']), ('POINT_TYPE', row['POINT_TYPE'])])
-                pt = Point(row['X'], row['Y'])
-                output.write({'properties': props,
-                              'geometry': mapping(pt)})
-
-        return None
 
     def _point_raster_extract(self, raster):
 
@@ -337,7 +347,13 @@ class PixelTrainingArray(object):
 
     @property
     def data_path(self):
-        return os.path.join(self.image_directory, 'data.pkl')
+        if os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
+            if not self.overwrite:
+                return None
+            else:
+                return os.path.join(self.image_directory, 'data.pkl')
+        else:
+            return os.path.join(self.image_directory, 'data.pkl')
 
     @property
     def shapefile_path(self):
