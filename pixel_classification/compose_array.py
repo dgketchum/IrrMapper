@@ -17,6 +17,7 @@
 import os
 import pickle
 import pkg_resources
+from copy import deepcopy
 from datetime import datetime
 from warnings import warn
 from pandas import DataFrame, Series
@@ -45,7 +46,11 @@ class NoCoordinateReferenceError(Exception):
     pass
 
 
-class UnexpectedCoordinateReferenceSystem(Exception):
+class UnexpectedCoordinateReferenceSystemError(Exception):
+    pass
+
+
+class ExcessiveCloudsError(Exception):
     pass
 
 
@@ -84,6 +89,8 @@ class PixelTrainingArray(object):
             self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
             self.vectors = training_shape
             self.coord_system = self.current_img.rasterio_geometry['crs']
+
+            self.polygons = self._get_polygons()
 
     def extract_sample(self, save_points=False):
         self.sample_coverage()
@@ -139,7 +146,7 @@ class PixelTrainingArray(object):
                 if Point(coord[0], coord[1]).within(inverse_polygon):
                     self._add_entry(coord, val=0)
                     count += 1
-                    if count % 100 == 0:
+                    if count % 1000 == 0:
                         print('Count {} of {} negative instances'
                               ' in {} seconds'.format(count, int(required_points),
                                                       (datetime.now() - time).seconds))
@@ -153,6 +160,7 @@ class PixelTrainingArray(object):
                                               positive_area / shape(self.tile_bbox).area))
         print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
                                                                                      len(self.extracted_points)))
+        print('{} positive instances, {} negative'.format(poly_pt_ct, count))
         print('Sample operation completed in {} seconds'.format((datetime.now() - time).seconds))
         self.is_sampled = True
 
@@ -160,15 +168,31 @@ class PixelTrainingArray(object):
 
         for sat_image in self.images:
             self.current_img = sat_image
-            for band, path in sat_image.tif_dict.items():
-                if band.replace('b', '') in self.band_map[sat_image.satellite]:
-                    band_series = self._point_raster_extract(path)
-                    self.extracted_points = self.extracted_points.join(band_series,
-                                                                       how='outer')
-            for path in sat_image.masks:
-                mask_series = self._point_raster_extract(path)
-                self.extracted_points = self.extracted_points.join(mask_series,
-                                                                   how='outer')
+            scn = self.current_img.landsat_scene_id
+            try:
+                for path in sat_image.masks:
+                    mask_series = self._point_raster_extract(path)
+                    is_cloud_mask = path.endswith('cloud_fmask.tif')
+                    if is_cloud_mask:
+                        fraction_masked = mask_series.sum() / len(mask_series)
+                        excessive_clouds = fraction_masked > 0.07
+                        if excessive_clouds:
+                            raise ExcessiveCloudsError(print(
+                                '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.)))
+                        else:
+                            print('Extracting {}'.format(scn))
+
+                        self.extracted_points = self.extracted_points.join(mask_series,
+                                                                           how='outer')
+
+                for band, path in sat_image.tif_dict.items():
+                    if band.replace('b', '') in self.band_map[sat_image.satellite]:
+                        band_series = self._point_raster_extract(path)
+                        self.extracted_points = self.extracted_points.join(band_series,
+                                                                           how='outer')
+
+            except ExcessiveCloudsError:
+                pass
 
         data_array, targets = self._purge_array()
 
@@ -256,17 +280,23 @@ class PixelTrainingArray(object):
 
     def _purge_array(self):
 
-        masks = [x for x in self.extracted_points.columns.tolist() if x.endswith('mask')]
-        bands = [x for x in self.extracted_points.columns.tolist() if not x.endswith('mask')]
-        xp = self.extracted_points
-        for m in masks:
-            xp[xp[m] == 1.] = nan
+        data_array = deepcopy(self.extracted_points)
 
-        for b in bands:
-            xp[xp[b] == 0.] = nan
+        target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
 
-        data_array = self.extracted_points.drop(['X', 'Y', 'OBJECTID'],
-                                                axis=1, inplace=False)
+        data_array.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'], axis=1, inplace=True)
+        masks = [x for x in data_array.columns.tolist() if x.endswith('mask')]
+        bands = [x for x in data_array.columns.tolist() if not x.endswith('mask')]
+
+        for msk in masks:
+            data_array[data_array[msk] == 1.] = nan
+
+        for bnd in bands:
+            data_array[data_array[bnd] == 0.] = nan
+
+        data_array = data_array.join(target_vals,
+                                     how='outer')
+
         data_array.dropna(axis=0, inplace=True)
 
         data_array.drop(masks, axis=1, inplace=True)
@@ -307,7 +337,6 @@ class PixelTrainingArray(object):
             date_string = self.current_img.date_acquired_str
 
         column_name = '{}_{}_{}'.format(self.current_img.satellite, date_string, band)
-        print('Extracting {}'.format(column_name))
 
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
@@ -349,6 +378,29 @@ class PixelTrainingArray(object):
         x, y = transform(in_crs, out_crs, x, y)
         return x, y
 
+    def _get_polygons(self):
+        with fopen(self.vectors, 'r') as src:
+            crs = src.crs
+            if not crs:
+                raise NoCoordinateReferenceError('Provided shapefile has no reference data.')
+            if crs['init'] != 'epsg:4326':
+                raise UnexpectedCoordinateReferenceSystemError(
+                    'Provided shapefile should be in unprojected (geographic)'
+                    'coordinate system, i.e., WGS84, EPSG 4326')
+            clipped = src.filter(mask=self.tile_bbox)
+            polys = []
+            bad_geo_count = 0
+            for feat in clipped:
+                try:
+                    geo = shape(feat['geometry'])
+                    polys.append(geo)
+                except AttributeError:
+                    bad_geo_count += 1
+
+        print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
+
+        return polys
+
     @staticmethod
     def _recursive_file_gen(directory):
         for root, dirs, files in os.walk(directory):
@@ -375,28 +427,6 @@ class PixelTrainingArray(object):
         return os.path.join(self.image_directory, 'model.pkl')
 
     @property
-    def polygons(self):
-        with fopen(self.vectors, 'r') as src:
-            crs = src.crs
-            if not crs:
-                raise NoCoordinateReferenceError('Provided shapefile has no reference data.')
-            if crs['init'] != 'epsg:4326':
-                raise UnexpectedCoordinateReferenceSystem('Provided shapefile should be in unprojected (geographic)'
-                                                          'coordinate system, i.e., WGS84, EPSG 4326')
-            clipped = src.filter(mask=self.tile_bbox)
-            polys = []
-            bad_geo_count = 0
-            for feat in clipped:
-                try:
-                    geo = shape(feat['geometry'])
-                    polys.append(geo)
-                except AttributeError:
-                    bad_geo_count += 1
-            print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
-
-        return polys
-
-    @property
     def tile_geometry(self):
         with fopen(WRS_2, 'r') as wrs:
             wrs_meta = wrs.meta.copy()
@@ -421,6 +451,6 @@ if __name__ == '__main__':
                                                os.path.join('spatial_data', 'MT',
                                                             'FLU_2017_Irrig.shp'))
     m = 10000
-    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=10000, overwrite_existing=True)
+    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=m, overwrite_existing=True)
     p.extract_sample(save_points=True)
 # ========================= EOF ====================================================================
