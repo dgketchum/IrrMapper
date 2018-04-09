@@ -41,6 +41,14 @@ method `extract_sample` will return a numpy.ndarray object ready for a learning 
 '''
 
 
+class NoCoordinateReferenceError(Exception):
+    pass
+
+
+class UnexpectedCoordinateReferenceSystem(Exception):
+    pass
+
+
 class PixelTrainingArray(object):
     def __init__(self, training_shape=None, images=None, instances=None, pickle_path=None,
                  overwrite_existing=False):
@@ -133,7 +141,7 @@ class PixelTrainingArray(object):
                     count += 1
                     if count % 100 == 0:
                         print('Count {} of {} negative instances'
-                              ' in {} seconds'.format(count, required_points,
+                              ' in {} seconds'.format(count, int(required_points),
                                                       (datetime.now() - time).seconds))
             else:
                 break
@@ -145,8 +153,7 @@ class PixelTrainingArray(object):
                                               positive_area / shape(self.tile_bbox).area))
         print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
                                                                                      len(self.extracted_points)))
-        print('Sample operation completed in {} seconds'.format(self.m_instances,
-                                                                (datetime.now() - time).seconds))
+        print('Sample operation completed in {} seconds'.format((datetime.now() - time).seconds))
         self.is_sampled = True
 
     def make_data_array(self):
@@ -243,6 +250,9 @@ class PixelTrainingArray(object):
         pkl = pickle.load(open(path, 'rb'))
         for key, val in pkl.items():
             setattr(self, key, val)
+
+        self._check_targets(self.target_values)
+        self.has_data = True
 
     def _purge_array(self):
 
@@ -367,11 +377,22 @@ class PixelTrainingArray(object):
     @property
     def polygons(self):
         with fopen(self.vectors, 'r') as src:
+            crs = src.crs
+            if not crs:
+                raise NoCoordinateReferenceError('Provided shapefile has no reference data.')
+            if crs['init'] != 'epsg:4326':
+                raise UnexpectedCoordinateReferenceSystem('Provided shapefile should be in unprojected (geographic)'
+                                                          'coordinate system, i.e., WGS84, EPSG 4326')
             clipped = src.filter(mask=self.tile_bbox)
             polys = []
+            bad_geo_count = 0
             for feat in clipped:
-                geo = shape(feat['geometry'])
-                polys.append(geo)
+                try:
+                    geo = shape(feat['geometry'])
+                    polys.append(geo)
+                except AttributeError:
+                    bad_geo_count += 1
+            print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
 
         return polys
 
@@ -393,5 +414,13 @@ class PixelTrainingArray(object):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-
+    image_dir = os.path.dirname(__file__).replace('pixel_classification',
+                                                  os.path.join('landsat_data', '39',
+                                                               '27', '2015'))
+    vector = os.path.dirname(__file__).replace('pixel_classification',
+                                               os.path.join('spatial_data', 'MT',
+                                                            'FLU_2017_Irrig.shp'))
+    m = 10000
+    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=10000, overwrite_existing=True)
+    p.extract_sample(save_points=True)
 # ========================= EOF ====================================================================

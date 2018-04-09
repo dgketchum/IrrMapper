@@ -22,7 +22,6 @@ from pixel_classification.compose_array import PixelTrainingArray
 
 
 def classify(alg='mlp', data=None, path_to_pickled=None):
-
     if data:
         if not isinstance(data, PixelTrainingArray):
             raise TypeError('Classification requires a PixelTrainingArray object.')
@@ -49,8 +48,8 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    spatial = os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT')
-    p_path = os.path.join(spatial, 'P39R27_Test_all.pkl')
+    p_path = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
+                                                                                    '27', '2015', 'data.pkl'))
     classify(alg='mlp', path_to_pickled=p_path)
 
 

@@ -53,7 +53,7 @@ def make_fmask(image_dir, sat='LC8'):
 
         f = Fmask(lst_image)
 
-        cloud, shadow, water = f.cloud_mask()
+        c, shadow, water = f.cloud_mask()
         cloud = f.cloud_mask(cloud_and_shadow=True)
 
         f.save_array(cloud, dst_path_cloud)
@@ -78,8 +78,8 @@ if __name__ == '__main__':
     p, r = 39, 27
     yr = 2016
     home = os.path.expanduser('~')
-    creds = os.path.join(home, 'usgs.txt')
-    images = os.path.dirname(__file__).replace('pixel_classification', 'landsat_data')
-    prepare_image_stack(p, r, yr, creds, images, satellite='LC8')
+    images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
+                                               '27', '2015'))
+    warp_vrt(images, sat='LC8', delete_extra=True, use_band_map=True)
 
 # ========================= EOF ====================================================================
