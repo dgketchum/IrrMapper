@@ -37,8 +37,9 @@ from pixel_classification.band_map import band_map
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
 '''
-This script contains a class meant to gather data from rasters using a polygon shapefile.  The high-level 
-method `extract_sample` will return a numpy.ndarray object ready for a learning algorithm.  
+This script contains a class meant to gather data from rasters using a polygon shapefile.  
+The high-level method `extract_sample` will return a numpy.ndarray object ready for a 
+learning algorithm.  
 '''
 
 
@@ -55,8 +56,28 @@ class ExcessiveCloudsError(Exception):
 
 
 class PixelTrainingArray(object):
+    """
+    Notes: The training shape must be un-projected, in the WGS84 EPSG 4326 coordinate reference system.
+    For now, images are Landsat images. The 'images' parameter is for a directory of images from
+    one path,row Landsat tile.
+    """
     def __init__(self, training_shape=None, images=None, instances=None, pickle_path=None,
                  overwrite_existing=False):
+        """
+
+        :param training_shape: The training shape must be un-projected,
+        in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
+        :param images: Directory of images from one path,row Landsat tile, use warp_vrt to set them
+        at the same geometry. (str)
+        :param instances: The number of sample points to extract (int). A small sample size will result
+        in an excessive number of 'positive' sample points, as each valid positive sample geometry will
+        be sampled once.  As the sample size becomes large (perhaps 10**5), the dataset will approach
+        feature balance. Each point is taken from a random spatial index within each polygon.  Approximate
+        feature balance is hard-coded in this class.
+        :param pickle_path: If the data exists, specify this path to instantiate a data-filled instance
+        without repeating the time-consuming sampling process. (bool)
+        :param overwrite_existing:
+        """
 
         if pickle_path and not overwrite_existing:
             self._from_pickle(pickle_path)

@@ -15,31 +15,36 @@
 # =============================================================================================
 
 import os
-import numpy as np
+from numpy import unique
+from numpy.random import randint
 import tensorflow as tf
 from pandas import get_dummies
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import minmax_scale
+from sklearn.preprocessing import StandardScaler
+
+from pixel_classification.compose_array import PixelTrainingArray
 
 
 def mlp(data):
     """
-    :param data: Use the prep_structured_data.StructuredData class.
+    :param data: Use the PixelTrainingArray class.
     :return:
     """
+    assert isinstance(data, PixelTrainingArray)
 
-    N = len(data.classes)
-    n = data.x.shape[1]
+    x = normalize(data.data)
+    y = get_dummies(data.target_values).values
+    N = len(unique(data.features))
+    n = data.data.shape[1]
+
     nodes = 500
     eta = 0.05
     epochs = 1000
     seed = 128
 
-    data.x, x_test, data.y, y_test = train_test_split(data.x, data.y, test_size=0.33,
-                                                      random_state=None)
+    x, x_test, y, y_test = train_test_split(x, y, test_size=0.33,
+                                            random_state=None)
 
-    data.y = get_dummies(data.y).values
-    y_test = get_dummies(y_test).values
     X = tf.placeholder("float", [None, n])
     Y = tf.placeholder("float", [None, N])
 
@@ -59,14 +64,11 @@ def mlp(data):
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
-    correct_pred = tf.equal(tf.argmax(Y, 1), tf.argmax(y_pred, 1))
-
     sess = tf.InteractiveSession()
-    init = tf.global_variables_initializer().run()
-    loss = None
+    tf.global_variables_initializer().run()
 
     for step in range(epochs):
-        offset = np.random.randint(0, data.y.shape[0] - batch_size - 1)
+        offset = randint(0, data.y.shape[0] - batch_size - 1)
 
         batch_data = data.x[offset:(offset + batch_size), :]
         batch_labels = data.y[offset:(offset + batch_size), :]
@@ -83,11 +85,17 @@ def mlp(data):
             print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
 
-# Create neural network
 def multilayer_perceptron(x, weights, biases):
     out_layer = tf.add(tf.matmul(x, weights), biases)
     out_layer = tf.nn.sigmoid(out_layer)
     return out_layer
+
+
+def normalize(data):
+    scaler = StandardScaler()
+    scaler = scaler.fit(data)
+    data = scaler.transform(data)
+    return data
 
 
 if __name__ == '__main__':

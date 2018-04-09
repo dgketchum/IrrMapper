@@ -32,8 +32,6 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
     else:
         raise TypeError('Classification requires PixelTrainingArray object.')
 
-    data.principal_components(return_percentile=0.90)
-
     mapping = {'softmax': softmax,
                'mlp': mlp}
 
