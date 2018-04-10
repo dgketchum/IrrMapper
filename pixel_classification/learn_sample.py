@@ -38,6 +38,7 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
     try:
         cls = mapping[alg]
         results = cls(data)
+        return None
 
     except KeyError:
         print('Invalid satellite key: "{}". available keys = {}'.format

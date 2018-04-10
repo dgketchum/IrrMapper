@@ -34,21 +34,20 @@ def mlp(data):
 
     x = normalize(data.data)
     y = get_dummies(data.target_values).values
-    N = len(unique(data.features))
+    N = len(unique(data.target_values))
     n = data.data.shape[1]
 
     nodes = 500
     eta = 0.05
-    epochs = 1000
+    epochs = 10000
     seed = 128
+    batch_size = 100
 
     x, x_test, y, y_test = train_test_split(x, y, test_size=0.33,
                                             random_state=None)
 
     X = tf.placeholder("float", [None, n])
     Y = tf.placeholder("float", [None, N])
-
-    batch_size = 100
 
     weights = {
         'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed)),
@@ -68,10 +67,11 @@ def mlp(data):
     tf.global_variables_initializer().run()
 
     for step in range(epochs):
-        offset = randint(0, data.y.shape[0] - batch_size - 1)
 
-        batch_data = data.x[offset:(offset + batch_size), :]
-        batch_labels = data.y[offset:(offset + batch_size), :]
+        offset = randint(0, y.shape[0] - batch_size - 1)
+
+        batch_data = x[offset:(offset + batch_size), :]
+        batch_labels = y[offset:(offset + batch_size), :]
 
         feed_dict = {X: batch_data, Y: batch_labels}
 
