@@ -76,10 +76,10 @@ def orgainize_directory(root, path, row, year):
 
 if __name__ == '__main__':
     p, r = 39, 27
-    yr = 2016
+    yr = 2013
     home = os.path.expanduser('~')
-    images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
-                                               '27', '2015'))
-    warp_vrt(images, sat='LC8', delete_extra=True, use_band_map=True)
+    creds = os.path.join(home, 'usgs.txt')
+    images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
+    prepare_image_stack(p, r, yr, creds, images, satellite='LC8')
 
 # ========================= EOF ====================================================================

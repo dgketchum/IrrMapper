@@ -106,3 +106,6 @@ ENV/
 landsat_data/
 pixel_prep/temp/
 tests/temp/
+scene_list/
+tests/data/naip_test/wheatland_tile.tif.aux.xml
+tests/data/pixel_extract_test/images/LC80390272015237LGN01/LC08_L1TP_039027_20150825_20170225_01_T1_B3.TIF.aux.xml
