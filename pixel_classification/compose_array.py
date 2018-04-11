@@ -271,25 +271,7 @@ class PixelTrainingArray(object):
                               'geometry': mapping(pt)})
         return None
 
-    # def make_binary(self, binary_true, inplace=False):
-    #     """ Use a key value that will equate to True (1), all others to False (0)."""
-    #     """
-    #     :param binary_true:
-    #     :return:
-    #     """
-    #     pass
-    #     # if inplace:
-    #     #     self.y[self.y_strs == binary_true] = 1
-    #     #     self.y[self.y_strs != binary_true] = 0
-    #     #     self.y_strs[self.y_strs != binary_true] = '{}{}'.format('N', binary_true)
-    #     #     unique, _ = np.unique(self.y_strs, return_inverse=True)
-    #     #     self.classes = unique
-    #     #     self.class_counts = {x: list(self.y_strs).count(x) for x in self.classes}
-    #     #     self.one_hot = get_dummies(self.y).values
-    #     # else:
-    #     #     new = copy.deepcopy(self)
-    #     #     self.make_binary(binary_true, inplace=True)
-    #     #     return new
+
 
     def _from_pickle(self, path):
         pkl = pickle.load(open(path, 'rb'))
