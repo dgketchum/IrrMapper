@@ -16,25 +16,25 @@
 
 
 import os
-from datetime import datetime
 
-from landsat import download_composer
+from sat_image.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 
 
-def prepare_image_stack(path, row, year, credentials, outpath, satellite='LC8'):
+def prepare_image_stack(path, row, year, outpath, satellite=8):
+
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
-    start = datetime.strptime(start, '%Y-%m-%d')
-    end = datetime.strptime(end, '%Y-%m-%d')
 
     sub_directory = orgainize_directory(outpath, path, row, year)
 
-    download_composer.download_landsat(start, end, satellite=satellite, path=path, row=row, output_path=sub_directory,
-                                       usgs_creds=credentials, max_cloud_percent=20)
-    make_fmask(outpath, sat=satellite)
-    warp_vrt(outpath, sat=satellite, delete_extra=True, use_band_map=True)
+    g = GoogleDownload(satellite, start, end, path, row, max_cloud=20)
+    g.download(sub_directory)
+
+    make_fmask(sub_directory, sat=g.sat_abv)
+
+    warp_vrt(sub_directory, sat=g.sat_abv, delete_extra=True, use_band_map=True)
 
     return None
 
@@ -48,7 +48,7 @@ def make_fmask(image_dir, sat='LC8'):
 
     else:
         mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-
+        # TODO: configue so make_fmask gets a list of image dirs, as it stands its geting home/p/r/year
         lst_image = mapping[sat](image_dir)
 
         f = Fmask(lst_image)
@@ -76,10 +76,10 @@ def orgainize_directory(root, path, row, year):
 
 if __name__ == '__main__':
     p, r = 39, 27
-    yr = 2013
+    yr = 2009
     home = os.path.expanduser('~')
     creds = os.path.join(home, 'usgs.txt')
     images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
-    prepare_image_stack(p, r, yr, creds, images, satellite='LC8')
+    prepare_image_stack(p, r, yr, images, satellite=5)
 
 # ========================= EOF ====================================================================
