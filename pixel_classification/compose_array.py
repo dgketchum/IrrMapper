@@ -61,6 +61,7 @@ class PixelTrainingArray(object):
     For now, images are Landsat images. The 'images' parameter is for a directory of images from
     one path,row Landsat tile.
     """
+
     def __init__(self, training_shape=None, images=None, instances=None, pickle_path=None,
                  overwrite_existing=False):
         """
@@ -270,8 +271,6 @@ class PixelTrainingArray(object):
                 output.write({'properties': props,
                               'geometry': mapping(pt)})
         return None
-
-
 
     def _from_pickle(self, path):
         pkl = pickle.load(open(path, 'rb'))

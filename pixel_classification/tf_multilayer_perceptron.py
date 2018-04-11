@@ -22,15 +22,13 @@ from pandas import get_dummies
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-from pixel_classification.compose_array import PixelTrainingArray
 
-
-def mlp(data):
+def mlp(data, checkpoint=None):
     """
+    :param checkpoint:
     :param data: Use the PixelTrainingArray class.
     :return:
     """
-    assert isinstance(data, PixelTrainingArray)
 
     x = normalize(data.data)
     y = get_dummies(data.target_values).values
@@ -41,7 +39,7 @@ def mlp(data):
     eta = 0.05
     epochs = 10000
     seed = 128
-    batch_size = 100
+    batch_size = 500
 
     x, x_test, y, y_test = train_test_split(x, y, test_size=0.33,
                                             random_state=None)
@@ -84,6 +82,10 @@ def mlp(data):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
+    if checkpoint:
+        saver = tf.train.Saver()
+        saver.save(sess, checkpoint)
+
 
 def multilayer_perceptron(x, weights, biases):
     out_layer = tf.add(tf.matmul(x, weights), biases)
@@ -92,6 +94,7 @@ def multilayer_perceptron(x, weights, biases):
 
 
 def normalize(data):
+
     scaler = StandardScaler()
     scaler = scaler.fit(data)
     data = scaler.transform(data)

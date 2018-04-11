@@ -24,7 +24,6 @@ from sat_image.warped_vrt import warp_vrt
 
 
 def prepare_image_stack(path, row, year, outpath, satellite=8):
-
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
 
     sub_directory = orgainize_directory(outpath, path, row, year)
@@ -78,7 +77,6 @@ if __name__ == '__main__':
     p, r = 39, 27
     yr = 2009
     home = os.path.expanduser('~')
-    creds = os.path.join(home, 'usgs.txt')
     images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
     prepare_image_stack(p, r, yr, images, satellite=5)
 

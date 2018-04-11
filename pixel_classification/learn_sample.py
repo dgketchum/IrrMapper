@@ -21,13 +21,12 @@ from pixel_classification.tf_softmax import softmax
 from pixel_classification.compose_array import PixelTrainingArray
 
 
-def classify(alg='mlp', data=None, path_to_pickled=None):
-    if data:
-        if not isinstance(data, PixelTrainingArray):
-            raise TypeError('Classification requires a PixelTrainingArray object.')
+def classify(data, alg='mlp', model=None):
+    if isinstance(data, PixelTrainingArray):
+        pass
 
-    elif path_to_pickled:
-        data = PixelTrainingArray(pickle_path=path_to_pickled)
+    elif os.path.isfile(data):
+        data = PixelTrainingArray(pickle_path=data)
 
     else:
         raise TypeError('Classification requires PixelTrainingArray object.')
@@ -37,19 +36,21 @@ def classify(alg='mlp', data=None, path_to_pickled=None):
 
     try:
         cls = mapping[alg]
-        results = cls(data)
-        return None
+        cls(data, model)
 
     except KeyError:
         print('Invalid satellite key: "{}". available keys = {}'.format
               (alg, ', '.join(mapping.keys())))
+
+    return None
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     p_path = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
                                                                                     '27', '2015', 'data.pkl'))
-    classify(alg='mlp', path_to_pickled=p_path)
+    checkpoint = p_path.replace('data.pkl', 'checkpoint.chk')
+    classify(p_path, alg='mlp', model=checkpoint)
 
 
 # ========================= EOF ====================================================================
