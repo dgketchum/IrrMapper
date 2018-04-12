@@ -17,18 +17,17 @@
 from __future__ import division
 
 import os
-import shutil
 from datetime import datetime
 
+from rasterio import open as rasopen
 from rasterio.enums import Resampling
 from rasterio.vrt import WarpedVRT
-from rasterio import open as rasopen
 
-from sat_image.image import Landsat5, Landsat7, Landsat8
-from pixel_classification.band_map import band_map
+from sat_image.band_map import BandMap
+from sat_image.image import Landsat5, Landsat7, Landsat8, LandsatImage
 
 
-def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
+def warp_vrt(directory, delete_extra=False, use_band_map=False):
     """ Read in image geometry, resample subsequent images to same grid.
 
     The purpose of this function is to snap many Landsat images to one geometry. Use Landsat578
@@ -37,23 +36,23 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
     :param use_band_map:
     :param delete_extra:
     :param directory: A directory containing sub-directories of Landsat images.
-    :param sat: Landsat satellite; 'LT5', 'LE7', 'LC8'
     :return: None
     """
+    mapping = {'LC8': Landsat8, 'LE7': Landsat7, 'LT5': Landsat5}
 
     vrt_options = {}
-    list_dir = os.listdir(directory)
+    list_dir = [x[0] for x in os.walk(directory) if os.path.basename(x[0])[:3] in mapping.keys()]
 
     first = True
 
     for d in list_dir:
-
+        sat = LandsatImage(d).satellite
         paths = []
         root = os.path.join(directory, d)
         if os.path.isdir(root):
             for x in os.listdir(root):
                 if use_band_map:
-                    bands = band_map()
+                    bands = BandMap().selected
                     for y in bands[sat]:
                         if x.endswith('B{}.TIF'.format(y)):
                             paths.append(os.path.join(directory, d, x))
@@ -65,8 +64,6 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
 
         if first:
 
-            mapping = {'LC8': Landsat8, 'LE7': Landsat7, 'LT5': Landsat5}
-
             landsat = mapping[sat](os.path.join(directory, d))
             dst = landsat.rasterio_geometry
 
@@ -76,8 +73,7 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
                            'dst_height': dst['height'],
                            'dst_width': dst['width']}
 
-            print('geometry: {} \n {}'.format(d, vrt_options))
-            print('shape: {}'.format(landsat.shape))
+
             message = """
             This directory has been resampled to same grid.
             Master grid is {}.
@@ -117,6 +113,6 @@ def warp_vrt(directory, sat, delete_extra=False, use_band_map=False):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     images = os.path.join(home, 'landsat_images', 'vrt_testing')
-    warp_vrt(images, 'LC8', delete_extra=True, use_band_map=True)
+    warp_vrt(images, delete_extra=True, use_band_map=True)
 
 # ========================= EOF ================================================================

@@ -31,6 +31,7 @@ from fiona import open as fopen
 from shapely.geometry import shape, Point
 
 from .update_landsat_metadata import update
+from .band_map import BandMap
 
 SATS = ['LANDSAT_1', 'LANDSAT_2', 'LANDSAT_3', 'LANDSAT_4',
         'LANDSAT_5', 'LANDSAT_7', 'LANDSAT_8']
@@ -77,6 +78,7 @@ class GoogleDownload(object):
         self.scenes = os.path.abspath(os.path.dirname(__file__).replace('sat_image', 'scene_list'))
         self._check_scenes_lists()
         self._get_candidate_scenes()
+        self.band_map = BandMap()
 
     def download(self, output_dir, zipped=False,
                  alt_name=None):
@@ -84,7 +86,7 @@ class GoogleDownload(object):
         self.output = output_dir
         for ind, row in self.scenes_df.iterrows():
             print('Image {} for {}'.format(row.SCENE_ID, row.DATE_ACQUIRED))
-            for band in self.band_map[self.sat_name]:
+            for band in self.band_map.file_suffixes[self.sat_name]:
 
                 url = self._make_url(row, band)
 
@@ -96,8 +98,6 @@ class GoogleDownload(object):
 
                 if not os.path.isfile(dst):
                     self._fetch_image(url, dst)
-                else:
-                    print('{} exists'.format(dst))
 
             if zipped:
                 tgz_file = '{}.tar.gz'.format(row.SCENE_ID)
@@ -154,23 +154,7 @@ class GoogleDownload(object):
             for feat in src:
                 geo = shape(feat['geometry'])
                 polys.append(geo)
-        return polys
-
-    @property
-    def band_map(self):
-
-        b = {'LANDSAT_1': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF', 'MTL.txt'],
-             'LANDSAT_2': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF', 'MTL.txt'],
-             'LANDSAT_3': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF', 'MTL.txt'],
-             'LANDSAT_4': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF', 'MTL.txt'],
-             'LANDSAT_5': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF', 'MTL.txt'],
-
-             'LANDSAT_7': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF',
-                           'B6_VCID_1.TIF', 'B6_VCID_2.TIF', 'B7.TIF', 'B8.TIF', 'MTL.txt'],
-
-             'LANDSAT_8': ['B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF',
-                           'B7.TIF', 'B8.TIF', 'B9.TIF', 'B10.TIF', 'B11.TIF', 'BQA.TIF', 'MTL.txt']}
-        return b
+        return poly
 
     @staticmethod
     def _make_url(row, band):

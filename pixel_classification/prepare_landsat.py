@@ -22,6 +22,8 @@ from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 
+MAPPING = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+
 
 def prepare_image_stack(path, row, year, outpath, satellite=8):
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
@@ -31,9 +33,12 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
     g = GoogleDownload(satellite, start, end, path, row, max_cloud=20)
     g.download(sub_directory)
 
-    make_fmask(sub_directory, sat=g.sat_abv)
+    dirs = [x[0] for x in os.walk(sub_directory) if os.path.basename(x[0])[:3] in MAPPING.keys()]
 
-    warp_vrt(sub_directory, sat=g.sat_abv, delete_extra=True, use_band_map=True)
+    for d in dirs:
+        make_fmask(d, sat=g.sat_abv)
+
+    warp_vrt(sub_directory, delete_extra=True, use_band_map=True)
 
     return None
 
@@ -43,12 +48,11 @@ def make_fmask(image_dir, sat='LC8'):
     dst_path_water = os.path.join(image_dir, 'water_fmask.tif')
 
     if os.path.isfile(dst_path_cloud) and os.path.isfile(dst_path_water):
-        print('{} and {} exist'.format(dst_path_cloud, dst_path_water))
+        print('{} and {} exist'.format(os.path.basename(dst_path_cloud), os.path.basename(dst_path_water)))
 
     else:
-        mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-        # TODO: configue so make_fmask gets a list of image dirs, as it stands its geting home/p/r/year
-        lst_image = mapping[sat](image_dir)
+
+        lst_image = MAPPING[sat](image_dir)
 
         f = Fmask(lst_image)
 
@@ -75,7 +79,7 @@ def orgainize_directory(root, path, row, year):
 
 if __name__ == '__main__':
     p, r = 39, 27
-    yr = 2009
+    yr = 2008
     home = os.path.expanduser('~')
     images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
     prepare_image_stack(p, r, yr, images, satellite=5)

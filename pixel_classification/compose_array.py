@@ -16,23 +16,23 @@
 
 import os
 import pickle
-import pkg_resources
 from copy import deepcopy
 from datetime import datetime
 from warnings import warn
-from pandas import DataFrame, Series
+
+import pkg_resources
+from fiona import open as fopen
 from numpy import linspace, round, max, nan, unique, cumsum
 from numpy.random import shuffle
-from sklearn.decomposition import PCA
-
-from fiona import open as fopen
+from pandas import DataFrame, Series
+from pyproj import Proj, transform
 from rasterio import open as rasopen
 from shapely.geometry import shape, Polygon, Point, mapping
 from shapely.ops import unary_union
-from pyproj import Proj, transform
+from sklearn.decomposition import PCA
 
+from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
-from pixel_classification.band_map import band_map
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
@@ -102,13 +102,17 @@ class PixelTrainingArray(object):
             self.object_id = None
 
             landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-            self.band_map = band_map()
-            dirs = [os.path.join(images, x) for x in os.listdir(images) if os.path.isdir(os.path.join(images, x))]
+            self.band_map = BandMap
+
+            dirs = [x[0] for x in os.walk(images) if os.path.basename(x[0])[:3] in landsat_map.keys()]
             objs = [LandsatImage(x).satellite for x in dirs]
             self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
 
             self.current_img = self.images[0]
-            self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
+            try:
+                self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
+            except AttributeError:
+                self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
             self.vectors = training_shape
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
@@ -182,7 +186,7 @@ class PixelTrainingArray(object):
                                               positive_area / shape(self.tile_bbox).area))
         print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
                                                                                      len(self.extracted_points)))
-        print('{} positive instances, {} negative'.format(poly_pt_ct, count))
+        print('{} positive instances, {} negative'.format(pos_instance_ct, count))
         print('Sample operation completed in {} seconds'.format((datetime.now() - time).seconds))
         self.is_sampled = True
 
@@ -208,7 +212,7 @@ class PixelTrainingArray(object):
                                                                            how='outer')
 
                 for band, path in sat_image.tif_dict.items():
-                    if band.replace('b', '') in self.band_map[sat_image.satellite]:
+                    if band.replace('b', '') in self.band_map.selected[sat_image.satellite]:
                         band_series = self._point_raster_extract(path)
                         self.extracted_points = self.extracted_points.join(band_series,
                                                                            how='outer')
@@ -405,9 +409,11 @@ class PixelTrainingArray(object):
 
     @staticmethod
     def _recursive_file_gen(directory):
+        _list = []
         for root, dirs, files in os.walk(directory):
             for file in files:
-                yield os.path.join(root, file)
+                _list.append(os.path.join(root, file))
+        return _list
 
     @property
     def data_path(self):
@@ -448,7 +454,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27', '2015'))
+                                                               '27'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
                                                             'FLU_2017_Irrig.shp'))
