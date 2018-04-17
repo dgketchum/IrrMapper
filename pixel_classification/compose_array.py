@@ -98,6 +98,10 @@ class PixelTrainingArray(object):
 
             self.m_instances = instances
             self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
+            self.extract_paths = {}
+            self.model_map = {}
+
+            self.water_mask = None
 
             self.object_id = None
 
@@ -192,6 +196,7 @@ class PixelTrainingArray(object):
 
     def make_data_array(self):
 
+        min_cloud = 1.
         for sat_image in self.images:
             self.current_img = sat_image
             scn = self.current_img.landsat_scene_id
@@ -202,6 +207,9 @@ class PixelTrainingArray(object):
                     if is_cloud_mask:
                         fraction_masked = mask_series.sum() / len(mask_series)
                         excessive_clouds = fraction_masked > 0.07
+                        if fraction_masked < min_cloud:
+                            min_cloud = fraction_masked
+                            self.water_mask = path.replace('cloud', 'water')
                         if excessive_clouds:
                             raise ExcessiveCloudsError(print(
                                 '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.)))
@@ -222,9 +230,15 @@ class PixelTrainingArray(object):
 
         data_array, targets = self._purge_array()
 
+        for key, val in self.extract_paths.items():
+            if key in data_array.columns.values:
+                self.model_map[key] = val
+
         data = {'features': data_array.columns.values,
                 'data': data_array.values,
-                'target_values': targets}
+                'target_values': targets,
+                'model_map': self.model_map,
+                'water_mask': self.water_mask}
 
         for key, val in data.items():
             setattr(self, key, val)
@@ -344,6 +358,8 @@ class PixelTrainingArray(object):
 
         column_name = '{}_{}_{}'.format(self.current_img.satellite, date_string, band)
 
+        self.extract_paths[column_name] = raster
+
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
@@ -454,7 +470,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27', '2008'))
+                                                               '27', '2015'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
                                                             'FLU_2017_Irrig.shp'))
