@@ -21,6 +21,10 @@ from pixel_classification.tf_softmax import softmax
 from pixel_classification.compose_array import PixelTrainingArray
 
 
+def apply_model(model):
+    pass
+
+
 def build_model(data, alg='mlp', model=None):
     if isinstance(data, PixelTrainingArray):
         pass
@@ -39,7 +43,7 @@ def build_model(data, alg='mlp', model=None):
         cls(data, model)
 
     except KeyError:
-        print('Invalid satellite key: "{}". available keys = {}'.format
+        print('Invalid algorithm key: "{}". available keys = {}'.format
               (alg, ', '.join(mapping.keys())))
 
     return None
@@ -48,7 +52,7 @@ def build_model(data, alg='mlp', model=None):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     p_path = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
-                                                                                    '27', '2015', 'data.pkl'))
+                                                                                    '27', '2008', 'data.pkl'))
     checkpoint = p_path.replace('data.pkl', 'checkpoint.chk')
     build_model(p_path, alg='mlp', model=checkpoint)
 

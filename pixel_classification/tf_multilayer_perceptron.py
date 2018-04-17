@@ -37,7 +37,7 @@ def mlp(data, checkpoint=None):
 
     nodes = 500
     eta = 0.05
-    epochs = 10000
+    epochs = 3000
     seed = 128
     batch_size = 500
 
@@ -61,26 +61,28 @@ def mlp(data, checkpoint=None):
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
-    sess = tf.InteractiveSession()
-    tf.global_variables_initializer().run()
+    init_op = tf.global_variables_initializer().run()
 
-    for step in range(epochs):
+    saver = tf.train.Saver()
 
-        offset = randint(0, y.shape[0] - batch_size - 1)
+    with tf.InteractiveSession() as sess:
+        for step in range(epochs):
 
-        batch_data = x[offset:(offset + batch_size), :]
-        batch_labels = y[offset:(offset + batch_size), :]
+            offset = randint(0, y.shape[0] - batch_size - 1)
 
-        feed_dict = {X: batch_data, Y: batch_labels}
+            batch_data = x[offset:(offset + batch_size), :]
+            batch_labels = y[offset:(offset + batch_size), :]
 
-        _, loss = sess.run([optimizer, loss_op],
-                           feed_dict=feed_dict)
+            feed_dict = {X: batch_data, Y: batch_labels}
 
-        if step % 100 == 0:
-            pred = tf.nn.softmax(y_pred)
-            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
+            _, loss = sess.run([optimizer, loss_op],
+                               feed_dict=feed_dict)
+
+            if step % 100 == 0:
+                pred = tf.nn.softmax(y_pred)
+                correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+                print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
     if checkpoint:
         saver = tf.train.Saver()
@@ -94,7 +96,6 @@ def multilayer_perceptron(x, weights, biases):
 
 
 def normalize(data):
-
     scaler = StandardScaler()
     scaler = scaler.fit(data)
     data = scaler.transform(data)

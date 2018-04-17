@@ -102,7 +102,7 @@ class PixelTrainingArray(object):
             self.object_id = None
 
             landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-            self.band_map = BandMap
+            self.band_map = BandMap()
 
             dirs = [x[0] for x in os.walk(images) if os.path.basename(x[0])[:3] in landsat_map.keys()]
             objs = [LandsatImage(x).satellite for x in dirs]
@@ -454,7 +454,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27'))
+                                                               '27', '2008'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
                                                             'FLU_2017_Irrig.shp'))
