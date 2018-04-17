@@ -17,33 +17,54 @@
 import os
 
 from rasterio import open as rasopen
-from numpy import zeros, uint16, linspace
+from numpy import zeros, uint16, linspace, array
 
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.tf_softmax import softmax
 from pixel_classification.compose_array import PixelTrainingArray
 
 
-def apply_model(model, pixel_data):
+def apply_model(model, pixel_data, max_memory=2, write_stack=False):
     data = PixelTrainingArray(pickle_path=pixel_data)
+    # data_size = get_size(os.path.dirname(pixel_data))
 
-    lows = linspace(0, 7000, 8).tolist()
-    highs = linspace(1000, 8000, 8).tolist()
-
-    stack = []
-
-    for feat in data.features.tolist():
-        # print('Block {} of 64'.format(i + 1))
+    features = data.features.tolist()
+    stack = None
+    first = True
+    for i, feat in enumerate(features):
         with rasopen(data.model_map[feat], mode='r') as src:
             arr = src.read()
-        empty = zeros((1, 8000, 8000), dtype=uint16)
-        try:
-            empty[0, :arr.shape[1], :arr.shape[2]] = arr
-        except ValueError:
-            pass
-        padded = empty
-        stack.append(padded)
+            meta = src.meta.copy()
+        if first:
+            empty = zeros((len(features), arr.shape[1], arr.shape[2]), uint16)
+            stack = empty
+            stack[i, :, :] = arr
+            first = False
+        else:
+            stack[i, :, :] = arr
+
+    if write_stack:
+        meta['count'] = i + 1
+        meta['dtype'] = uint16
+        with rasopen(pixel_data.replace('data.pkl', 'stack.tif'), 'w', **meta) as dst:
+            for i in range(1, stack.shape[0] + 1):
+                dst.write(stack[i - 1, :, :], i)
+
     pass
+
+
+def get_size(start_path='.'):
+    """ Size of data directory in GB.
+    :param start_path:
+    :return:
+    """
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            total_size += os.path.getsize(fp)
+    total_size = total_size * 1e-9
+    return total_size
 
 
 def build_model(data, alg='mlp', model=None):
@@ -73,7 +94,7 @@ def build_model(data, alg='mlp', model=None):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     p_path = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data', '39',
-                                                                                    '27', '2015', 'data.pkl'))
+                                                                                    '27', '2008', 'data.pkl'))
     checkpoint = p_path.replace('data.pkl', 'checkpoint.chk')
     # build_model(p_path, alg='mlp', model=checkpoint)
     apply_model(None, p_path)
