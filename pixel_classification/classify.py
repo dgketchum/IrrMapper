@@ -17,6 +17,7 @@
 import os
 
 from rasterio import open as rasopen
+from numpy import zeros, uint16, linspace
 
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.tf_softmax import softmax
@@ -24,13 +25,25 @@ from pixel_classification.compose_array import PixelTrainingArray
 
 
 def apply_model(model, pixel_data):
-
     data = PixelTrainingArray(pickle_path=pixel_data)
-    for key, val in data.model_map.items():
-        with rasopen(val, mode='r') as src:
-            geo = src.meta.copy()
-            arr = src.read()
 
+    lows = linspace(0, 7000, 8).tolist()
+    highs = linspace(1000, 8000, 8).tolist()
+
+    stack = []
+
+    for feat in data.features.tolist():
+        # print('Block {} of 64'.format(i + 1))
+        with rasopen(data.model_map[feat], mode='r') as src:
+            arr = src.read()
+        empty = zeros((1, 8000, 8000), dtype=uint16)
+        try:
+            empty[0, :arr.shape[1], :arr.shape[2]] = arr
+        except ValueError:
+            pass
+        padded = empty
+        stack.append(padded)
+    pass
 
 
 def build_model(data, alg='mlp', model=None):

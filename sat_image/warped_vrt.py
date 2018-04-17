@@ -83,23 +83,21 @@ def warp_vrt(directory, delete_extra=False, use_band_map=False):
                 f.write(message)
             first = False
 
-        else:
+        os.rename(mtl, mtl.replace('.txt', 'copy.txt'))
 
-            os.rename(mtl, mtl.replace('.txt', 'copy.txt'))
+        for tif_path in paths:
+            print('warping {}'.format(os.path.basename(tif_path)))
+            with rasopen(tif_path, 'r') as src:
+                with WarpedVRT(src, **vrt_options) as vrt:
+                    data = vrt.read()
+                    dst_dir, name = os.path.split(tif_path)
+                    outfile = os.path.join(dst_dir, name)
+                    meta = vrt.meta.copy()
+                    meta['driver'] = 'GTiff'
+                    with rasopen(outfile, 'w', **meta) as dst:
+                        dst.write(data)
 
-            for tif_path in paths:
-                print('warping {}'.format(os.path.basename(tif_path)))
-                with rasopen(tif_path, 'r') as src:
-                    with WarpedVRT(src, **vrt_options) as vrt:
-                        data = vrt.read()
-                        dst_dir, name = os.path.split(tif_path)
-                        outfile = os.path.join(dst_dir, name)
-                        meta = vrt.meta.copy()
-                        meta['driver'] = 'GTiff'
-                        with rasopen(outfile, 'w', **meta) as dst:
-                            dst.write(data)
-
-            os.rename(mtl.replace('.txt', 'copy.txt'), mtl)
+        os.rename(mtl.replace('.txt', 'copy.txt'), mtl)
 
         if delete_extra:
             for x in os.listdir(os.path.join(directory, d)):
