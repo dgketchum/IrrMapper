@@ -154,7 +154,7 @@ class GoogleDownload(object):
             for feat in src:
                 geo = shape(feat['geometry'])
                 polys.append(geo)
-        return poly
+        return polys
 
     @staticmethod
     def _make_url(row, band):
@@ -173,16 +173,19 @@ class GoogleDownload(object):
         if not destination_path:
             destination_path = os.path.join(os.getcwd(), os.path.basename(url))
 
-        response = get(url, stream=True)
-        if response.status_code == 200:
-            with open(destination_path, 'wb') as f:
-                print('Getting {}'.format(os.path.basename(url)))
-                for chunk in response.iter_content(chunk_size=1024 * 1024 * 8):
-                    f.write(chunk)
+        try:
+            response = get(url, stream=True)
+            if response.status_code == 200:
+                with open(destination_path, 'wb') as f:
+                    print('Getting {}'.format(os.path.basename(url)))
+                    for chunk in response.iter_content(chunk_size=1024 * 1024 * 8):
+                        f.write(chunk)
 
-        elif response.status_code > 399:
-            print('Code {}'.format(response.status_code))
-            raise BadRequestsResponse(Exception)
+            elif response.status_code > 399:
+                print('Code {}'.format(response.status_code))
+                raise BadRequestsResponse(Exception)
+        except BadRequestsResponse:
+            pass
 
     @staticmethod
     def _zip_image(output_filename, source_dir):
