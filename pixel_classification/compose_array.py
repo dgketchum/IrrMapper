@@ -34,7 +34,7 @@ from sklearn.decomposition import PCA
 from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
-WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
+WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending_test.shp')
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  
@@ -470,11 +470,12 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27', '2015'))
+                                                               '27', '2007'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
                                                             'FLU_2017_Irrig.shp'))
     m = 10000
-    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=m, overwrite_existing=True)
+    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=m,
+                           overwrite_existing=True)
     p.extract_sample(save_points=True)
 # ========================= EOF ====================================================================
