@@ -16,9 +16,11 @@
 
 import os
 from numpy import unique
+from numpy import zeros, where, uint16
 from numpy.random import randint
 import tensorflow as tf
 from pandas import get_dummies
+from rasterio import open as rasopen
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
@@ -30,7 +32,7 @@ def mlp(data, checkpoint=None):
     :return:
     """
 
-    x = normalize(data.data)
+    x = normalize_feature_array(data.data)
     y = get_dummies(data.target_values).values
     N = len(unique(data.target_values))
     n = data.data.shape[1]
@@ -48,11 +50,11 @@ def mlp(data, checkpoint=None):
     Y = tf.placeholder("float", [None, N])
 
     weights = {
-        'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed)),
-        'output': tf.Variable(tf.random_normal([nodes, N], seed=seed))}
+        'hidden': tf.Variable(tf.random_normal([n, nodes], seed=seed), name='Wh'),
+        'output': tf.Variable(tf.random_normal([nodes, N], seed=seed), name='Wo')}
     biases = {
-        'hidden': tf.Variable(tf.random_normal([nodes], seed=seed)),
-        'output': tf.Variable(tf.random_normal([N], seed=seed))}
+        'hidden': tf.Variable(tf.random_normal([nodes], seed=seed), name='Bh'),
+        'output': tf.Variable(tf.random_normal([N], seed=seed), name='Bo')}
 
     y_pred = tf.add(tf.matmul(multilayer_perceptron(X, weights['hidden'], biases['hidden']),
                               weights['output']), biases['output'])
@@ -60,8 +62,6 @@ def mlp(data, checkpoint=None):
     loss_op = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits(logits=y_pred, labels=Y))
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
-
-    saver = tf.train.Saver()
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
@@ -84,8 +84,24 @@ def mlp(data, checkpoint=None):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
-    if checkpoint:
-        saver.save(sess, checkpoint)
+    features = data.features.tolist()
+    stack = None
+    first = True
+    for i, feat in enumerate(features):
+        with rasopen(data.model_map[feat], mode='r') as src:
+            arr = src.read()
+            meta = src.meta.copy()
+        if first:
+            empty = zeros((len(features), arr.shape[1], arr.shape[2]), uint16)
+            stack = empty
+            stack[i, :, :] = normalize_feature_array(arr)
+            first = False
+            mask = where(arr != 0)
+        else:
+            stack[i, :, :] = normalize_feature_array(arr)
+
+
+
 
 
 def multilayer_perceptron(x, weights, biases):
@@ -94,11 +110,44 @@ def multilayer_perceptron(x, weights, biases):
     return out_layer
 
 
-def normalize(data):
+def normalize_feature_array(data):
     scaler = StandardScaler()
     scaler = scaler.fit(data)
     data = scaler.transform(data)
     return data
+
+
+def write_stack(pixel_data, meta, stack):
+
+    meta['count'] = stack.shape[0] + 1
+    meta['dtype'] = uint16
+    with rasopen(pixel_data.replace('data.pkl', 'stack.tif'), 'w', **meta) as dst:
+        for i in range(1, stack.shape[0] + 1):
+            dst.write(stack[i - 1, :, :], i)
+    return None
+
+
+def normalize_image_channel(data):
+    data = data.reshape((data.shape[1], data.shape[2]))
+    scaler = StandardScaler()
+    scaler = scaler.fit(data)
+    data = scaler.transform(data)
+    data = data.reshape((1, data.shape[0], data.shape[1]))
+    return data
+
+
+def get_size(start_path='.'):
+    """ Size of data directory in GB.
+    :param start_path:
+    :return:
+    """
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            total_size += os.path.getsize(fp)
+    total_size = total_size * 1e-9
+    return total_size
 
 
 if __name__ == '__main__':
