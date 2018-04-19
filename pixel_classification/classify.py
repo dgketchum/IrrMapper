@@ -50,7 +50,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     root = os.path.dirname(__file__).replace('pixel_classification', 'landsat_data')
 
-    year = os.path.join(root, '39', '27', '2008')
+    year = os.path.join(root, '39', '27', '2015')
     p_path = os.path.join(year, 'data.pkl')
 
     model_path = build_model(p_path, alg='mlp', model=year)

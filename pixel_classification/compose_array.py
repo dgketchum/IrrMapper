@@ -470,12 +470,13 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27', '2007'))
+                                                               '27', '2015'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
-                                                            'FLU_2017_Irrig.shp'))
+                                                            'OE_Sites_Only_Final.shp'))
     m = 10000
     p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=m,
                            overwrite_existing=True)
     p.extract_sample(save_points=True)
+
 # ========================= EOF ====================================================================
