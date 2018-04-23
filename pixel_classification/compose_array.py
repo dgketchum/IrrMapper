@@ -62,12 +62,12 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, training_shape=None, images=None, instances=None, pickle_path=None,
-                 overwrite_existing=False):
+    def __init__(self, images=None, instances=None, pickle_path=None,
+                 overwrite_existing=False, training_vectors=None):
         """
 
-        :param training_shape: The training shape must be un-projected,
         in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
+        :param training_vectors:
         :param images: Directory of images from one path,row Landsat tile, use warp_vrt to set them
         at the same geometry. (str)
         :param instances: The number of sample points to extract (int). A small sample size will result
@@ -117,7 +117,7 @@ class PixelTrainingArray(object):
                 self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
             except AttributeError:
                 self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
-            self.vectors = training_shape
+            self.vectors = training_vectors
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
             self.polygons = self._get_polygons()
@@ -473,8 +473,7 @@ if __name__ == '__main__':
                                                os.path.join('spatial_data', 'MT',
                                                             'OE_Sites_Only_Final.shp'))
     m = 10000
-    p = PixelTrainingArray(training_shape=vector, images=image_dir, instances=m,
-                           overwrite_existing=True)
+    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True)
     p.extract_sample(save_points=True)
 
 # ========================= EOF ====================================================================

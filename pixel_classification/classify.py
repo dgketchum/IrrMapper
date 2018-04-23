@@ -18,10 +18,9 @@ import os
 
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.tf_softmax import softmax
 
 
-def build_model(data, alg='mlp', model=None):
+def build_model(data, model=None):
     if isinstance(data, PixelTrainingArray):
         pass
 
@@ -31,17 +30,7 @@ def build_model(data, alg='mlp', model=None):
     else:
         raise TypeError('Classification requires PixelTrainingArray object.')
 
-    mapping = {'softmax': softmax,
-               'mlp': mlp}
-
-    try:
-        cls = mapping[alg]
-        path = cls(data, model)
-        return path
-
-    except KeyError:
-        print('Invalid algorithm key: "{}". available keys = {}'.format
-              (alg, ', '.join(mapping.keys())))
+    mlp(data, model)
 
     return None
 
@@ -53,6 +42,6 @@ if __name__ == '__main__':
     year = os.path.join(root, '39', '27', '2015')
     p_path = os.path.join(year, 'data.pkl')
 
-    model_path = build_model(p_path, alg='mlp', model=year)
+    build_model(p_path, model=year)
 
 # ========================= EOF ====================================================================

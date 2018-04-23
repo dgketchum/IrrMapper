@@ -40,8 +40,7 @@ class TestPointExtract(unittest.TestCase):
         shutil.rmtree(self.directory)
 
     def test_sample_points(self):
-        p = PixelTrainingArray(training_shape=self.shapefile, images=self.image,
-                               instances=100, overwrite_existing=True)
+        p = PixelTrainingArray(images=self.image, instances=100, overwrite_existing=True)
         p.extract_sample(save_points=True)
         with fopen(p.shapefile_path, 'r') as src:
             points = [x for x in src]
