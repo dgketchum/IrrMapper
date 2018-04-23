@@ -34,7 +34,7 @@ from sklearn.decomposition import PCA
 from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
-WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending_test.shp')
+WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  
@@ -139,8 +139,6 @@ class PixelTrainingArray(object):
         :param save_points:
         :return: None
         """
-
-        time = datetime.now()
 
         union = unary_union(self.polygons)
         positive_area = sum([x.area for x in self.polygons])

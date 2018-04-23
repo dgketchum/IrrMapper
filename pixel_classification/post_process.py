@@ -17,20 +17,20 @@
 import os
 
 from rasterio import open as rasopen
-from scipy.ndimage.filters import minimum_filter
+from scipy.ndimage.filters import median_filter
 
 from sat_image.image import LandsatImage, Landsat8, Landsat7, Landsat5
 
 MAPPING = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
 
 
-def filter_image(shapefile, min_filter=4):
+def filter_image(shapefile, min_filter=6):
     with rasopen(shapefile, 'r') as src:
         meta = src.meta.copy()
         data = src.read()
 
-    filtered = minimum_filter(data, size=min_filter)
-    out_name = shapefile.replace('binary_raster.tif', 'binary_filtered_4.tif')
+    filtered = median_filter(data, size=min_filter)
+    out_name = shapefile.replace('binary_raster.tif', 'binary_med_filter_6.tif')
 
     with rasopen(out_name, 'w', **meta) as dst:
         dst.write(filtered)
@@ -52,6 +52,6 @@ if __name__ == '__main__':
 
     year = os.path.join(root, '39', '27', '2015')
     shape = os.path.join(year, 'binary_raster.tif')
-    filter_image(shape, min_filter=2)
+    filter_image(shape, min_filter=6)
     # ndvi(year)
 # ========================= EOF ================================================================
