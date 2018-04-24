@@ -15,9 +15,21 @@
 # =============================================================================================
 
 import os
+home = os.path.expanduser('~')
+
+def montana():
+    d = {1: {'path': os.path.join('PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Irrig.shp'),
+             'mode': 'normal',
+             'attrs': 'all'},
+
+         2: {'path': os.path.join('PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Fallow.shp'),
+             'mode': 'normal',
+             'attrs': 'all'},
+
+         0: {'path': os.path.join('PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Forrest.shp')}}
+
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
-
+    pass
 
 # ========================= EOF ================================================================
