@@ -1,7 +1,7 @@
 # =============================================================================================
-# Copyright 2017 dgketchum
+# Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -16,8 +16,20 @@
 
 import os
 
+home = os.path.expanduser('~')
+
+
+def montana():
+    d = {1: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Irrig.shp')},
+
+         2: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Fallow.shp')},
+
+         0: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Forrest.shp')}}
+
+    return d
+
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
+    pass
 
-# =============================================================================================
+# ========================= EOF ================================================================

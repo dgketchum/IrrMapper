@@ -120,7 +120,7 @@ class PixelTrainingArray(object):
             self.vectors = training_vectors
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
-            self.polygons = self._get_polygons()
+            self.polygons = None
 
     def extract_sample(self, save_points=False):
         self.sample_coverage()
