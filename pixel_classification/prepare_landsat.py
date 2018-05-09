@@ -22,7 +22,8 @@ from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 
-MAPPING = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+MAPPING_OBJECTS = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+MAPPING_ABV = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
 
 
 def prepare_image_stack(path, row, year, outpath, satellite=8):
@@ -30,13 +31,14 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
 
     sub_directory = orgainize_directory(outpath, path, row, year)
 
-    g = GoogleDownload(satellite, start, end, path, row, max_cloud=20)
-    g.download(sub_directory)
+    g = GoogleDownload(start, end, satellite, path=path, row=row, output_path=sub_directory, max_cloud_percent=20)
+    g.download()
 
-    dirs = [x[0] for x in os.walk(sub_directory) if os.path.basename(x[0])[:3] in MAPPING.keys()]
+    dirs = [x[0] for x in os.walk(sub_directory) if os.path.basename(x[0])[:3] in MAPPING_OBJECTS.keys()]
 
     for d in dirs:
-        make_fmask(d, sat=g.sat_abv)
+        satellite_abv = MAPPING_ABV[satellite]
+        make_fmask(d, sat=satellite_abv)
 
     warp_vrt(sub_directory, delete_extra=True, use_band_map=True)
 
@@ -52,7 +54,7 @@ def make_fmask(image_dir, sat='LC8'):
 
     else:
 
-        lst_image = MAPPING[sat](image_dir)
+        lst_image = MAPPING_OBJECTS[sat](image_dir)
 
         f = Fmask(lst_image)
 
@@ -67,11 +69,12 @@ def orgainize_directory(root, path, row, year):
     dst_dir = os.path.join(root, str(path), str(row),
                            str(year))
     if not os.path.isdir(dst_dir):
+
         try:
             os.makedirs(dst_dir)
             print('Made {}'.format(dst_dir))
 
-        except:
+        except Exception:
             pass
 
     return dst_dir
