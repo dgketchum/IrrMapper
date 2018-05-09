@@ -17,7 +17,7 @@
 
 import os
 
-from sat_image.google_download import GoogleDownload
+from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
