@@ -66,8 +66,7 @@ class PixelTrainingArray(object):
                  overwrite_existing=False, training_vectors=None):
         """
 
-        in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
-        :param training_vectors:
+        :param training_vectors: in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
         :param images: Directory of images from one path,row Landsat tile, use warp_vrt to set them
         at the same geometry. (str)
         :param instances: The number of sample points to extract (int). A small sample size will result
@@ -421,14 +420,6 @@ class PixelTrainingArray(object):
 
         return polys
 
-    @staticmethod
-    def _recursive_file_gen(directory):
-        _list = []
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                _list.append(os.path.join(root, file))
-        return _list
-
     @property
     def data_path(self):
         if os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
@@ -468,11 +459,11 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
-                                                               '27', '2015'))
+                                                               '27', '2016'))
     vector = os.path.dirname(__file__).replace('pixel_classification',
                                                os.path.join('spatial_data', 'MT',
-                                                            'OE_Sites_Only_Final.shp'))
-    m = 10000
+                                                            'FLU.shp'))
+    m = 100
     p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True)
     p.extract_sample(save_points=True)
 

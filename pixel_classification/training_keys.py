@@ -19,14 +19,25 @@ import os
 home = os.path.expanduser('~')
 
 
-def montana():
-    d = {1: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Irrig.shp')},
+class TrainingAssignments(object):
+    def __init__(self, **selected_attributes):
+        self.attribute_list = ['forest', 'fallow', 'irrigated']
+        self.selected_attributes = None
 
-         2: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Fallow.shp')},
 
-         0: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Forrest.shp')}}
+class Montana(TrainingAssignments):
 
-    return d
+    def __init__(self, **selected_attributes):
+        TrainingAssignments.__init__(self, **selected_attributes)
+
+        self.state_attributes = {
+            0: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Irrig.shp')},
+
+            1: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                     'FLU_2017_Fallow.shp')},
+
+            2: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                     'FLU_2017_Forrest.shp')}}
 
 
 if __name__ == '__main__':
