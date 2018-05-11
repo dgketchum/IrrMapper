@@ -15,7 +15,7 @@
 # ===============================================================================
 
 import os
-from shapely.geometry import Polygon, mapping
+from shapely.geometry import Polygon, mapping, shape
 from fiona import crs
 import fiona
 import subprocess
@@ -30,7 +30,7 @@ def build_data(coords_wsen, image_dir, training_vector, new_test_dir):
     with fiona.open(os.path.join(new_test_dir, 'polygon.shp'), **args) as output:
         poly = Polygon(shell=linear_ring)
         prop = {'FID': 1}
-        output.write({'geometry': mapping(poly), 'properties': prop})
+        # output.write({'geometry': mapping(poly), 'properties': prop})
 
     image_dirs = [x for x in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, x))]
     for image in image_dirs:
@@ -39,8 +39,18 @@ def build_data(coords_wsen, image_dir, training_vector, new_test_dir):
                 in_tif = os.path.join(image_dir, image, tif)
                 out_tif = os.path.join(new_test_dir, image, tif)
                 call_string = 'rio {} {} --bounds {} {} {} {}'.format(in_tif, out_tif, w, s, e, n)
-                print(call_string)
-                subprocess.call(call_string)
+                # print(call_string)
+                # subprocess.call(call_string)
+
+    clip_train_vector = training_vector.replace('.shp', '_clip.shp')
+    training_clip = os.path.join(new_test_dir, os.path.basename(clip_train_vector))
+    with fiona.open(training_vector) as trn:
+        clipped = trn.filter(bbox=((w, s, e, n)))
+        clip_schema = trn.schema.copy()
+        args = {'mode': 'w', 'driver': 'ESRI Shapefile', 'schema': clip_schema, 'crs': crs.from_epsg(4326)}
+        with fiona.open(training_clip, **args) as clip:
+            for elem in clipped:
+                clip.write({'geometry': mapping(shape(elem['geometry'])), 'properties': prop})
 
 
 if __name__ == '__main__':
