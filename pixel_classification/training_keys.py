@@ -19,6 +19,11 @@ import os
 home = os.path.expanduser('~')
 
 
+def return_object(key):
+    _dict = {'montana': Montana}
+    return _dict[key]()
+
+
 class TrainingAssignments(object):
     def __init__(self, **selected_attributes):
         self.attribute_list = ['forest', 'fallow', 'irrigated']

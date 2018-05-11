@@ -1,5 +1,0 @@
-
-            This directory has been resampled to same grid.
-            Master grid is LC80390272015221LGN02.
-            2018-04-04 17:18:36.593572
-            

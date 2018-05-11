@@ -258,9 +258,8 @@ class PixelTrainingArray(object):
 
     def save_sample_points(self):
 
-        points_schema = {'properties': dict(
-            [('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-            'geometry': 'Point'}
+        points_schema = {'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+                         'geometry': 'Point'}
         meta = self.tile_geometry.copy()
         meta['schema'] = points_schema
 

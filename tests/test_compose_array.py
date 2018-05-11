@@ -21,26 +21,23 @@ import unittest
 from fiona import open as fopen
 
 from pixel_classification.compose_array import PixelTrainingArray
+from tests.build_extract_test_data import make_test_dataset
+from pixel_classification.training_keys import return_object
 
 
 class TestPointExtract(unittest.TestCase):
     def setUp(self):
-        self.origin = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                                   'data', 'pixel_extract_test'))
+        self.origin = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
         self.satellite = 'LC8'
-        self.directory = os.path.join('data', 'pixel_extract_test_copy')
-        shutil.copytree(self.origin, self.directory)
+        self.directory = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
 
-        self.image = os.path.join(self.directory, 'images')
-        self.shapefile = os.path.join(self.directory, 'flu_test_clip.shp')
-
-        self.pkl = os.path.join(self.directory, 'images', 'data.pkl')
-
-    def tearDown(self):
-        shutil.rmtree(self.directory)
+    # def tearDown(self):
+    #     shutil.rmtree(self.directory)
 
     def test_sample_points(self):
-        p = PixelTrainingArray(images=self.image, instances=100, overwrite_existing=True)
+
+        montana = return_object('montana')
+        p = PixelTrainingArray(images=self.directory, instances=100, geography=montana)
         p.extract_sample(save_points=True)
         with fopen(p.shapefile_path, 'r') as src:
             points = [x for x in src]
