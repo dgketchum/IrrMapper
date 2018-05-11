@@ -30,14 +30,21 @@ class Montana(TrainingAssignments):
     def __init__(self, **selected_attributes):
         TrainingAssignments.__init__(self, **selected_attributes)
 
-        self.state_attributes = {
-            0: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT', 'FLU_2017_Irrig.shp')},
+        self.attributes = {
+            0: {'ltype': 'irrigated', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                                           'FLU_2017_Irrig.shp')},
 
-            1: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
-                                     'FLU_2017_Fallow.shp')},
+            1: {'ltype': 'dryland', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                                         'FLU_2017_Fallow.shp')},
 
-            2: {'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
-                                     'FLU_2017_Forrest.shp')}}
+            2: {'ltype': 'forrest', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                                         'FLU_2017_Forrest.shp')}}
+
+        self.negative = {-1: {}}
+
+        self.unique_classes = len(self.attributes.keys())
+
+        self.sample_negative = True
 
 
 if __name__ == '__main__':

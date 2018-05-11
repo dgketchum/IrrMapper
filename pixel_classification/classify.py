@@ -39,7 +39,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     root = os.path.dirname(__file__).replace('pixel_classification', 'landsat_data')
 
-    year = os.path.join(root, '39', '27', '2015')
+    year = os.path.join(root, '39', '27', '2016')
     p_path = os.path.join(year, 'data.pkl')
 
     build_model(p_path, model=year)

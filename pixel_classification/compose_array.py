@@ -33,6 +33,7 @@ from sklearn.decomposition import PCA
 
 from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
+from pixel_classification.training_keys import Montana
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
@@ -63,7 +64,7 @@ class PixelTrainingArray(object):
     """
 
     def __init__(self, images=None, instances=None, pickle_path=None,
-                 overwrite_existing=False, training_vectors=None):
+                 overwrite_existing=False, geography=None):
         """
 
         :param training_vectors: in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
@@ -96,98 +97,107 @@ class PixelTrainingArray(object):
             self.target_values = None
 
             self.m_instances = instances
-            self.extracted_points = DataFrame(columns=['OBJECTID', 'X', 'Y', 'POINT_TYPE'])
+            self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
             self.extract_paths = {}
             self.model_map = {}
 
             self.water_mask = None
-
+            self.interior_rings = []
             self.object_id = None
 
-            landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
             self.band_map = BandMap()
-
-            dirs = [x[0] for x in os.walk(images) if os.path.basename(x[0])[:3] in landsat_map.keys()]
-            objs = [LandsatImage(x).satellite for x in dirs]
-            self.images = [landsat_map[x](y) for x, y in zip(objs, dirs)]
-
+            self.images = self._instantiate_images()
             self.current_img = self.images[0]
+
             try:
                 self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
             except AttributeError:
                 self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
-            self.vectors = training_vectors
+
+            self.geography = geography
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
-            self.polygons = None
-
     def extract_sample(self, save_points=False):
-        self.sample_coverage()
+
+        self.sample_training_coverage()
+        if self.geography.sample_negative:
+            self.sample_negative_space()
+
         self.make_data_array()
+
         if save_points:
             self.save_sample_points()
 
-    def sample_coverage(self):
+    def sample_training_coverage(self):
         """ Create a clipped training set and inverse training set from polygon shapefiles.
 
         This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
         to the path row provided, gets the bounding box and profile (aka meta) from
         compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
         union to reduce the number of polygon objects.
-        :param points:
-        :param save_points:
-        :return: None
         """
 
-        union = unary_union(self.polygons)
-        positive_area = sum([x.area for x in self.polygons])
-        interior_rings_dissolved = []
-        self.object_id = 0
-        pos_instance_ct = 0
-        for poly in union:
-            interior_rings_dissolved.append(poly.exterior.coords)
-            fractional_area = poly.area / positive_area
-            required_points = max([1, fractional_area * self.m_instances * 0.5])
-            x_range, y_range = self._random_points_array(poly.bounds)
-            poly_pt_ct = 0
-            for coord in zip(x_range, y_range):
-                if poly_pt_ct < required_points:
-                    if Point(coord[0], coord[1]).within(poly):
-                        self._add_entry(coord, val=1)
-                        poly_pt_ct += 1
-                        pos_instance_ct += 1
-                else:
-                    break
+        _dict = None
+        positive_area = 0
+        for class_code, _dict in self.geography.attributes.items():
+
+            polygons = self._get_polygons(_dict['path'])
+            _dict['instance_count'] = 0
+
+            union = unary_union(polygons)
+            positive_area = sum([x.area for x in polygons])
+            self.object_id = class_code
+
+            for poly in union:
+                self.interior_rings.append(poly.exterior.coords)
+                fractional_area = poly.area / positive_area
+                required_points = max([1, fractional_area * self.m_instances])
+                x_range, y_range = self._random_points_array(poly.bounds)
+                poly_pt_ct = 0
+                for coord in zip(x_range, y_range):
+                    if poly_pt_ct < required_points:
+                        if Point(coord[0], coord[1]).within(poly):
+                            self._add_entry(coord, val=class_code)
+                            poly_pt_ct += 1
+                            _dict['instance_count'] += 1
+                    else:
+                        break
+
+        fraction_ltype = positive_area / shape(self.tile_bbox).area
+        print('Total area in decimal degrees: {}\n'
+              'Area under land type {}: {}\n'
+              'Fraction land type {}: {}'.format(shape(self.tile_bbox).area, _dict['ltype'], positive_area,
+                                                 _dict['ltype'], fraction_ltype))
+
+    def sample_negative_space(self):
+        """
+        Create an inverse training set from the inverse of the polygon shapefiles.
+        """
 
         shell = self.tile_bbox['coordinates'][0]
-        inverse_polygon = Polygon(shell=shell, holes=interior_rings_dissolved)
+        inverse_polygon = Polygon(shell=shell, holes=self.interior_rings)
         inverse_polygon = inverse_polygon.buffer(0)
         inverse_polygon = unary_union(inverse_polygon)
         coords = inverse_polygon.bounds
         x_range, y_range = self._random_points_array(coords)
-        required_points = round(self.m_instances * 0.5)
         count = 0
         time = datetime.now()
         for coord in zip(x_range, y_range):
-            if count < required_points:
+            if count < self.m_instances:
                 if Point(coord[0], coord[1]).within(inverse_polygon):
-                    self._add_entry(coord, val=0)
+                    self._add_entry(coord, val=-1)
                     count += 1
                     if count % 1000 == 0:
                         print('Count {} of {} negative instances'
-                              ' in {} seconds'.format(count, int(required_points),
+                              ' in {} seconds'.format(count, int(self.m_instances),
                                                       (datetime.now() - time).seconds))
             else:
                 break
 
         self.extracted_points.infer_objects()
-        print('Total area in decimal degrees: {}\n'
-              'Area irrigated: {}\n'
-              'Fraction irrigated: {}'.format(shape(self.tile_bbox).area, positive_area,
-                                              positive_area / shape(self.tile_bbox).area))
+        print('{} positive instances, {} negative'.format(self.pos_instance_count, count))
         print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
                                                                                      len(self.extracted_points)))
-        print('{} positive instances, {} negative'.format(pos_instance_ct, count))
         print('Sample operation completed in {} seconds'.format((datetime.now() - time).seconds))
         self.is_sampled = True
 
@@ -246,7 +256,23 @@ class PixelTrainingArray(object):
         self._check_targets(targets)
         self.has_data = True
 
-    def principal_components(self, return_percentile=None, n_components=None):
+    def save_sample_points(self):
+
+        points_schema = {'properties': dict(
+            [('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+            'geometry': 'Point'}
+        meta = self.tile_geometry.copy()
+        meta['schema'] = points_schema
+
+        with fopen(self.shapefile_path, 'w', **meta) as output:
+            for index, row in self.extracted_points.iterrows():
+                props = dict([('FID', row['FID']), ('POINT_TYPE', row['POINT_TYPE'])])
+                pt = Point(row['X'], row['Y'])
+                output.write({'properties': props,
+                              'geometry': mapping(pt)})
+        return None
+
+    def _principal_components(self, return_percentile=None, n_components=None):
         """ Extract eigenvectors and eigenvalue, return desired PCAs""
         :return:
         """
@@ -271,22 +297,6 @@ class PixelTrainingArray(object):
                                                                      pca.n_components * 100))
         return pca
 
-    def save_sample_points(self):
-
-        points_schema = {'properties': dict(
-            [('OBJECTID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-            'geometry': 'Point'}
-        meta = self.tile_geometry.copy()
-        meta['schema'] = points_schema
-
-        with fopen(self.shapefile_path, 'w', **meta) as output:
-            for index, row in self.extracted_points.iterrows():
-                props = dict([('OBJECTID', row['OBJECTID']), ('POINT_TYPE', row['POINT_TYPE'])])
-                pt = Point(row['X'], row['Y'])
-                output.write({'properties': props,
-                              'geometry': mapping(pt)})
-        return None
-
     def _from_pickle(self, path):
         pkl = pickle.load(open(path, 'rb'))
         for key, val in pkl.items():
@@ -301,7 +311,7 @@ class PixelTrainingArray(object):
 
         target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
 
-        data_array.drop(['X', 'Y', 'OBJECTID', 'POINT_TYPE'], axis=1, inplace=True)
+        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
         masks = [x for x in data_array.columns.tolist() if x.endswith('mask')]
         bands = [x for x in data_array.columns.tolist() if not x.endswith('mask')]
 
@@ -384,7 +394,7 @@ class PixelTrainingArray(object):
 
     def _add_entry(self, coord, val=0):
 
-        self.extracted_points = self.extracted_points.append({'OBJECTID': int(self.object_id),
+        self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
                                                               'X': coord[0],
                                                               'Y': coord[1],
                                                               'POINT_TYPE': val}, ignore_index=True)
@@ -397,8 +407,8 @@ class PixelTrainingArray(object):
         x, y = transform(in_crs, out_crs, x, y)
         return x, y
 
-    def _get_polygons(self):
-        with fopen(self.vectors, 'r') as src:
+    def _get_polygons(self, vector):
+        with fopen(vector, 'r') as src:
             crs = src.crs
             if not crs:
                 raise NoCoordinateReferenceError('Provided shapefile has no reference data.')
@@ -419,6 +429,14 @@ class PixelTrainingArray(object):
         print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
 
         return polys
+
+    def _instantiate_images(self):
+        _dir = self.image_directory
+        landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
+        dirs = [x[0] for x in os.walk(_dir) if os.path.basename(x[0])[:3] in landsat_map.keys()]
+        objs = [LandsatImage(x).satellite for x in dirs]
+        image_objs = [landsat_map[x](y) for x, y in zip(objs, dirs)]
+        return image_objs
 
     @property
     def data_path(self):
@@ -460,11 +478,9 @@ if __name__ == '__main__':
     image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                   os.path.join('landsat_data', '39',
                                                                '27', '2016'))
-    vector = os.path.dirname(__file__).replace('pixel_classification',
-                                               os.path.join('spatial_data', 'MT',
-                                                            'FLU.shp'))
+    geo = Montana()
     m = 100
-    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True)
+    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
     p.extract_sample(save_points=True)
 
 # ========================= EOF ====================================================================

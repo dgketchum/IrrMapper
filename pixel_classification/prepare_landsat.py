@@ -82,9 +82,9 @@ def orgainize_directory(root, path, row, year):
 
 if __name__ == '__main__':
     p, r = 39, 27
-    yr = 2015
+    yr = 2005
     home = os.path.expanduser('~')
     images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
-    prepare_image_stack(p, r, yr, images, satellite=8)
+    prepare_image_stack(p, r, yr, images, satellite=5)
 
 # ========================= EOF ====================================================================
