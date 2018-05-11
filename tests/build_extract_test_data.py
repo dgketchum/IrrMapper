@@ -15,10 +15,18 @@
 # ===============================================================================
 
 import os
-from shapely.geometry import Polygon, mapping, shape
-from fiona import crs
+import sys
 import fiona
+import rasterio
 import subprocess
+from fiona import crs
+from pyproj import Proj, transform
+from shapely.geometry import Polygon, mapping, shape
+
+paths = sys.path
+base = paths[7]
+root = base.split('lib')[0]
+RIO = os.path.join(root, 'bin', 'rio')
 
 
 def build_data(coords_wsen, image_dir, training_vector, new_test_dir):
@@ -30,27 +38,51 @@ def build_data(coords_wsen, image_dir, training_vector, new_test_dir):
     with fiona.open(os.path.join(new_test_dir, 'polygon.shp'), **args) as output:
         poly = Polygon(shell=linear_ring)
         prop = {'FID': 1}
-        # output.write({'geometry': mapping(poly), 'properties': prop})
+        output.write({'geometry': mapping(poly), 'properties': prop})
 
+    first = True
     image_dirs = [x for x in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, x))]
     for image in image_dirs:
         for tif in os.listdir(os.path.join(image_dir, image)):
             if tif.lower().endswith('.tif'):
                 in_tif = os.path.join(image_dir, image, tif)
                 out_tif = os.path.join(new_test_dir, image, tif)
-                call_string = 'rio {} {} --bounds {} {} {} {}'.format(in_tif, out_tif, w, s, e, n)
-                # print(call_string)
-                # subprocess.call(call_string)
+                if first:
+                    with rasterio.open(in_tif, 'r') as ras:
+                        ref_system = ras.crs
+                    first = False
+                    init = ref_system['init']
+                    proj = []
+                    for tup in linear_ring:
+                        proj.append(_geo_point_to_projected_coords(tup[0], tup[1], init))
+
+                call_string = '{} clip --bounds {} {} {} {} {} {}'.format(RIO,
+                                                                 str(proj[2][0]), str(proj[3][1]),
+                                                                  str(proj[0][0]), str(proj[1][1]),
+                                                                  in_tif, out_tif)
+                print(call_string)
+                subprocess.run(call_string, shell=True)
+                break
 
     clip_train_vector = training_vector.replace('.shp', '_clip.shp')
     training_clip = os.path.join(new_test_dir, os.path.basename(clip_train_vector))
+
     with fiona.open(training_vector) as trn:
-        clipped = trn.filter(bbox=((w, s, e, n)))
-        clip_schema = trn.schema.copy()
-        args = {'mode': 'w', 'driver': 'ESRI Shapefile', 'schema': clip_schema, 'crs': crs.from_epsg(4326)}
+        clipped = trn.filter(bbox=(w, s, e, n))
+
+        args = {'mode': 'w', 'driver': 'ESRI Shapefile',
+                'schema': trn.schema, 'crs': crs.from_epsg(4326)}
+
         with fiona.open(training_clip, **args) as clip:
             for elem in clipped:
-                clip.write({'geometry': mapping(shape(elem['geometry'])), 'properties': prop})
+                clip.write(elem)
+
+
+def _geo_point_to_projected_coords(x, y, out_crs):
+    in_crs = Proj(init='epsg:4326')
+    out_crs = Proj(init=out_crs)
+    x, y = transform(in_crs, out_crs, x, y)
+    return x, y
 
 
 if __name__ == '__main__':
