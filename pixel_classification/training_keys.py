@@ -52,6 +52,17 @@ class Montana(TrainingAssignments):
         self.sample_negative = True
 
 
+class MontanaTest(Montana):
+    def __init__(self):
+        Montana.__init__(self)
+
+        for code, _dict in self.attributes.items():
+            _dict['path'].replace(os.path.join('spatial_data', 'MT'),
+                                  os.path.join('tests', 'data', 'pixel_extract_test',
+                                               ))
+            _dict['path'].replace('.shp', '_clip.shp')
+
+
 if __name__ == '__main__':
     pass
 
