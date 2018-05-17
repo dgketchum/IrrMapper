@@ -15,7 +15,6 @@
 # ===============================================================================
 
 import os
-import sys
 import shutil
 import fiona
 import rasterio
@@ -24,11 +23,13 @@ from fiona import crs
 from pyproj import Proj, transform
 from shapely.geometry import Polygon, mapping
 
+from pixel_classification.training_keys import MontanaTest
 
-def make_test_dataset(coords_wsen, image_dir, training_vector, new_test_dir):
+
+def make_test_dataset(coords_wsen, image_dir, new_test_dir, training):
     make_dir(new_test_dir)
     new_polygon_path = make_polygon(coords_wsen, new_test_dir)
-    clip_training_vector(training_vector, new_test_dir, coords_wsen)
+    clip_training_vector(new_test_dir, coords_wsen, training)
     clip_images(image_dir, new_polygon_path, new_test_dir)
     return None
 
@@ -53,20 +54,21 @@ def make_polygon(coordinates, test_data_dir):
     return new_polygon
 
 
-def clip_training_vector(shapefile, test_directory, coords):
+def clip_training_vector(test_directory, coords, geography):
     w, s, e, n = coords
+    for class_code, _dict in geography.attributes.items():
 
-    with fiona.open(shapefile) as trn:
-        clipped = trn.filter(bbox=(w, s, e, n))
+        with fiona.open(_dict['path']) as trn:
+            clipped = trn.filter(bbox=(w, s, e, n))
 
-        args = {'mode': 'w', 'driver': 'ESRI Shapefile',
-                'schema': trn.schema, 'crs': crs.from_epsg(4326)}
-        clip_train_vector = shapefile.replace('.shp', '_clip.shp')
-        training_clip = os.path.join(test_directory, os.path.basename(clip_train_vector))
+            args = {'mode': 'w', 'driver': 'ESRI Shapefile',
+                    'schema': trn.schema, 'crs': crs.from_epsg(4326)}
+            clip_train_vector = _dict['path'].replace('.shp', '_clip.shp')
+            training_clip = os.path.join(test_directory, os.path.basename(clip_train_vector))
 
-        with fiona.open(training_clip, **args) as clip:
-            for elem in clipped:
-                clip.write(elem)
+            with fiona.open(training_clip, **args) as clip:
+                for elem in clipped:
+                    clip.write(elem)
 
 
 def clip_images(image_dir, new_polygon, new_test_dir):
@@ -124,8 +126,8 @@ def _geo_to_projected(x, y, out_crs):
 
 if __name__ == '__main__':
     coords = -111.67, 47.17, -111.20, 47.48
+    geo = MontanaTest()
     _dir = os.path.join(os.path.dirname(__file__).replace('tests', 'landsat_data'), '39', '27', '2015')
-    train = os.path.join(os.path.dirname(__file__).replace('tests', 'spatial_data'), 'MT', 'FLU.shp')
     test_dir = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
-    make_test_dataset(coords, _dir, train, test_dir)
+    make_test_dataset(coords, _dir, test_dir, geo)
 # ========================= EOF ====================================================================
