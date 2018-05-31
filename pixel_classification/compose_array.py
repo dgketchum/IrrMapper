@@ -22,7 +22,7 @@ from warnings import warn
 
 import pkg_resources
 from fiona import open as fopen
-from numpy import linspace, round, max, nan, unique, cumsum
+from numpy import linspace, max, nan, unique, cumsum
 from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
@@ -103,7 +103,7 @@ class PixelTrainingArray(object):
 
             self.water_mask = None
             self.interior_rings = []
-            self.object_id = None
+            self.object_id = 0
 
             self.band_map = BandMap()
             self.images = self._instantiate_images()
@@ -117,38 +117,41 @@ class PixelTrainingArray(object):
             self.geography = geography
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
-    def extract_sample(self, save_points=False):
+    def extract_sample(self, save_points=False, limit_sample=False):
 
-        self.sample_training_coverage()
+        self.create_sample_points(limit=limit_sample)
         if self.geography.sample_negative:
-            self.sample_negative_space()
+            self.create_negative_sample_points()
 
         self.make_data_array()
 
         if save_points:
             self.save_sample_points()
 
-    def sample_training_coverage(self):
+    def create_sample_points(self, limit=False):
         """ Create a clipped training set and inverse training set from polygon shapefiles.
 
         This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
         to the path row provided, gets the bounding box and profile (aka meta) from
         compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
         union to reduce the number of polygon objects.
+        :param limit:
         """
 
         _dict = None
         positive_area = 0
         for class_code, _dict in self.geography.attributes.items():
-
+            print(_dict['ltype'])
             polygons = self._get_polygons(_dict['path'])
             _dict['instance_count'] = 0
-
-            union = unary_union(polygons)
+            if not limit:
+                # TODO: replace this with something faster!
+                polygons = unary_union(polygons)
             positive_area = sum([x.area for x in polygons])
-            self.object_id = class_code
 
-            for poly in union:
+            for poly in polygons:
+                if limit and _dict['instance_count'] > self.m_instances:
+                    break
                 self.interior_rings.append(poly.exterior.coords)
                 fractional_area = poly.area / positive_area
                 required_points = max([1, fractional_area * self.m_instances])
@@ -169,7 +172,7 @@ class PixelTrainingArray(object):
               'Fraction land type {}: {}'.format(shape(self.tile_bbox).area, _dict['ltype'], positive_area,
                                                  _dict['ltype'], fraction_ltype))
 
-    def sample_negative_space(self):
+    def create_negative_sample_points(self):
         """
         Create an inverse training set from the inverse of the polygon shapefiles.
         """
@@ -195,10 +198,6 @@ class PixelTrainingArray(object):
                 break
 
         self.extracted_points.infer_objects()
-        print('{} positive instances, {} negative'.format(self.pos_instance_count, count))
-        print('Requested {} instances, random point placement resulted in {}'.format(self.m_instances,
-                                                                                     len(self.extracted_points)))
-        print('Sample operation completed in {} seconds'.format((datetime.now() - time).seconds))
         self.is_sampled = True
 
     def make_data_array(self):
@@ -251,7 +250,7 @@ class PixelTrainingArray(object):
             setattr(self, key, val)
 
         with open(self.data_path, 'wb') as handle:
-            pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(data, handle, protocol=0)
 
         self._check_targets(targets)
         self.has_data = True
@@ -473,13 +472,14 @@ class PixelTrainingArray(object):
 
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
-    image_dir = os.path.dirname(__file__).replace('pixel_classification',
-                                                  os.path.join('landsat_data', '39',
-                                                               '27', '2016'))
-    geo = Montana()
-    m = 100
-    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
-    p.extract_sample(save_points=True)
+    pass
+    # home = os.path.expanduser('~')
+    # image_dir = os.path.dirname(__file__).replace('pixel_classification',
+    #                                               os.path.join('landsat_data', '39',
+    #                                                            '27', '2016'))
+    # geo = Montana()
+    # m = 10
+    # p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
+    # p.extract_sample(save_points=True)
 
 # ========================= EOF ====================================================================
