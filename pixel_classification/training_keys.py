@@ -20,7 +20,8 @@ home = os.path.expanduser('~')
 
 
 def return_object(key):
-    _dict = {'montana': Montana}
+    _dict = {'montana': Montana,
+             'montana_test': MontanaTest}
     return _dict[key]()
 
 
@@ -57,11 +58,16 @@ class MontanaTest(Montana):
         Montana.__init__(self)
 
         for code, _dict in self.attributes.items():
-            _dict['path'].replace(os.path.join('spatial_data', 'MT'),
+            _dict['path'] = _dict['path'].replace(os.path.join('spatial_data', 'MT'),
                                   os.path.join('tests', 'data', 'pixel_extract_test',
                                                ))
-            _dict['path'].replace('.shp', '_clip.shp')
+            _dict['path'] = _dict['path'].replace('.shp', '_clip.shp')
 
+        self.negative = {-1: {}}
+
+        self.unique_classes = len(self.attributes.keys())
+
+        self.sample_negative = True
 
 if __name__ == '__main__':
     pass
