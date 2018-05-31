@@ -31,19 +31,15 @@ class TestPointExtract(unittest.TestCase):
         self.satellite = 'LC8'
         self.directory = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
 
-    # def tearDown(self):
-    #     shutil.rmtree(self.directory)
-
     def test_sample_points(self):
-
-        montana = return_object('montana')
-        p = PixelTrainingArray(images=self.directory, instances=100, geography=montana)
-        p.extract_sample(save_points=True)
+        montana = return_object('montana_test')
+        p = PixelTrainingArray(images=self.directory, instances=10,
+                               geography=montana, overwrite_existing=True)
+        p.extract_sample(save_points=True, limit_sample=True)
         with fopen(p.shapefile_path, 'r') as src:
             points = [x for x in src]
-        self.assertGreater(len(points), 100)
-        self.assertGreater(p.extracted_points.shape[0], 100)
-        self.assertEqual(p.extracted_points.shape[1], 8)
+        self.assertGreater(len(points), 40)
+        self.assertGreater(p.extracted_points.shape[0], 40)
 
     def test_instantiate_w_pkl(self):
         p = PixelTrainingArray(pickle_path=self.pkl)
