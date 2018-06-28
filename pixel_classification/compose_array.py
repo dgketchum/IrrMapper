@@ -217,8 +217,8 @@ class PixelTrainingArray(object):
                             min_cloud = fraction_masked
                             self.water_mask = path.replace('cloud', 'water')
                         if excessive_clouds:
-                            raise ExcessiveCloudsError(print(
-                                '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.)))
+                            raise ExcessiveCloudsError(
+                                '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.))
                         else:
                             print('Extracting {}'.format(scn))
 
@@ -472,14 +472,14 @@ class PixelTrainingArray(object):
 
 
 if __name__ == '__main__':
-    pass
-    # home = os.path.expanduser('~')
-    # image_dir = os.path.dirname(__file__).replace('pixel_classification',
-    #                                               os.path.join('landsat_data', '39',
-    #                                                            '27', '2016'))
-    # geo = Montana()
-    # m = 10
-    # p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
-    # p.extract_sample(save_points=True)
+    # pass
+    home = os.path.expanduser('~')
+    image_dir = os.path.dirname(__file__).replace('pixel_classification',
+                                                  os.path.join('landsat_data', '39',
+                                                               '27', '2015'))
+    geo = Montana()
+    m = 10
+    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
+    p.extract_sample(save_points=True)
 
 # ========================= EOF ====================================================================
