@@ -34,6 +34,7 @@ from sklearn.decomposition import PCA
 from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 from pixel_classification.training_keys import Montana
+from pixel_classification.prepare_landsat import path_rows
 
 WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
 
@@ -474,12 +475,14 @@ class PixelTrainingArray(object):
 if __name__ == '__main__':
     # pass
     home = os.path.expanduser('~')
-    image_dir = os.path.dirname(__file__).replace('pixel_classification',
-                                                  os.path.join('landsat_data', '39',
-                                                               '27', '2015'))
-    geo = Montana()
-    m = 10
-    p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
-    p.extract_sample(save_points=True)
+
+    for p, r in path_rows():
+        image_dir = os.path.dirname(__file__).replace('pixel_classification',
+                                                      os.path.join('landsat_data', str(p),
+                                                                   str(r), '2015'))
+        geo = Montana()
+        m = 5000
+        p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
+        p.extract_sample(save_points=True)
 
 # ========================= EOF ====================================================================

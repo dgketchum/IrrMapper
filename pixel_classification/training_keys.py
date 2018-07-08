@@ -59,8 +59,8 @@ class MontanaTest(Montana):
 
         for code, _dict in self.attributes.items():
             _dict['path'] = _dict['path'].replace(os.path.join('spatial_data', 'MT'),
-                                  os.path.join('tests', 'data', 'pixel_extract_test',
-                                               ))
+                                                  os.path.join('tests', 'data', 'pixel_extract_test',
+                                                               ))
             _dict['path'] = _dict['path'].replace('.shp', '_clip.shp')
 
         self.negative = {-1: {}}
@@ -68,6 +68,7 @@ class MontanaTest(Montana):
         self.unique_classes = len(self.attributes.keys())
 
         self.sample_negative = True
+
 
 if __name__ == '__main__':
     pass
