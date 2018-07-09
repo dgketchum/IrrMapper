@@ -1,7 +1,11 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
+<<<<<<< HEAD
 # Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+=======
+# Licensed under the Apache License, Version 2 (the "License");
+>>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -123,7 +127,11 @@ class ApfoNaip(NaipImage):
             :param bbox: (west, south, east, north) tuple in geographic coordinates
         """
 
+<<<<<<< HEAD
         # TODO un-hardcode pixelType, bboxSR, etc
+=======
+        # TODO un-hard-code pixelType, bboxSR, etc
+>>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
 
         NaipImage.__init__(self)
 
