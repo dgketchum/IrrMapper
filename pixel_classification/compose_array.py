@@ -475,7 +475,7 @@ class PixelTrainingArray(object):
 if __name__ == '__main__':
     # pass
     home = os.path.expanduser('~')
-
+    print(datetime.now())
     for p, r in path_rows():
         image_dir = os.path.dirname(__file__).replace('pixel_classification',
                                                       os.path.join('landsat_data', str(p),

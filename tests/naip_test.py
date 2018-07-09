@@ -1,7 +1,11 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
+<<<<<<< HEAD
+# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+=======
 # Licensed under the Apache License, Version 2.(the "License");
+>>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -26,7 +30,11 @@ class AfpoNaipTestCase(unittest.TestCase):
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
         self.dst_srs = '26912'
         self.kwargs = dict([('dst_crs', self.dst_srs)])
+<<<<<<< HEAD
+        with rasopen('data/wheatland_tile.tif', 'r') as src:
+=======
         with rasopen('data/naip_test/wheatland_tile.tif', 'r') as src:
+>>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
             self.profile = src.profile
             self.array = src.read()
 

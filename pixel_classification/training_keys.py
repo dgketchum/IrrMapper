@@ -44,13 +44,16 @@ class Montana(TrainingAssignments):
                                                          'FLU_2017_Fallow.shp')},
 
             2: {'ltype': 'forrest', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
-                                                         'FLU_2017_Forrest.shp')}}
+                                                         'FLU_2017_Forrest.shp')},
+
+            3: {'ltype': 'uneconomic', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                                            'MT_Unclassified.shp')}}
 
         self.negative = {-1: {}}
 
         self.unique_classes = len(self.attributes.keys())
 
-        self.sample_negative = True
+        self.sample_negative = False
 
 
 class MontanaTest(Montana):
@@ -67,7 +70,7 @@ class MontanaTest(Montana):
 
         self.unique_classes = len(self.attributes.keys())
 
-        self.sample_negative = True
+        self.sample_negative = False
 
 
 if __name__ == '__main__':
