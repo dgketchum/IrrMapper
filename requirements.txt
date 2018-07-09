@@ -1,87 +1,44 @@
-affine==2.2.0
-amqp==1.4.9
-anyjson==0.3.3
-arff2pandas==1.0.1
-asn1crypto==0.24.0
-attrs==17.4.0
-backports.weakref==1.0rc1
-bcrypt==3.1.4
-billiard==3.3.0.23
-bleach==1.5.0
-boto3==1.5.32
-botocore==1.8.46
-celery==3.1.23
-certifi==2018.1.18
-cffi==1.11.5
-chardet==3.0.4
-click==6.7
-click-plugins==1.0.3
-cligj==0.4.0
-cryptography==2.1.4
-cycler==0.10.0
-docutils==0.14
-Fiona==1.7.11.post1
-flake8==3.5.0
-Flask==0.10.1
-Flask-Celery-Helper==1.1.0
-Flask-SQLAlchemy==2.1
-future==0.16.0
-GDAL==2.2.4
-html5lib==0.9999999
-idna==2.6
-itsdangerous==0.24
-Jinja2==2.10
-jmespath==0.9.3
-kiwisolver==1.0.1
-kombu==3.0.37
-Landsat578==0.4.6
-liac-arff==2.1.1
-lxml==4.2.1
-Markdown==2.6.11
-MarkupSafe==1.0
-matplotlib==2.2.2
-mccabe==0.6.1
-munch==2.2.0
-numpy==1.14.2
-olefile==0.45.1
-pandas==0.22.0
-passlib==1.7.1
-Pillow==5.0.0
-pkginfo==1.4.2
-pluggy==0.6.0
-protobuf==3.5.1
-py==1.5.2
-pycodestyle==2.3.1
-pycparser==2.18
-pyflakes==1.6.0
-pyOpenSSL==17.5.0
-pyparsing==2.2.0
-pyproj==1.9.5.1
-PySocks==1.6.8
-python-dateutil==2.7.2
-pytz==2018.3
-PyYAML==3.12
-rasterio==1.0a12
-rb==1.4
-redis==2.10.5
-requests==2.18.4
-requests-toolbelt==0.8.0
-s3transfer==0.1.13
-scikit-learn==0.19.1
-scipy==1.0.0
-Shapely==1.6.4.post1
-simplejson==3.8.2
-six==1.11.0
-snuggs==1.4.1
-SQLAlchemy==1.2.5
-tensorflow==1.2.1
-tf-unet==0.1.1
-tornado==5.0
-tox==2.9.1
-tqdm==4.19.8
-twine==1.11.0
-urllib3==1.22
-virtualenv==15.1.0
-Werkzeug==0.14.1
-win-inet-pton==1.0.1
-wincertstore==0.2
+Package         Version     
+--------------- ------------
+absl-py         0.2.0       
+affine          2.2.0       
+astor           0.6.2       
+attrs           18.1.0      
+bleach          1.5.0       
+certifi         2018.4.16   
+chardet         3.0.4       
+click           6.7         
+click-plugins   1.0.3       
+cligj           0.4.0       
+Fiona           1.7.11.post2
+gast            0.2.0       
+grpcio          1.11.0      
+html5lib        0.9999999   
+idna            2.6         
+Landsat578      0.4.89      
+Markdown        2.6.11      
+munch           2.3.2       
+numpy           1.14.3      
+pandas          0.22.0      
+pip             10.0.1      
+protobuf        3.5.2.post1 
+pyparsing       2.2.0       
+pyproj          1.9.5.1     
+python-dateutil 2.7.2       
+pytz            2018.4      
+PyYAML          3.12        
+rasterio        1.0a12      
+requests        2.18.4      
+SatelliteImage  0.1.2       
+scikit-learn    0.19.1      
+scipy           1.1.0       
+setuptools      39.1.0      
+Shapely         1.6.4.post1 
+six             1.11.0      
+snuggs          1.4.1       
+tensorboard     1.8.0       
+tensorflow      1.8.0       
+termcolor       1.1.0       
+urllib3         1.22        
+Werkzeug        0.14.1      
+wheel           0.31.0      
