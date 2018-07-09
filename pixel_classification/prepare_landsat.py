@@ -50,6 +50,7 @@ def path_rows():
                (39, 27)]
     return pr_list
 
+
 def prepare_image_stack(path, row, year, outpath, satellite=8):
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
 
