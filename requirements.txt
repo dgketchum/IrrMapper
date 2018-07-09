@@ -1,6 +1,4 @@
-Package         Version     
---------------- ------------
-absl-py         0.2.0       
+absl-py         0.2.0
 affine          2.2.0       
 astor           0.6.2       
 attrs           18.1.0      
@@ -17,7 +15,7 @@ html5lib        0.9999999
 idna            2.6         
 Landsat578      0.4.89      
 Markdown        2.6.11      
-munch           2.3.2       
+munch           2.3.2
 numpy           1.14.3      
 pandas          0.22.0      
 pip             10.0.1      
