@@ -55,7 +55,7 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
 
     sub_directory = orgainize_directory(outpath, path, row, year)
-
+    print('preparing landsat at: {}'.format(sub_directory))
     g = GoogleDownload(start, end, satellite, path=path, row=row, output_path=sub_directory, max_cloud_percent=20)
     g.download()
 
@@ -109,7 +109,8 @@ if __name__ == '__main__':
     for p, r in path_rows():
         yr = 2015
         home = os.path.expanduser('~')
-        images = os.path.dirname(__file__).replace('pixel_classification', os.path.join('landsat_data'))
+        images = os.path.join(home, os.path.dirname(__file__).replace('pixel_classification',
+                                                                      os.path.join('landsat_data')))
         prepare_image_stack(p, r, yr, images, satellite=8)
 
 # ========================= EOF ====================================================================
