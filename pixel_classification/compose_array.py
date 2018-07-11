@@ -36,7 +36,8 @@ from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 from pixel_classification.training_keys import Montana
 from pixel_classification.prepare_landsat import path_rows
 
-WRS_2 = pkg_resources.resource_filename('spatial_data', 'wrs2_descending.shp')
+loc = os.path.dirname(__file__)
+WRS_2 = loc.replace('pixel_classification', os.path.join('spatial_data', 'wrs2_descending.shp'))
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  
@@ -476,9 +477,9 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
     print(datetime.now())
     for p, r in path_rows():
-        image_dir = os.path.dirname(__file__).replace('pixel_classification',
-                                                      os.path.join('landsat_data', str(p),
-                                                                   str(r), '2015'))
+        image_dir = os.path.join(home, os.path.dirname(__file__).replace('pixel_classification',
+                                                                         os.path.join('landsat_data', str(p),
+                                                                                      str(r), '2015')))
         geo = Montana()
         m = 10
         p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
