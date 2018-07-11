@@ -36,7 +36,7 @@ class Montana(TrainingAssignments):
     def __init__(self, **selected_attributes):
         TrainingAssignments.__init__(self, **selected_attributes)
 
-        self.targets = {
+        self.attributes = {
             0: {'ltype': 'irrigated', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
                                                            'FLU_2017_Irrig.shp')},
 
@@ -44,13 +44,15 @@ class Montana(TrainingAssignments):
                                                          'FLU_2017_Fallow.shp')},
 
             2: {'ltype': 'forrest', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
-                                                         'FLU_2017_Forrest.shp')}}
+                                                         'FLU_2017_Forrest.shp')},
 
-        self.join = {
-            3: {'ltype': 'uneconomic', 'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
-                                                            'FLU.shp')}}
+            3: {'ltype': 'unclassified',
+                'path': os.path.join(home, 'PycharmProjects', 'IrrMapper', 'spatial_data', 'MT',
+                                     'FLU.shp')}}
 
-        self.unique_classes = len(self.targets.keys()) + len(self.join.keys())
+        self.negative = {-1: {}}
+
+        self.unique_classes = len(self.attributes.keys())
 
         self.sample_negative = False
 
@@ -59,11 +61,17 @@ class MontanaTest(Montana):
     def __init__(self):
         Montana.__init__(self)
 
-        for code, _dict in self.targets.items():
+        for code, _dict in self.attributes.items():
             _dict['path'] = _dict['path'].replace(os.path.join('spatial_data', 'MT'),
                                                   os.path.join('tests', 'data', 'pixel_extract_test',
                                                                ))
             _dict['path'] = _dict['path'].replace('.shp', '_clip.shp')
+
+        self.negative = {-1: {}}
+
+        self.unique_classes = len(self.attributes.keys())
+
+        self.sample_negative = False
 
 
 if __name__ == '__main__':

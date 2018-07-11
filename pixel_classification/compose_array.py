@@ -104,7 +104,6 @@ class PixelTrainingArray(object):
             self.model_map = {}
 
             self.water_mask = None
-            self.interior_rings = []
             self.object_id = 0
 
             self.band_map = BandMap()
@@ -146,6 +145,7 @@ class PixelTrainingArray(object):
             print(_dict['ltype'])
             polygons = self._get_polygons(_dict['path'])
             _dict['instance_count'] = 0
+
             if not limit:
                 polygons = unary_union(polygons)
             positive_area = sum([x.area for x in polygons])
@@ -153,17 +153,29 @@ class PixelTrainingArray(object):
             for poly in polygons:
                 if limit and _dict['instance_count'] > self.m_instances:
                     break
-                self.interior_rings.append(poly.exterior.coords)
                 fractional_area = poly.area / positive_area
                 required_points = max([1, fractional_area * self.m_instances])
                 x_range, y_range = self._random_points_array(poly.bounds)
                 poly_pt_ct = 0
                 for coord in zip(x_range, y_range):
                     if poly_pt_ct < required_points:
-                        if Point(coord[0], coord[1]).within(poly):
+
+                        if Point(coord[0], coord[1]).within(poly) and _dict['ltype'] == 'unclassified':
+                            pass
+
+                        elif not Point(coord[0], coord[1]).within(poly) and _dict['ltype'] == 'unclassified':
                             self._add_entry(coord, val=class_code)
                             poly_pt_ct += 1
                             _dict['instance_count'] += 1
+
+                        elif Point(coord[0], coord[1]).within(poly):
+                            self._add_entry(coord, val=class_code)
+                            poly_pt_ct += 1
+                            _dict['instance_count'] += 1
+
+                        else:
+                            pass
+
                     else:
                         break
 
@@ -426,6 +438,7 @@ class PixelTrainingArray(object):
                     bad_geo_count += 1
 
         print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
+        print('Found {} valid geometries'.format(len(polys)))
 
         return polys
 
