@@ -1,11 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-<<<<<<< HEAD
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
-=======
 # Licensed under the Apache License, Version 2 (the "License");
->>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -40,13 +36,6 @@ def mlp(data, checkpoint=None):
     :return:
     """
 
-<<<<<<< HEAD
-    N = len(data.classes)
-    n = data.x.shape[1]
-    nodes = 500
-    eta = 0.05
-    epochs = 1000
-=======
     x = normalize_feature_array(data.data)
     y = get_dummies(data.target_values).values
     N = len(unique(data.target_values))
@@ -55,7 +44,6 @@ def mlp(data, checkpoint=None):
     nodes = 300
     eta = 0.01
     epochs = 10000
->>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
     seed = 128
     batch_size = 500
 
@@ -99,8 +87,6 @@ def mlp(data, checkpoint=None):
             correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
-<<<<<<< HEAD
-=======
 
     features = data.features.tolist()
     stack = None
@@ -157,7 +143,6 @@ def mlp(data, checkpoint=None):
     with rasopen(os.path.join(checkpoint, 'binary_raster.tif'), 'w', **meta) as dst:
         dst.write(new_array)
     return None
->>>>>>> ce638691ecdf01bbf7b8706544f7c020cf211067
 
 
 def multilayer_perceptron(x, weights, biases):
