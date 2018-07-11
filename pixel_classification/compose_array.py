@@ -480,7 +480,7 @@ if __name__ == '__main__':
                                                       os.path.join('landsat_data', str(p),
                                                                    str(r), '2015'))
         geo = Montana()
-        m = 5000
+        m = 10
         p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
         p.extract_sample(save_points=True)
 
