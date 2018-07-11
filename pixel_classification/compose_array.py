@@ -146,7 +146,6 @@ class PixelTrainingArray(object):
             polygons = self._get_polygons(_dict['path'])
             _dict['instance_count'] = 0
             if not limit:
-                # TODO: replace this with something faster!
                 polygons = unary_union(polygons)
             positive_area = sum([x.area for x in polygons])
 
