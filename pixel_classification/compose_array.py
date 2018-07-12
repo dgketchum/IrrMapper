@@ -82,13 +82,19 @@ class PixelTrainingArray(object):
         :param overwrite_existing:
         """
 
+        self.image_directory = images
+
         if pickle_path and not overwrite_existing:
             self._from_pickle(pickle_path)
+
+        elif not overwrite_existing and os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
+            self.array_exists = True
+            self.overwrite = overwrite_existing
 
         else:
 
             self.image_directory = images
-
+            self.array_exists = False
             self.is_sampled = False
             self.has_data = False
             self.is_binary = None
@@ -120,14 +126,27 @@ class PixelTrainingArray(object):
 
     def extract_sample(self, save_points=False, limit_sample=False):
 
-        self.create_sample_points(limit=limit_sample)
+        if self.array_exists and not self.overwrite:
+            print('The feature array has already been sampled to {}, use overwrite=True to resample '
+                  'this image stack'.format(self.image_directory))
+            return None
+
+        if not os.path.isfile(self.shapefile_path):
+            self.create_sample_points(limit=limit_sample)
+
+        elif self.overwrite:
+            self.create_sample_points(limit=limit_sample)
+
+        else:
+            pass
+
         if self.geography.sample_negative:
             self.create_negative_sample_points()
 
-        self.make_data_array()
-
         if save_points:
             self.save_sample_points()
+
+        self.make_data_array()
 
     def create_sample_points(self, limit=False):
         """ Create a clipped training set and inverse training set from polygon shapefiles.
@@ -136,6 +155,20 @@ class PixelTrainingArray(object):
         to the path row provided, gets the bounding box and profile (aka meta) from
         compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
         union to reduce the number of polygon objects.
+
+        The dict object this uses has a template in pixel_classification.training_keys.py.
+
+        Approach is to loop through the polygons, create a random grid of points over the extent of
+        the polygon, random shuffle order of points, loop over points, check it point is within polygon,
+        and if within, create a sample point.
+
+        If data is entered in self.geography.attributes as {'ltype': 'unclassified'}, the program will
+        perform the same random point grid generation as with classified land types, but only chose
+        points that do not fall within the polygon.
+
+        If a relatively simple geometry is available, use create_negative_sample_points(), though if
+        there ar > 10**4 polygons, it will probably hang on unary_union().
+
         :param limit:
         """
 
@@ -150,7 +183,12 @@ class PixelTrainingArray(object):
                 polygons = unary_union(polygons)
             positive_area = sum([x.area for x in polygons])
 
+            class_count = 0
+
             for poly in polygons:
+                if class_count > self.m_instances:
+                    break
+
                 if limit and _dict['instance_count'] > self.m_instances:
                     break
                 fractional_area = poly.area / positive_area
@@ -179,10 +217,13 @@ class PixelTrainingArray(object):
                     else:
                         break
 
+                    class_count += poly_pt_ct
+
         fraction_ltype = positive_area / shape(self.tile_bbox).area
         print('Total area in decimal degrees: {}\n'
               'Area under land type {}: {}\n'
-              'Fraction land type {}: {}'.format(shape(self.tile_bbox).area, _dict['ltype'], positive_area,
+              'Fraction land type {}: {}'.format(shape(self.tile_bbox).area,
+                                                 _dict['ltype'], positive_area,
                                                  _dict['ltype'], fraction_ltype))
 
     def create_negative_sample_points(self):
@@ -244,7 +285,7 @@ class PixelTrainingArray(object):
                         self.extracted_points = self.extracted_points.join(band_series,
                                                                            how='outer')
 
-            except ExcessiveCloudsError:
+            except Exception:
                 pass
 
         data_array, targets = self._purge_array()
@@ -488,14 +529,17 @@ class PixelTrainingArray(object):
 if __name__ == '__main__':
     # pass
     home = os.path.expanduser('~')
-    print(datetime.now())
+    begin = datetime.now()
+    print(begin)
     for p, r in path_rows():
         image_dir = os.path.join(home, os.path.dirname(__file__).replace('pixel_classification',
                                                                          os.path.join('landsat_data', str(p),
                                                                                       str(r), '2015')))
         geo = Montana()
-        m = 10
-        p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=True, geography=geo)
+        m = 1000
+        p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=False, geography=geo)
         p.extract_sample(save_points=True)
+        print(datetime.now() - begin)
+        begin = datetime.now()
 
 # ========================= EOF ====================================================================
