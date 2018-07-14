@@ -16,31 +16,25 @@
 
 import os
 
-home = os.path.expanduser('~')
-
-
-def return_object(key):
-    _dict = {'montana': Montana,
-             'montana_test': MontanaTest}
-    return _dict[key]()
-
 
 class TrainingAssignments(object):
     def __init__(self, root):
-
         self.attribute_list = ['forest', 'fallow', 'irrigated', 'other']
 
         self.root = root
+        self.shapes = None
 
-        self.vector = 'empty'
+        self.attributes = {0: {'ltype': 'irrigated', 'path': None},
 
-        self.attributes = {0: {'ltype': 'irrigated', 'path': os.path.join(self.root, self.vector)},
+                           1: {'ltype': 'dryland', 'path': None},
 
-                           1: {'ltype': 'dryland', 'path': os.path.join(self.root, self.vector)},
+                           2: {'ltype': 'forrest', 'path': None},
 
-                           2: {'ltype': 'forrest', 'path': os.path.join(self.root, self.vector)},
+                           3: {'ltype': 'other', 'path': None}}
 
-                           3: {'ltype': 'other', 'path': os.path.join(self.root, self.vector)}}
+    def add_paths(self):
+        for key, vector in enumerate(self.shapes):
+            self.attributes[key]['path'] = os.path.join(self.root, vector)
 
 
 class Idaho(TrainingAssignments):
@@ -48,11 +42,9 @@ class Idaho(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        shapes = ['ID_2011_Irrigated_WGS84_4030.shp', 'non_irrigated_ESPA_2011_100_200_ac.shp',
-                  'ID_Public_forest_4030.shp', 'ID_Public_other_4030.shp']
-
-        for key, vector in enumerate(shapes):
-            self.attributes[key]['path'].replace(self.vector, vector)
+        self.shapes = ['ID_2011_Irrigated_WGS84_4030.shp', 'non_irrigated_ESPA_2011_100_200_ac.shp',
+                       'ID_Public_forest_4030.shp', 'ID_Public_other_4030.shp']
+        self.add_paths()
 
         self.path = 40
         self.row = 30
@@ -65,11 +57,9 @@ class Montana(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        shapes = ['MT_Sun_River_2013_3927.shp', 'MT_FLU_2017_Fallow_3927.shp',
-                  'MT_FLU_2017_Forrest_3927.shp', 'MT_other_3927.shp']
-
-        for key, vector in enumerate(shapes):
-            self.attributes[key]['path'].replace(self.vector, vector)
+        self.shapes = ['MT_Sun_River_2013_3927.shp', 'MT_FLU_2017_Fallow_3927.shp',
+                       'MT_FLU_2017_Forrest_3927.shp', 'MT_other_3927.shp']
+        self.add_paths()
 
         self.path = 39
         self.row = 27
@@ -82,11 +72,9 @@ class Nevada(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        shapes = ['2015_IRR_ACRE_NV/2015_IRR_ACRE.shp', 'NV_fallow.shp',
-                  'NV_forest.shp', 'NV_other.shp']
-
-        for key, vector in enumerate(shapes):
-            self.attributes[key]['path'].replace(self.vector, vector)
+        self.shapes = ['2015_IRR_ACRE_NV/2015_IRR_ACRE.shp', 'NV_fallow.shp',
+                       'NV_forest.shp', 'NV_other.shp']
+        self.add_paths()
 
         self.path = 41
         self.row = 32
@@ -94,20 +82,33 @@ class Nevada(TrainingAssignments):
         self.sat = 8
 
 
-class Nevada(TrainingAssignments):
+class Oregon(TrainingAssignments):
 
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        shapes = ['2015_IRR_ACRE_NV/2015_IRR_ACRE.shp', 'NV_fallow.shp',
-                  'NV_forest.shp', 'NV_other.shp']
+        self.shapes = ['harney_irrigated_2016.shp', 'harney_fallow_2016.shp',
+                       'OR_forest.shp', 'OR_other.shp']
+        self.add_paths()
 
-        for key, vector in enumerate(shapes):
-            self.attributes[key]['path'].replace(self.vector, vector)
+        self.path = 43
+        self.row = 30
+        self.year = 2016
+        self.sat = 8
 
-        self.path = 41
-        self.row = 32
-        self.year = 2015
+
+class Washington(TrainingAssignments):
+
+    def __init__(self, root):
+        TrainingAssignments.__init__(self, root)
+
+        self.shapes = ['WA_2017_irrigated_4427.shp', 'WA_2017_unirrigated_ag_4427.shp',
+                       'WA_Forest_Practices_Applications_4427.shp', 'WA_other_4427.shp']
+        self.add_paths()
+
+        self.path = 44
+        self.row = 27
+        self.year = 2017
         self.sat = 8
 
 

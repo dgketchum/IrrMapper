@@ -15,22 +15,26 @@
 # ===============================================================================
 
 import os
+from pixel_classification.runspec import Idaho, Montana, Nevada, Oregon, Washington
 
 home = os.path.expanduser('~')
-root = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
+ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
-ID = os.path.join(root, 'ID')
-MT = os.path.join(root, 'MT')
-NV = os.path.join(root, 'NV')
-OR = os.path.join(root, 'OR')
-UT = os.path.join(root, 'UT')
-WA = os.path.join(root, 'WA')
+
+OBJECT_MAP = {'ID': Idaho,
+              'MT': Montana,
+              'NV': Nevada,
+              'OR': Oregon,
+              'WA': Washington}
 
 
 def build_compiled_feature_array():
-    pass
+    for key, obj in OBJECT_MAP.items():
+        path = os.path.join(ROOT, key)
+        geo = obj(path)
+
 
 
 if __name__ == '__main__':
-    pass
+    build_compiled_feature_array()
 # ========================= EOF ====================================================================
