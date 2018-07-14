@@ -23,7 +23,7 @@ from fiona import crs
 from pyproj import Proj, transform
 from shapely.geometry import Polygon, mapping
 
-from pixel_classification.training_keys import MontanaTest
+from pixel_classification.runspec import MontanaTest
 
 
 def make_test_dataset(coords_wsen, image_dir, new_test_dir, training):

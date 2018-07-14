@@ -25,12 +25,6 @@ from sat_image.warped_vrt import warp_vrt
 MAPPING_OBJECTS = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
 MAPPING_ABV = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
 
-pr_list = [(39, 27), (40, 27), (38, 26), (37, 26), (35, 27), (37, 28), (39, 28), (40, 28)]
-
-
-def path_rows():
-    return pr_list
-
 
 def prepare_image_stack(path, row, year, outpath, satellite=8):
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
@@ -87,11 +81,6 @@ def orgainize_directory(root, path, row, year):
 
 
 if __name__ == '__main__':
-    for p, r in path_rows():
-        yr = 2015
-        home = os.path.expanduser('~')
-        images = os.path.join(home, os.path.dirname(__file__).replace('pixel_classification',
-                                                                      os.path.join('landsat_data')))
-        prepare_image_stack(p, r, yr, images, satellite=8)
+    pass
 
 # ========================= EOF ====================================================================

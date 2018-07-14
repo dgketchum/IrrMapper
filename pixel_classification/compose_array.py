@@ -33,8 +33,6 @@ from sklearn.decomposition import PCA
 
 from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
-from pixel_classification.training_keys import Montana
-from pixel_classification.prepare_landsat import path_rows
 
 loc = os.path.dirname(__file__)
 WRS_2 = loc.replace('pixel_classification', os.path.join('spatial_data', 'wrs2_descending.shp'))
@@ -156,7 +154,7 @@ class PixelTrainingArray(object):
         compose_array.get_tile_geometry, clips the training data to the landsat tile, then performs a
         union to reduce the number of polygon objects.
 
-        The dict object this uses has a template in pixel_classification.training_keys.py.
+        The dict object this uses has a template in pixel_classification.runspec.py.
 
         Approach is to loop through the polygons, create a random grid of points over the extent of
         the polygon, random shuffle order of points, loop over points, check it point is within polygon,
@@ -198,21 +196,10 @@ class PixelTrainingArray(object):
                 for coord in zip(x_range, y_range):
                     if poly_pt_ct < required_points:
 
-                        if Point(coord[0], coord[1]).within(poly) and _dict['ltype'] == 'unclassified':
-                            pass
-
-                        elif not Point(coord[0], coord[1]).within(poly) and _dict['ltype'] == 'unclassified':
+                        if Point(coord[0], coord[1]).within(poly):
                             self._add_entry(coord, val=class_code)
                             poly_pt_ct += 1
                             _dict['instance_count'] += 1
-
-                        elif Point(coord[0], coord[1]).within(poly):
-                            self._add_entry(coord, val=class_code)
-                            poly_pt_ct += 1
-                            _dict['instance_count'] += 1
-
-                        else:
-                            pass
 
                     else:
                         break
@@ -527,19 +514,6 @@ class PixelTrainingArray(object):
 
 
 if __name__ == '__main__':
-    # pass
-    home = os.path.expanduser('~')
-    begin = datetime.now()
-    print(begin)
-    for p, r in path_rows():
-        image_dir = os.path.join(home, os.path.dirname(__file__).replace('pixel_classification',
-                                                                         os.path.join('landsat_data', str(p),
-                                                                                      str(r), '2015')))
-        geo = Montana()
-        m = 1000
-        p = PixelTrainingArray(images=image_dir, instances=m, overwrite_existing=False, geography=geo)
-        p.extract_sample(save_points=True)
-        print(datetime.now() - begin)
-        begin = datetime.now()
+    pass
 
 # ========================= EOF ====================================================================

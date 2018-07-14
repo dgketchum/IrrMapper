@@ -22,7 +22,7 @@ from fiona import open as fopen
 
 from pixel_classification.compose_array import PixelTrainingArray
 from tests.build_extract_test_data import make_test_dataset
-from pixel_classification.training_keys import return_object
+from pixel_classification.runspec import return_object
 
 
 class TestPointExtract(unittest.TestCase):
