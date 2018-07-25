@@ -138,9 +138,6 @@ class PixelTrainingArray(object):
         else:
             pass
 
-        if self.geography.sample_negative:
-            self.create_negative_sample_points()
-
         if save_points:
             self.save_sample_points()
 
@@ -178,7 +175,11 @@ class PixelTrainingArray(object):
             _dict['instance_count'] = 0
 
             if not limit:
-                polygons = unary_union(polygons)
+                try:
+                    polygons = unary_union(polygons)
+                except ValueError:
+                    break
+
             positive_area = sum([x.area for x in polygons])
 
             class_count = 0

@@ -15,7 +15,7 @@
 # ===============================================================================
 
 import os
-from pixel_classification.runspec import Idaho, Montana, Nevada, Oregon, Washington
+from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
 
@@ -23,10 +23,10 @@ home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
 
-OBJECT_MAP = {'ID': Idaho,
-              'MT': Montana,
+OBJECT_MAP = {'MT': Montana,
               'NV': Nevada,
               'OR': Oregon,
+              'UT': Utah,
               'WA': Washington}
 
 
@@ -34,11 +34,10 @@ def build_compiled_feature_array():
     for key, obj in OBJECT_MAP.items():
         path = os.path.join(ROOT, key)
         geo = obj(path)
-
-        prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
-
-        p = PixelTrainingArray(path, instances=1000, overwrite_existing=True, geography=geo)
-        p.extract_sample(save_points=True, limit_sample=False)
+        if geo.sat == 8:
+            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
+            p = PixelTrainingArray(path, instances=1000, overwrite_existing=True, geography=geo)
+            p.extract_sample(save_points=True, limit_sample=False)
 
 
 if __name__ == '__main__':

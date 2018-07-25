@@ -97,6 +97,21 @@ class Oregon(TrainingAssignments):
         self.sat = 8
 
 
+class Utah(TrainingAssignments):
+
+    def __init__(self, root):
+        TrainingAssignments.__init__(self, root)
+
+        self.shapes = ['UT_Irrigated_3732_2014.shp', 'UT_UnirrigatedAg_3732.shp',
+                       'UT_forest.shp', 'UT_other.shp']
+        self.add_paths()
+
+        self.path = 40
+        self.row = 30
+        self.year = 2011
+        self.sat = 5
+
+
 class Washington(TrainingAssignments):
 
     def __init__(self, root):
