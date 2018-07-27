@@ -144,7 +144,7 @@ class PixelTrainingArray(object):
         self.make_data_array()
 
     def create_sample_points(self, limit=False):
-        """ Create a clipped training set and inverse training set from polygon shapefiles.
+        """ Create a clipped training set from polygon shapefiles.
 
         This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
         to the path row provided, gets the bounding box and profile (aka meta) from
@@ -154,12 +154,8 @@ class PixelTrainingArray(object):
         The dict object this uses has a template in pixel_classification.runspec.py.
 
         Approach is to loop through the polygons, create a random grid of points over the extent of
-        the polygon, random shuffle order of points, loop over points, check it point is within polygon,
+        each polygon, random shuffle order of points, loop over points, check if point is within polygon,
         and if within, create a sample point.
-
-        If data is entered in self.geography.attributes as {'ltype': 'unclassified'}, the program will
-        perform the same random point grid generation as with classified land types, but only chose
-        points that do not fall within the polygon.
 
         If a relatively simple geometry is available, use create_negative_sample_points(), though if
         there ar > 10**4 polygons, it will probably hang on unary_union().
@@ -184,28 +180,35 @@ class PixelTrainingArray(object):
 
             class_count = 0
 
-            for poly in polygons:
+            for i, poly in enumerate(polygons):
+
                 if class_count > self.m_instances:
                     break
 
                 if limit and _dict['instance_count'] > self.m_instances:
                     break
+
                 fractional_area = poly.area / positive_area
                 required_points = max([1, fractional_area * self.m_instances])
                 x_range, y_range = self._random_points_array(poly.bounds)
                 poly_pt_ct = 0
+
+                if i % 100 == 0.:
+                    print('{} of {} polygons'.format(i, len(polygons), required_points))
+
                 for coord in zip(x_range, y_range):
-                    if poly_pt_ct < required_points:
+                    if Point(coord[0], coord[1]).within(poly):
+                        self._add_entry(coord, val=class_code)
+                        poly_pt_ct += 1
+                        _dict['instance_count'] += 1
 
-                        if Point(coord[0], coord[1]).within(poly):
-                            self._add_entry(coord, val=class_code)
-                            poly_pt_ct += 1
-                            _dict['instance_count'] += 1
-
-                    else:
+                    if len(polygons) > self.m_instances and poly_pt_ct == 1:
                         break
 
-                    class_count += poly_pt_ct
+                    if poly_pt_ct >= int(required_points):
+                        break
+
+                class_count += poly_pt_ct
 
         fraction_ltype = positive_area / shape(self.tile_bbox).area
         print('Total area in decimal degrees: {}\n'

@@ -106,10 +106,10 @@ class Utah(TrainingAssignments):
                        'UT_forest.shp', 'UT_other.shp']
         self.add_paths()
 
-        self.path = 40
-        self.row = 30
-        self.year = 2011
-        self.sat = 5
+        self.path = 37
+        self.row = 32
+        self.year = 2014
+        self.sat = 8
 
 
 class Washington(TrainingAssignments):

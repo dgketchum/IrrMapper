@@ -22,12 +22,13 @@ from pixel_classification.compose_array import PixelTrainingArray
 home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
-
-OBJECT_MAP = {'MT': Montana,
-              'NV': Nevada,
-              'OR': Oregon,
-              'UT': Utah,
-              'WA': Washington}
+OBJECT_MAP = {
+    'MT': Montana,
+    'NV': Nevada,
+    'OR': Oregon,
+    'UT': Utah,
+    'WA': Washington
+}
 
 
 def build_compiled_feature_array():
@@ -36,7 +37,7 @@ def build_compiled_feature_array():
         geo = obj(path)
         if geo.sat == 8:
             prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
-            p = PixelTrainingArray(path, instances=1000, overwrite_existing=False, geography=geo)
+            p = PixelTrainingArray(path, instances=1000, overwrite_existing=True, geography=geo)
             p.extract_sample(save_points=True, limit_sample=False)
 
 
