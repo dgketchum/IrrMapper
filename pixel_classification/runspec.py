@@ -72,7 +72,7 @@ class Nevada(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['2015_IRR_ACRE_NV/2015_IRR_ACRE.shp', 'NV_fallow.shp',
+        self.shapes = ['2015_IRR_ACRE_WGS84.shp', 'NV_fallow.shp',
                        'NV_forest.shp', 'NV_other.shp']
         self.add_paths()
 

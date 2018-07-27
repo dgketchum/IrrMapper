@@ -455,7 +455,7 @@ class PixelTrainingArray(object):
             if crs['init'] != 'epsg:4326':
                 raise UnexpectedCoordinateReferenceSystemError(
                     'Provided shapefile should be in unprojected (geographic)'
-                    'coordinate system, i.e., WGS84, EPSG 4326')
+                    'coordinate system, i.e., WGS84, EPSG 4326, {} is not'.format(vector))
             clipped = src.filter(mask=self.tile_bbox)
             polys = []
             bad_geo_count = 0
