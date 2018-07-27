@@ -200,6 +200,9 @@ class PixelTrainingArray(object):
                         poly_pt_ct += 1
                         _dict['instance_count'] += 1
 
+                    if _dict['instance_count'] > self.m_instances:
+                        break
+
                     if poly_pt_ct >= required_points:
                         break
 
