@@ -27,7 +27,7 @@ from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
 from rasterio import open as rasopen
-from shapely.geometry import shape, Polygon, Point, mapping
+from shapely.geometry import shape, Polygon, Point, mapping, MultiPolygon
 from shapely.ops import unary_union
 from sklearn.decomposition import PCA
 
@@ -130,10 +130,10 @@ class PixelTrainingArray(object):
             return None
 
         if not os.path.isfile(self.shapefile_path):
-            self.create_sample_points(limit=limit_sample)
+            self.create_sample_points()
 
         elif self.overwrite:
-            self.create_sample_points(limit=limit_sample)
+            self.create_sample_points()
 
         else:
             pass
@@ -143,7 +143,7 @@ class PixelTrainingArray(object):
 
         self.make_data_array()
 
-    def create_sample_points(self, limit=False):
+    def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.
 
         This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
@@ -160,7 +160,6 @@ class PixelTrainingArray(object):
         If a relatively simple geometry is available, use create_negative_sample_points(), though if
         there ar > 10**4 polygons, it will probably hang on unary_union().
 
-        :param limit:
         """
 
         _dict = None
@@ -170,11 +169,13 @@ class PixelTrainingArray(object):
             polygons = self._get_polygons(_dict['path'])
             _dict['instance_count'] = 0
 
-            if not limit:
-                try:
-                    polygons = unary_union(polygons)
-                except ValueError:
-                    break
+            if len(polygons) > self.m_instances:
+                areas = zip(polygons, [x.area for x in polygons])
+                srt = sorted(areas, key=lambda x: x[1], reverse=True)
+                polygons = [x for x, y in srt[:self.m_instances]]
+
+            polygons = unary_union(polygons)
+            print('{} unary polygons'.format(len(polygons)))
 
             positive_area = sum([x.area for x in polygons])
 
@@ -182,10 +183,7 @@ class PixelTrainingArray(object):
 
             for i, poly in enumerate(polygons):
 
-                if class_count > self.m_instances:
-                    break
-
-                if limit and _dict['instance_count'] > self.m_instances:
+                if class_count >= self.m_instances:
                     break
 
                 fractional_area = poly.area / positive_area
@@ -202,13 +200,11 @@ class PixelTrainingArray(object):
                         poly_pt_ct += 1
                         _dict['instance_count'] += 1
 
-                    if len(polygons) > self.m_instances and poly_pt_ct == 1:
-                        break
-
-                    if poly_pt_ct >= int(required_points):
+                    if poly_pt_ct >= required_points:
                         break
 
                 class_count += poly_pt_ct
+            print('{} sample points for {}'.format(class_count, _dict['ltype']))
 
         fraction_ltype = positive_area / shape(self.tile_bbox).area
         print('Total area in decimal degrees: {}\n'
