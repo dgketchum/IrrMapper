@@ -20,14 +20,13 @@ from copy import deepcopy
 from datetime import datetime
 from warnings import warn
 
-import pkg_resources
 from fiona import open as fopen
 from numpy import linspace, max, nan, unique, cumsum
 from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
 from rasterio import open as rasopen
-from shapely.geometry import shape, Polygon, Point, mapping, MultiPolygon
+from shapely.geometry import shape, Polygon, Point, mapping
 from shapely.ops import unary_union
 from sklearn.decomposition import PCA
 
@@ -289,7 +288,7 @@ class PixelTrainingArray(object):
                 'target_values': targets,
                 'model_map': self.model_map,
                 'water_mask': self.water_mask}
-
+        print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():
             setattr(self, key, val)
 
