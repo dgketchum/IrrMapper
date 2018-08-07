@@ -62,10 +62,11 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, images=None, instances=None, pickle_path=None,
-                 overwrite_existing=False, geography=None):
+    def __init__(self, images=None, instances=None, pickle_path=None, overwrite_existing=False, geography=None,
+                 max_cloud=1.0):
         """
 
+        :param max_cloud:
         :param training_vectors: in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
         :param images: Directory of images from one path,row Landsat tile, use warp_vrt to set them
         at the same geometry. (str)
@@ -106,6 +107,7 @@ class PixelTrainingArray(object):
             self.extract_paths = {}
             self.model_map = {}
 
+            self.max_cloud = max_cloud
             self.water_mask = None
             self.object_id = 0
 
@@ -174,7 +176,7 @@ class PixelTrainingArray(object):
                 polygons = [x for x, y in srt[:self.m_instances]]
 
             polygons = unary_union(polygons)
-            print('{} unary polygons'.format(len(polygons)))
+            # print('{} unary polygons'.format(len(polygons)))
 
             positive_area = sum([x.area for x in polygons])
 
@@ -190,8 +192,8 @@ class PixelTrainingArray(object):
                 x_range, y_range = self._random_points_array(poly.bounds)
                 poly_pt_ct = 0
 
-                if i % 100 == 0.:
-                    print('{} of {} polygons'.format(i, len(polygons), required_points))
+                # if i % 100 == 0.:
+                #     print('{} of {} polygons'.format(i, len(polygons), required_points))
 
                 for coord in zip(x_range, y_range):
                     if Point(coord[0], coord[1]).within(poly):
@@ -206,14 +208,14 @@ class PixelTrainingArray(object):
                         break
 
                 class_count += poly_pt_ct
-            print('{} sample points for {}'.format(class_count, _dict['ltype']))
+            # print('{} sample points for {}'.format(class_count, _dict['ltype']))
 
-        fraction_ltype = positive_area / shape(self.tile_bbox).area
-        print('Total area in decimal degrees: {}\n'
-              'Area under land type {}: {}\n'
-              'Fraction land type {}: {}'.format(shape(self.tile_bbox).area,
-                                                 _dict['ltype'], positive_area,
-                                                 _dict['ltype'], fraction_ltype))
+        # fraction_ltype = positive_area / shape(self.tile_bbox).area
+        # print('Total area in decimal degrees: {}\n'
+        #       'Area under land type {}: {}\n'
+        #       'Fraction land type {}: {}'.format(shape(self.tile_bbox).area,
+        #                                          _dict['ltype'], positive_area,
+        #                                          _dict['ltype'], fraction_ltype))
 
     def create_negative_sample_points(self):
         """
@@ -255,10 +257,11 @@ class PixelTrainingArray(object):
                     is_cloud_mask = path.endswith('cloud_fmask.tif')
                     if is_cloud_mask:
                         fraction_masked = mask_series.sum() / len(mask_series)
-                        excessive_clouds = fraction_masked > 0.07
+                        excessive_clouds = fraction_masked > self.max_cloud
                         if fraction_masked < min_cloud:
                             min_cloud = fraction_masked
                             self.water_mask = path.replace('cloud', 'water')
+
                         if excessive_clouds:
                             raise ExcessiveCloudsError(
                                 '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.))
@@ -467,8 +470,8 @@ class PixelTrainingArray(object):
                 except AttributeError:
                     bad_geo_count += 1
 
-        print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
-        print('Found {} valid geometries'.format(len(polys)))
+        # print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
+        # print('Found {} valid geometries'.format(len(polys)))
 
         return polys
 
