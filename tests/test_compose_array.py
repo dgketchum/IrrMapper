@@ -33,8 +33,7 @@ class TestPointExtract(unittest.TestCase):
 
     def test_sample_points(self):
         montana = return_object('montana_test')
-        p = PixelTrainingArray(images=self.directory, instances=10,
-                               geography=montana, overwrite_existing=True)
+        p = PixelTrainingArray(images=self.directory, instances=10, overwrite_existing=True, geography=montana)
         p.extract_sample(save_points=True, limit_sample=True)
         with fopen(p.shapefile_path, 'r') as src:
             points = [x for x in src]

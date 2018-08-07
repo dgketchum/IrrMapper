@@ -63,7 +63,7 @@ class PixelTrainingArray(object):
     """
 
     def __init__(self, images=None, instances=None, pickle_path=None, overwrite_existing=False, geography=None,
-                 max_cloud=1.0):
+                 max_cloud=1.0, from_dict=None):
         """
 
         :param max_cloud:
@@ -85,9 +85,13 @@ class PixelTrainingArray(object):
         if pickle_path and not overwrite_existing:
             self._from_pickle(pickle_path)
 
-        elif not overwrite_existing and os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
-            self.array_exists = True
-            self.overwrite = overwrite_existing
+        elif from_dict and not overwrite_existing:
+            self._from_dict(from_dict)
+
+        elif not overwrite_existing and images:
+            if os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
+                self.array_exists = True
+                self.overwrite = overwrite_existing
 
         else:
 
@@ -349,6 +353,14 @@ class PixelTrainingArray(object):
         self._check_targets(self.target_values)
         self.has_data = True
 
+    def _from_dict(self, data):
+
+        for key, val in data.items():
+            setattr(self, key, val)
+
+        self._check_targets(self.target_values)
+        self.has_data = True
+
     def _purge_array(self):
 
         data_array = deepcopy(self.extracted_points)
@@ -389,7 +401,7 @@ class PixelTrainingArray(object):
             warn('This dataset has fewer than two target classes,'
                  'classification is meaningless.')
         elif unique_targets > 2:
-            print('This dataset has {} unique target classes'.format(unique_targets))
+            # print('This dataset has {} unique target classes'.format(unique_targets))
             self.is_binary = False
         else:
             warn('This dataset has {} target classes'.format(unique_targets))

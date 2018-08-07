@@ -17,7 +17,7 @@
 import os
 import numpy as np
 import tensorflow as tf
-import rasterio.open as rasopen
+from rasterio import open as rasopen
 from rasterio.dtypes import float32
 from datetime import datetime
 
@@ -29,7 +29,6 @@ from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
 def classify_raster(data, out_location=None):
-
     features = data.features.tolist()
     stack = None
     first = True
@@ -86,6 +85,7 @@ def classify_raster(data, out_location=None):
         dst.write(new_array)
     return None
 
+
 def normalize_image_channel(data):
     data = data.reshape((data.shape[1], data.shape[2]))
     scaler = StandardScaler()
@@ -93,6 +93,7 @@ def normalize_image_channel(data):
     data = scaler.transform(data)
     data = data.reshape((1, data.shape[0], data.shape[1]))
     return data
+
 
 if __name__ == '__main__':
     pass

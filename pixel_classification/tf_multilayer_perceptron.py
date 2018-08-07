@@ -15,29 +15,23 @@
 # =============================================================================================
 
 import os
-from datetime import datetime
-import numpy as np
 from numpy import unique
-from numpy import zeros, float16, array
 from numpy.random import randint
-from numpy.ma import array as marray
 import tensorflow as tf
 from pandas import get_dummies
-from rasterio import open as rasopen
-from rasterio.dtypes import float32
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 
-def mlp(data, checkpoint=None):
+def mlp(data, model_output=None):
     """
-    :param checkpoint:
     :param data: Use the PixelTrainingArray class.
     :return:
     """
 
     x = normalize_feature_array(data.data)
-    y = get_dummies(data.target_values).values
+    labels = data.target_values
+    y = get_dummies(labels.reshape((labels.shape[0],))).values
     N = len(unique(data.target_values))
     n = data.data.shape[1]
 
@@ -67,6 +61,8 @@ def mlp(data, checkpoint=None):
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
+    saver = tf.train.Saver({'weights': weights, 'biases': biases})
+
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
@@ -88,61 +84,10 @@ def mlp(data, checkpoint=None):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
-    features = data.features.tolist()
-    stack = None
-    first = True
-    arr = None
-    for i, feat in enumerate(features):
-        with rasopen(data.model_map[feat], mode='r') as src:
-            arr = src.read()
-            meta = src.meta.copy()
-        if first:
-            empty = zeros((len(features), arr.shape[1], arr.shape[2]), float16)
-            stack = empty
-            stack[i, :, :] = normalize_image_channel(arr)
+    if model_output:
+        path = saver.save(sess, model_output)
 
-            first = False
-        else:
-            stack[i, :, :] = normalize_image_channel(arr)
-
-    final_shape = 1, stack.shape[1], stack.shape[2]
-    stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
-    stack[stack == 0.] = np.nan
-    m_stack = marray(stack, mask=np.isnan(stack))
-
-    new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
-
-    pixel = tf.placeholder("float", [None, n])
-    classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
-                                weights['output']), biases['output'])
-    time = datetime.now()
-
-    ct_nan = 0
-    ct_out = 0
-
-    for i in range(m_stack.shape[-1]):
-        if not np.ma.is_masked(m_stack[:, i]):
-            dat = m_stack[:, i]
-            dat = array(dat).reshape((1, dat.shape[0]))
-            loss = sess.run(classify, feed_dict={pixel: dat})
-            new_array[0, i] = np.argmax(loss, 1)
-            ct_out += 1
-        else:
-            new_array[0, i] = np.nan
-            ct_nan += 1
-
-        if i % 1000000 == 0:
-            print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
-                                                               (datetime.now() - time).seconds))
-
-    new_array = new_array.reshape(final_shape)
-    new_array = array(new_array, dtype=float32)
-
-    meta['count'] = 1
-    meta['dtype'] = float32
-    with rasopen(os.path.join(checkpoint, 'binary_raster.tif'), 'w', **meta) as dst:
-        dst.write(new_array)
-    return None
+    return path
 
 
 def multilayer_perceptron(x, weights, biases):
@@ -155,15 +100,6 @@ def normalize_feature_array(data):
     scaler = StandardScaler()
     scaler = scaler.fit(data)
     data = scaler.transform(data)
-    return data
-
-
-def normalize_image_channel(data):
-    data = data.reshape((data.shape[1], data.shape[2]))
-    scaler = StandardScaler()
-    scaler = scaler.fit(data)
-    data = scaler.transform(data)
-    data = data.reshape((1, data.shape[0], data.shape[1]))
     return data
 
 
