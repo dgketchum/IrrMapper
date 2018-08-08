@@ -419,7 +419,8 @@ class PixelTrainingArray(object):
             band = basename.replace('.tif', '')
             date_string = self.current_img.date_acquired_str
 
-        column_name = '{}_{}_{}'.format(self.current_img.satellite, date_string, band)
+        column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite, self.path,
+                                                     self.row, date_string, band)
 
         self.extract_paths[column_name] = raster
 
