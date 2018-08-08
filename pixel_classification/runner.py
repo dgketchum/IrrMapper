@@ -19,7 +19,7 @@ from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washingt
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import classify_raster
+from pixel_classification.classify import classify_stack
 
 from numpy import vstack
 
@@ -42,7 +42,7 @@ def build_training_feature_array():
         geo = obj(path)
         if geo.sat == 8:
             prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
-            p = PixelTrainingArray(path, instances=1000, overwrite_existing=True, geography=geo)
+            p = PixelTrainingArray(path, instances=1100, overwrite_existing=True, geography=geo)
             p.extract_sample(save_points=True, limit_sample=False)
 
 
@@ -61,8 +61,7 @@ def build_model(model_location):
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-    # TODO: new PixelTrainingArray object has no .features attribute
-    model_path = mlp(p, model_output=model_location)
+    mlp(p, model_output=model_location)
 
     for key, obj in OBJECT_MAP.items():
 
@@ -70,7 +69,15 @@ def build_model(model_location):
         if not os.path.isdir(dst):
             os.mkdir(dst)
 
-        classify_raster(model_path, model=model_path, out_location=dst)
+
+def classify_rasters(model, destination):
+
+    for key, obj in OBJECT_MAP.items():
+
+        path = os.path.join(ROOT, key)
+        geo = obj(path)
+        dst = None
+        classify_stack(path, model=model, out_location=dst)
 
 
 def concatenate_training_data(existing, new_data):
@@ -78,18 +85,28 @@ def concatenate_training_data(existing, new_data):
     add_array = new_data.data
     new_array = vstack((existing_array, add_array))
 
+    existing_features = existing['features']
+    add_features = new_data.features
+    new_features = vstack((existing_features.reshape((existing_features.shape[0], 1)),
+                           add_features.reshape((add_features.shape[0], 1))))
+
     existing_labels = existing['target_values']
     add_labels = new_data.target_values
     new_lables = vstack((existing_labels.reshape((existing_labels.shape[0], 1)),
                          add_labels.reshape((add_labels.shape[0], 1))))
 
-    concatenated = {'data': new_array, 'target_values': new_lables}
+    existing['model_map'].update(new_data.model_map)
+
+    concatenated = {'data': new_array, 'target_values': new_lables, 'features': new_features,
+                    'model_map': existing['model_map']}
+
     return concatenated
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    model_loc = os.path.dirname(__file__)
-    build_model(model_loc)
-    pass
+    model_loc = os.path.join(os.path.dirname(__file__), 'classifier')
+    # build_training_feature_array()
+    # build_model(model_loc)
+    classify_rasters(model_loc, )
 # ========================= EOF ====================================================================
