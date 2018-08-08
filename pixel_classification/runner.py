@@ -21,6 +21,8 @@ from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_stack
 
+from sat_image.image import LandsatImage
+
 from numpy import vstack
 
 home = os.path.expanduser('~')
@@ -70,14 +72,28 @@ def build_model(model_location):
             os.mkdir(dst)
 
 
-def classify_rasters(model, destination):
+def classify_rasters(model):
 
     for key, obj in OBJECT_MAP.items():
 
         path = os.path.join(ROOT, key)
         geo = obj(path)
-        dst = None
-        classify_stack(path, model=model, out_location=dst)
+        dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
+        meta = StackMetadata(dst)
+        classify_stack(meta, model=model, out_location=dst)
+
+
+class StackMetadata(object):
+
+    def __init__(self, directory):
+
+        self.dirs = [os.path.join(directory, x) for x in os.listdir(directory) if os.path.isdir(os.path.join(directory,
+                                                                                                             x))]
+        self.metadata = {}
+
+        for d in self.dirs:
+            l = LandsatImage(d)
+            self.metadata[d] = {'files': [os.path.join(d, x) for x in l.tif_list if 'BQA' not in x]}
 
 
 def concatenate_training_data(existing, new_data):
@@ -108,5 +124,5 @@ if __name__ == '__main__':
     model_loc = os.path.join(os.path.dirname(__file__), 'classifier')
     # build_training_feature_array()
     # build_model(model_loc)
-    classify_rasters(model_loc, )
+    classify_rasters(model_loc)
 # ========================= EOF ====================================================================
