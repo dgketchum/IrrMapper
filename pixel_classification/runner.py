@@ -61,10 +61,16 @@ def build_model(model_location):
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-
+    # TODO: new PixelTrainingArray object has no .features attribute
     model_path = mlp(p, model_output=model_location)
 
-    classify_raster()
+    for key, obj in OBJECT_MAP.items():
+
+        dst = os.path.join(ROOT, key, 'classified_rasters')
+        if not os.path.isdir(dst):
+            os.mkdir(dst)
+
+        classify_raster(model_path, model=model_path, out_location=dst)
 
 
 def concatenate_training_data(existing, new_data):
@@ -83,7 +89,7 @@ def concatenate_training_data(existing, new_data):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    model_loc = os.path.basename(__file__)
+    model_loc = os.path.dirname(__file__)
     build_model(model_loc)
     pass
 # ========================= EOF ====================================================================

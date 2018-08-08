@@ -61,31 +61,32 @@ def mlp(data, model_output=None):
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
-    saver = tf.train.Saver({'weights': weights, 'biases': biases})
+    saver = tf.train.Saver()
 
-    sess = tf.InteractiveSession()
-    tf.global_variables_initializer().run()
+    with tf.Session() as sess:
+        tf.global_variables_initializer().run()
 
-    for step in range(epochs):
+        for step in range(epochs):
 
-        offset = randint(0, y.shape[0] - batch_size - 1)
+            offset = randint(0, y.shape[0] - batch_size - 1)
 
-        batch_data = x[offset:(offset + batch_size), :]
-        batch_labels = y[offset:(offset + batch_size), :]
+            batch_data = x[offset:(offset + batch_size), :]
+            batch_labels = y[offset:(offset + batch_size), :]
 
-        feed_dict = {X: batch_data, Y: batch_labels}
+            feed_dict = {X: batch_data, Y: batch_labels}
 
-        _, loss = sess.run([optimizer, loss_op],
-                           feed_dict=feed_dict)
+            _, loss = sess.run([optimizer, loss_op],
+                               feed_dict=feed_dict)
 
-        if step % 1000 == 0:
-            pred = tf.nn.softmax(y_pred)
-            correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-            print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
+            if step % 1000 == 0:
+                pred = tf.nn.softmax(y_pred)
+                correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(Y, 1))
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+                print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
-    if model_output:
-        path = saver.save(sess, model_output)
+        if model_output:
+            path = saver.save(sess, model_output)
+            print('Model saved to {}'.format(path))
 
     return path
 

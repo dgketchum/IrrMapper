@@ -21,14 +21,15 @@ from rasterio import open as rasopen
 from rasterio.dtypes import float32
 from datetime import datetime
 
-from numpy import zeros, array
+from numpy import zeros, array, float16
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def classify_raster(data, out_location=None):
+def classify_raster(data, model=None, out_location=None):
+
     features = data.features.tolist()
     stack = None
     first = True
@@ -41,7 +42,6 @@ def classify_raster(data, out_location=None):
             empty = zeros((len(features), arr.shape[1], arr.shape[2]), float16)
             stack = empty
             stack[i, :, :] = normalize_image_channel(arr)
-
             first = False
         else:
             stack[i, :, :] = normalize_image_channel(arr)
@@ -53,28 +53,30 @@ def classify_raster(data, out_location=None):
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-    pixel = tf.placeholder("float", [None, n])
-    classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
-                                weights['output']), biases['output'])
-    time = datetime.now()
+    with tf.Session() as sess:
 
-    ct_nan = 0
-    ct_out = 0
+        pixel = tf.placeholder("float", [None, n])
+        classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
+                                    weights['output']), biases['output'])
+        time = datetime.now()
 
-    for i in range(m_stack.shape[-1]):
-        if not np.ma.is_masked(m_stack[:, i]):
-            dat = m_stack[:, i]
-            dat = array(dat).reshape((1, dat.shape[0]))
-            loss = sess.run(classify, feed_dict={pixel: dat})
-            new_array[0, i] = np.argmax(loss, 1)
-            ct_out += 1
-        else:
-            new_array[0, i] = np.nan
-            ct_nan += 1
+        ct_nan = 0
+        ct_out = 0
 
-        if i % 1000000 == 0:
-            print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
-                                                               (datetime.now() - time).seconds))
+        for i in range(m_stack.shape[-1]):
+            if not np.ma.is_masked(m_stack[:, i]):
+                dat = m_stack[:, i]
+                dat = array(dat).reshape((1, dat.shape[0]))
+                loss = sess.run(classify, feed_dict={pixel: dat})
+                new_array[0, i] = np.argmax(loss, 1)
+                ct_out += 1
+            else:
+                new_array[0, i] = np.nan
+                ct_nan += 1
+
+            if i % 1000000 == 0:
+                print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
+                                                                   (datetime.now() - time).seconds))
 
     new_array = new_array.reshape(final_shape)
     new_array = array(new_array, dtype=float32)
