@@ -43,7 +43,7 @@ def build_training_feature_array():
         path = os.path.join(ROOT, key)
         geo = obj(path)
         if geo.sat == 8:
-            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
+            # prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
             p = PixelTrainingArray(path, instances=1100, overwrite_existing=True, geography=geo)
             p.extract_sample(save_points=True, limit_sample=False)
 
@@ -73,9 +73,7 @@ def build_model(model_location):
 
 
 def classify_rasters(model):
-
     for key, obj in OBJECT_MAP.items():
-
         path = os.path.join(ROOT, key)
         geo = obj(path)
         dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
@@ -86,14 +84,18 @@ def classify_rasters(model):
 class StackMetadata(object):
 
     def __init__(self, directory):
-
         self.dirs = [os.path.join(directory, x) for x in os.listdir(directory) if os.path.isdir(os.path.join(directory,
                                                                                                              x))]
         self.metadata = {}
+        file_list = []
 
         for d in self.dirs:
             l = LandsatImage(d)
-            self.metadata[d] = {'files': [os.path.join(d, x) for x in l.tif_list if 'BQA' not in x]}
+            self.metadata[d] = [os.path.join(d, x) for x in l.tif_list if 'BQA' not in x]
+            file_list.append(self.metadata[d])
+
+        self.file_list = [item for sublist in file_list for item in sublist]
+        self.stack_shape = (len(self.file_list), l.rasterio_geometry['height'], l.rasterio_geometry['width'])
 
 
 def concatenate_training_data(existing, new_data):

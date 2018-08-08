@@ -61,10 +61,12 @@ def mlp(data, model_output=None):
 
     optimizer = tf.train.AdamOptimizer(learning_rate=eta).minimize(loss_op)
 
+    init = tf.global_variables_initializer()
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        tf.global_variables_initializer().run()
+
+        sess.run(init)
 
         for step in range(epochs):
 

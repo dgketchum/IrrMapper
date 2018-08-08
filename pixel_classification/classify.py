@@ -28,18 +28,17 @@ from sklearn.preprocessing import StandardScaler
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def classify_raster(data, model=None, out_location=None):
-
-    features = data.features.tolist()
+def classify_stack(stack_meta, model, out_location=None):
     stack = None
-    first = True
     arr = None
-    for i, feat in enumerate(features):
-        with rasopen(data.model_map[feat], mode='r') as src:
+    first = True
+
+    for i, feat in enumerate(stack_meta.file_list):
+        with rasopen(feat, mode='r') as src:
             arr = src.read()
             meta = src.meta.copy()
         if first:
-            empty = zeros((len(features), arr.shape[1], arr.shape[2]), float16)
+            empty = zeros((len(stack_meta.file_list), arr.shape[1], arr.shape[2]), float16)
             stack = empty
             stack[i, :, :] = normalize_image_channel(arr)
             first = False
@@ -50,14 +49,22 @@ def classify_raster(data, model=None, out_location=None):
     stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
     stack[stack == 0.] = np.nan
     m_stack = marray(stack, mask=np.isnan(stack))
+    n = len(m_stack[0])
+    stack = None
+
+    # classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
+    #                             weights['output']), biases['output'])
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
     with tf.Session() as sess:
 
+        saver = tf.train.import_meta_graph('{}.meta'.format(model))
+        saver.restore(sess, model)
+
         pixel = tf.placeholder("float", [None, n])
-        classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
-                                    weights['output']), biases['output'])
+        # TODO: find out how to restore the variables and initialize the classifier
+
         time = datetime.now()
 
         ct_nan = 0
@@ -85,6 +92,7 @@ def classify_raster(data, model=None, out_location=None):
     meta['dtype'] = float32
     with rasopen(os.path.join(out_location, 'binary_raster.tif'), 'w', **meta) as dst:
         dst.write(new_array)
+
     return None
 
 
