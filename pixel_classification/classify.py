@@ -25,7 +25,7 @@ from numpy import zeros, array, float16
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 
-from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
+from tf_multilayer_perceptron import multilayer_perceptron
 
 
 def classify_stack(stack_meta, model, out_location=None):

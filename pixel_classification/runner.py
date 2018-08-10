@@ -16,12 +16,11 @@
 
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__)))
-from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
-from pixel_classification.prepare_landsat import prepare_image_stack
-from pixel_classification.compose_array import PixelTrainingArray
-from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import classify_stack
+from runspec import Montana, Nevada, Oregon, Utah, Washington
+from prepare_landsat import prepare_image_stack
+from compose_array import PixelTrainingArray
+from tf_multilayer_perceptron import mlp
+from classify import classify_stack
 
 from sat_image.image import LandsatImage
 
