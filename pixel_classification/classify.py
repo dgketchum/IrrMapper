@@ -49,21 +49,24 @@ def classify_stack(stack_meta, model, out_location=None):
     stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
     stack[stack == 0.] = np.nan
     m_stack = marray(stack, mask=np.isnan(stack))
-    n = len(m_stack[0])
-    stack = None
-
-    # classify = tf.add(tf.matmul(multilayer_perceptron(pixel, weights['hidden'], biases['hidden']),
-    #                             weights['output']), biases['output'])
+    n = m_stack.shape[0]
+    del stack
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-    with tf.Session() as sess:
+    g = tf.get_default_graph()
 
+    with tf.Session() as sess:
         saver = tf.train.import_meta_graph('{}.meta'.format(model))
-        saver.restore(sess, model)
+        saver.restore(sess, tf.train.latest_checkpoint('./'))
 
         pixel = tf.placeholder("float", [None, n])
-        # TODO: find out how to restore the variables and initialize the classifier
+
+        wh = sess.graph.get_tensor_by_name('Wh:0')
+        wo = sess.graph.get_tensor_by_name('Wo:0')
+        bh = sess.graph.get_tensor_by_name('Bh:0')
+        bo = sess.graph.get_tensor_by_name('Bo:0')
+        classify = tf.add(tf.matmul(multilayer_perceptron(pixel, wh, bh), wo), bo)
 
         time = datetime.now()
 
