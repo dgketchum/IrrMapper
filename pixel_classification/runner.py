@@ -124,7 +124,7 @@ def concatenate_training_data(existing, new_data):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     model_loc = os.path.join(os.path.dirname(__file__), 'classifier')
-    # build_training_feature_array()
-    # build_model(model_loc)
+    build_training_feature_array()
+    build_model(model_loc)
     classify_rasters(model_loc)
 # ========================= EOF ====================================================================
