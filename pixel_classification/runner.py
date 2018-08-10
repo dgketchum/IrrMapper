@@ -44,7 +44,7 @@ def build_training_feature_array():
         path = os.path.join(ROOT, key)
         geo = obj(path)
         if geo.sat == 8:
-            # prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
+            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
             p = PixelTrainingArray(path, instances=1100, overwrite_existing=True, geography=geo)
             p.extract_sample(save_points=True, limit_sample=False)
 
