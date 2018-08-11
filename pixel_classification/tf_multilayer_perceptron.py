@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 
-def mlp(data, model_output=None):
+def mlp(data):
     """
     :param data: Use the PixelTrainingArray class.
     :return:
@@ -86,9 +86,8 @@ def mlp(data, model_output=None):
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
-        if model_output:
-            path = saver.save(sess, model_output)
-            print('Model saved to {}'.format(path))
+        path = saver.save(sess, '/tmp/model.ckpt')
+        print('Model saved to {}'.format(path))
 
     return path
 

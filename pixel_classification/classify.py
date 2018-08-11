@@ -59,8 +59,7 @@ def classify_stack(stack_meta, model, out_location=None):
 
     with tf.Session() as sess:
         saver = tf.train.import_meta_graph('{}.meta'.format(model))
-        saver.restore(sess, tf.train.latest_checkpoint('./'))
-
+        saver.restore(sess, model)
         pixel = tf.placeholder("float", [None, n])
 
         wh = sess.graph.get_tensor_by_name('Wh:0')

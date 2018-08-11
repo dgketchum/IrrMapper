@@ -50,7 +50,7 @@ def build_training_feature_array():
             p.extract_sample(save_points=True, limit_sample=False)
 
 
-def build_model(model_location):
+def build_model():
     first = True
 
     # concatenate data from all pickled PixelTrainingArray objects
@@ -65,7 +65,7 @@ def build_model(model_location):
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-    path = mlp(p, model_output=model_location)
+    path = mlp(p)
 
     for key, obj in OBJECT_MAP.items():
 
@@ -139,9 +139,8 @@ def check_dimensions():
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    model_loc = os.path.join(os.path.dirname(__file__), 'classifier')
     # build_training_feature_array()
-    model_path = build_model(model_loc)
+    model_path = build_model()
     classify_rasters(model_path)
     # check_dimensions()
 
