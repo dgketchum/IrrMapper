@@ -16,6 +16,7 @@
 
 import os
 import sys
+from rasterio import open as rasopen
 from runspec import Montana, Nevada, Oregon, Utah, Washington
 from prepare_landsat import prepare_image_stack
 from compose_array import PixelTrainingArray
@@ -64,13 +65,14 @@ def build_model(model_location):
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-    mlp(p, model_output=model_location)
+    path = mlp(p, model_output=model_location)
 
     for key, obj in OBJECT_MAP.items():
 
         dst = os.path.join(ROOT, key, 'classified_rasters')
         if not os.path.isdir(dst):
             os.mkdir(dst)
+    return path
 
 
 def classify_rasters(model):
@@ -122,10 +124,25 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
+def check_dimensions():
+    for key, obj in OBJECT_MAP.items():
+        path = os.path.join(ROOT, key)
+        geo = obj(path)
+        dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
+        stack_meta = StackMetadata(dst)
+        print(dst)
+        for i, feat in enumerate(stack_meta.file_list):
+            with rasopen(feat, mode='r') as src:
+                meta = src.meta.copy()
+            print(meta['height'], meta['width'])
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     model_loc = os.path.join(os.path.dirname(__file__), 'classifier')
-    build_training_feature_array()
-    build_model(model_loc)
-    classify_rasters(model_loc)
+    # build_training_feature_array()
+    model_path = build_model(model_loc)
+    classify_rasters(model_path)
+    # check_dimensions()
+
 # ========================= EOF ====================================================================

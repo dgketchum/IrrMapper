@@ -38,6 +38,7 @@ def classify_stack(stack_meta, model, out_location=None):
             arr = src.read()
             meta = src.meta.copy()
         if first:
+            print(os.path.dirname(feat))
             empty = zeros((len(stack_meta.file_list), arr.shape[1], arr.shape[2]), float16)
             stack = empty
             stack[i, :, :] = normalize_image_channel(arr)

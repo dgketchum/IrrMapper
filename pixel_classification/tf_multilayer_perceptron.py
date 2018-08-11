@@ -90,7 +90,7 @@ def mlp(data, model_output=None):
             path = saver.save(sess, model_output)
             print('Model saved to {}'.format(path))
 
-    return None
+    return path
 
 
 def multilayer_perceptron(x, weights, biases):
