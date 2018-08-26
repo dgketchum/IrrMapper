@@ -16,6 +16,8 @@
 
 import os
 import sys
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from rasterio import open as rasopen
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
