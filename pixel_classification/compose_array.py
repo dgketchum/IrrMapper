@@ -34,7 +34,8 @@ from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
 loc = os.path.dirname(__file__)
-WRS_2 = loc.replace('pixel_classification', os.path.join('spatial_data', 'wrs2_descending.shp'))
+WRS_2 = loc.replace('pixel_classification',
+                    os.path.join('spatial_data', 'wrs2_descending.shp'))
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  
@@ -62,13 +63,15 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, images=None, instances=None, pickle_path=None, overwrite_existing=False, geography=None,
-                 max_cloud=1.0, from_dict=None, ancillary_rasters=None):
+    def __init__(self, root, geography, instances=None, pickle_path=None,
+                 overwrite_array=False, overwrite_points=False, max_cloud=1.0, from_dict=None,
+                 ancillary_rasters=None):
         """
 
+        :param overwrite_points:
         :param max_cloud:
         :param training_vectors: in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
-        :param images: Directory of images from one path,row Landsat tile, use warp_vrt to set them
+        :param root: Directory of images from one path,row Landsat tile, use warp_vrt to set them
         at the same geometry. (str)
         :param instances: The number of sample points to extract (int). A small sample size will result
         in an excessive number of 'positive' sample points, as each valid positive sample geometry will
@@ -77,30 +80,34 @@ class PixelTrainingArray(object):
         feature balance is hard-coded in this class.
         :param pickle_path: If the data exists, specify this path to instantiate a data-filled instance
         without repeating the time-consuming sampling process. (bool)
-        :param overwrite_existing:
+        :param overwrite_array:
         """
+        g = geography
+        self.root = root
+        self.path_row_dir = os.path.join(self.root, str(g.path), str(g.row))
+        self.year_dir = os.path.join(self.path_row_dir, str(g.year))
 
-        self.image_directory = images
-
-        if pickle_path and not overwrite_existing:
+        if pickle_path and not overwrite_array:
             self._from_pickle(pickle_path)
 
-        elif from_dict and not overwrite_existing:
+        elif from_dict and not overwrite_array:
             self._from_dict(from_dict)
 
-        elif not overwrite_existing and images:
-            if os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
+        elif not overwrite_array and root:
+            if os.path.isfile(os.path.join(self.year, 'data.pkl')):
                 self.array_exists = True
-                self.overwrite = overwrite_existing
+                self.overwrite_array = overwrite_array
+                self.overwrite_points = overwrite_points
 
         else:
 
-            self.image_directory = images
+            self.image_directory = root
             self.array_exists = False
             self.is_sampled = False
             self.has_data = False
             self.is_binary = None
-            self.overwrite = overwrite_existing
+            self.overwrite_array = overwrite_array
+            self.overwrite_points = overwrite_points
 
             self.features = None
             self.data = None
@@ -129,26 +136,36 @@ class PixelTrainingArray(object):
             self.geography = geography
             self.coord_system = self.current_img.rasterio_geometry['crs']
 
-    def extract_sample(self, save_points=False, limit_sample=False):
+    def extract_sample(self, save_points=False):
 
-        if self.array_exists and not self.overwrite:
-            print('The feature array has already been sampled to {}, use overwrite=True to resample '
-                  'this image stack'.format(self.image_directory))
+        if self.array_exists and not self.overwrite_array and not self.overwrite_points:
+            print(
+                'The feature array has already been sampled to {}, '
+                'use overwrite=True to resample '
+                'this image stack'.format(self.image_directory))
             return None
 
         if not os.path.isfile(self.shapefile_path):
             self.create_sample_points()
 
-        elif self.overwrite:
+        elif self.overwrite_points:
             self.create_sample_points()
 
         else:
-            pass
+            self.populate_array_from_points()
 
-        if save_points:
+        if save_points and self.overwrite_points:
             self.save_sample_points()
 
         self.make_data_array()
+
+    def populate_array_from_points(self):
+        # TODO: replace with geopandas.shp_to_dataframe
+        with fopen(self.shapefile_path, 'r') as src:
+            for feat in src:
+                coords = feat['geometry']['coordinates']
+                val = feat['properties']['POINT_TYPE']
+                self._add_entry(coords, val=val)
 
     def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.
@@ -169,8 +186,6 @@ class PixelTrainingArray(object):
 
         """
 
-        _dict = None
-        positive_area = 0
         for class_code, _dict in self.geography.attributes.items():
             print(_dict['ltype'])
             polygons = self._get_polygons(_dict['path'])
@@ -182,7 +197,6 @@ class PixelTrainingArray(object):
                 polygons = [x for x, y in srt[:self.m_instances]]
 
             polygons = unary_union(polygons)
-            # print('{} unary polygons'.format(len(polygons)))
 
             positive_area = sum([x.area for x in polygons])
 
@@ -198,9 +212,6 @@ class PixelTrainingArray(object):
                 x_range, y_range = self._random_points_array(poly.bounds)
                 poly_pt_ct = 0
 
-                # if i % 100 == 0.:
-                #     print('{} of {} polygons'.format(i, len(polygons), required_points))
-
                 for coord in zip(x_range, y_range):
                     if Point(coord[0], coord[1]).within(poly):
                         self._add_entry(coord, val=class_code)
@@ -214,14 +225,6 @@ class PixelTrainingArray(object):
                         break
 
                 class_count += poly_pt_ct
-            # print('{} sample points for {}'.format(class_count, _dict['ltype']))
-
-        # fraction_ltype = positive_area / shape(self.tile_bbox).area
-        # print('Total area in decimal degrees: {}\n'
-        #       'Area under land type {}: {}\n'
-        #       'Fraction land type {}: {}'.format(shape(self.tile_bbox).area,
-        #                                          _dict['ltype'], positive_area,
-        #                                          _dict['ltype'], fraction_ltype))
 
     def create_negative_sample_points(self):
         """
@@ -253,11 +256,6 @@ class PixelTrainingArray(object):
 
     def make_data_array(self):
 
-        if self.ancillary_rasters:
-            for ras in self.ancillary_rasters:
-                band_series = self._point_raster_extract(ras, image=False)
-                self.extracted_points = self.extracted_points.join(band_series,
-                                                                   how='outer')
         min_cloud = 1.
         for sat_image in self.images:
             self.current_img = sat_image
@@ -275,7 +273,8 @@ class PixelTrainingArray(object):
 
                         if excessive_clouds:
                             raise ExcessiveCloudsError(
-                                '{} has {:.2f}% clouds, skipping'.format(scn, fraction_masked * 100.))
+                                '{} has {:.2f}% clouds, skipping'.format(scn,
+                                                                         fraction_masked * 100.))
                         else:
                             print('Extracting {}'.format(scn))
 
@@ -290,6 +289,12 @@ class PixelTrainingArray(object):
 
             except Exception:
                 pass
+
+        if self.ancillary_rasters:
+            for ras in self.ancillary_rasters:
+                band_series = self._point_raster_extract(ras, image=False)
+                self.extracted_points = self.extracted_points.join(band_series,
+                                                                   how='outer')
 
         data_array, targets = self._purge_array()
 
@@ -314,8 +319,9 @@ class PixelTrainingArray(object):
 
     def save_sample_points(self):
 
-        points_schema = {'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-                         'geometry': 'Point'}
+        points_schema = {
+            'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+            'geometry': 'Point'}
         meta = self.tile_geometry.copy()
         meta['schema'] = points_schema
 
@@ -347,9 +353,10 @@ class PixelTrainingArray(object):
             pca.fit(self.data)
             self.data = pca.transform(self.data)
             print('Cumulative sum principal components: {}\n '
-                  '{} features \n {}'"%"' explained variance'.format(cumsum(pca.explained_variance_ratio_),
-                                                                     pca.n_components_,
-                                                                     pca.n_components * 100))
+                  '{} features \n {}'"%"' explained variance'.format(
+                cumsum(pca.explained_variance_ratio_),
+                pca.n_components_,
+                pca.n_components * 100))
         return pca
 
     def _from_pickle(self, path):
@@ -427,7 +434,8 @@ class PixelTrainingArray(object):
                 band = basename.replace('.tif', '')
                 date_string = self.current_img.date_acquired_str
 
-            column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite, self.path,
+            column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite,
+                                                         self.path,
                                                          self.row, date_string, band)
 
         else:
@@ -467,7 +475,8 @@ class PixelTrainingArray(object):
         self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
                                                               'X': coord[0],
                                                               'Y': coord[1],
-                                                              'POINT_TYPE': val}, ignore_index=True)
+                                                              'POINT_TYPE': val},
+                                                             ignore_index=True)
         self.object_id += 1
 
     def _geo_point_to_projected_coords(self, x, y):
@@ -481,11 +490,13 @@ class PixelTrainingArray(object):
         with fopen(vector, 'r') as src:
             crs = src.crs
             if not crs:
-                raise NoCoordinateReferenceError('Provided shapefile has no reference data.')
+                raise NoCoordinateReferenceError(
+                    'Provided shapefile has no reference data.')
             if crs['init'] != 'epsg:4326':
                 raise UnexpectedCoordinateReferenceSystemError(
                     'Provided shapefile should be in unprojected (geographic)'
-                    'coordinate system, i.e., WGS84, EPSG 4326, {} is not'.format(vector))
+                    'coordinate system, i.e., WGS84, EPSG 4326, {} is not'.format(
+                        vector))
             clipped = src.filter(mask=self.tile_bbox)
             polys = []
             bad_geo_count = 0
@@ -504,29 +515,30 @@ class PixelTrainingArray(object):
     def _instantiate_images(self):
         _dir = self.image_directory
         landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-        dirs = [x[0] for x in os.walk(_dir) if os.path.basename(x[0])[:3] in landsat_map.keys()]
+        dirs = [x[0] for x in os.walk(_dir) if
+                os.path.basename(x[0])[:3] in landsat_map.keys()]
         objs = [LandsatImage(x).satellite for x in dirs]
         image_objs = [landsat_map[x](y) for x, y in zip(objs, dirs)]
         return image_objs
 
     @property
     def data_path(self):
-        if os.path.isfile(os.path.join(self.image_directory, 'data.pkl')):
-            if not self.overwrite:
+        if os.path.isfile(os.path.join(self.year_dir, 'data.pkl')):
+            if not self.overwrite_array:
                 return None
             else:
-                os.remove(os.path.join(self.image_directory, 'data.pkl'))
-                return os.path.join(self.image_directory, 'data.pkl')
+                os.remove(os.path.join(self.year_dir, 'data.pkl'))
+                return os.path.join(self.year_dir, 'data.pkl')
         else:
-            return os.path.join(self.image_directory, 'data.pkl')
+            return os.path.join(self.year_dir, 'data.pkl')
 
     @property
     def shapefile_path(self):
-        return os.path.join(self.image_directory, 'sample_points.shp')
+        return os.path.join(self.path_row_dir, 'sample_points.shp')
 
     @property
     def model_path(self):
-        return os.path.join(self.image_directory, 'model.pkl')
+        return os.path.join(self.year_dir, 'model.pkl')
 
     @property
     def tile_geometry(self):
