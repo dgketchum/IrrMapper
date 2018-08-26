@@ -22,6 +22,7 @@ import numpy as np
 import tensorflow as tf
 from rasterio import open as rasopen
 from rasterio.dtypes import float32
+from rasterio.errors import RasterioIOError
 from datetime import datetime
 
 from numpy import zeros, array, float16
@@ -38,9 +39,15 @@ def classify_stack(data, model, out_location=None, out_name='classified_raster.t
 
     for i, feat in enumerate(data.features):
         feature_raster = data.model_map[feat]
-        with rasopen(feature_raster, mode='r') as src:
-            arr = src.read()
-            meta = src.meta.copy()
+        try:
+            with rasopen(feature_raster, mode='r') as src:
+                arr = src.read()
+                meta = src.meta.copy()
+        except RasterioIOError:
+            feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
+            with rasopen(feature_raster, mode='r') as src:
+                arr = src.read()
+                meta = src.meta.copy()
         if first:
             print(os.path.dirname(feature_raster))
             empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)

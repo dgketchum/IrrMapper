@@ -126,7 +126,7 @@ def concatenate_training_data(existing, new_data):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    build_training_feature_array()
+    # build_training_feature_array()
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
     model = build_model(data_path)
