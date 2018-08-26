@@ -17,11 +17,11 @@
 import os
 import sys
 from rasterio import open as rasopen
-from runspec import Montana, Nevada, Oregon, Utah, Washington
-from prepare_landsat import prepare_image_stack
-from compose_array import PixelTrainingArray
-from tf_multilayer_perceptron import mlp
-from classify import classify_stack
+from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
+from pixel_classification.prepare_landsat import prepare_image_stack
+from pixel_classification.compose_array import PixelTrainingArray
+from pixel_classification.tf_multilayer_perceptron import mlp
+from pixel_classification.classify import classify_stack
 
 from sat_image.image import LandsatImage
 
@@ -46,10 +46,12 @@ def build_training_feature_array():
         geo = obj(path)
         if geo.sat == 8:
             prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
-            dem = os.path.join(path, str(geo.path), str(geo.row), str(geo.year), 'dem.tif')
-            p = PixelTrainingArray(path, instances=5000, overwrite_existing=True, geography=geo,
-                                   ancillary_rasters=[dem])
-            p.extract_sample(save_points=True, limit_sample=False)
+            dem = os.path.join(path, str(geo.path), str(geo.row), 'dem.tif')
+            slope = os.path.join(path, str(geo.path), str(geo.row), 'slope.tif')
+            p = PixelTrainingArray(root=path, geography=geo, instances=5000, overwrite_array=True,
+                                   overwrite_points=False, ancillary_rasters=[dem,
+                                                                              slope])
+            p.extract_sample()
 
 
 def build_model():
@@ -57,7 +59,9 @@ def build_model():
 
     # concatenate data from all pickled PixelTrainingArray objects
     for key, obj in OBJECT_MAP.items():
-        pkl_data = PixelTrainingArray(pickle_path=os.path.join(ROOT, key, 'data.pkl'))
+        path = os.path.join(ROOT, key)
+        geo = obj(path)
+        pkl_data = PixelTrainingArray(root=path, geography=geo, from_pkl=True)
         if first:
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
                              'features': pkl_data.features, 'model_map': pkl_data.model_map,
@@ -74,23 +78,25 @@ def build_model():
         dst = os.path.join(ROOT, key, 'classified_rasters')
         if not os.path.isdir(dst):
             os.mkdir(dst)
-    return path
+
+    return path, training_data
 
 
-def classify_rasters(model):
+def classify_rasters(model, data):
     for key, obj in OBJECT_MAP.items():
         path = os.path.join(ROOT, key)
         geo = obj(path)
         dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
-        meta = StackMetadata(dst)
+        meta = StackMetadata(dst, data)
         classify_stack(meta, model=model, out_location=dst)
 
 
 class StackMetadata(object):
 
-    def __init__(self, directory):
-        self.dirs = [os.path.join(directory, x) for x in os.listdir(directory) if os.path.isdir(os.path.join(directory,
-                                                                                                             x))]
+    def __init__(self, directory, data):
+        # TODO: add a test for Landsat directory
+        self.dirs = [os.path.join(directory, x) for x in os.listdir(directory) if
+                     os.path.isdir(os.path.join(directory, x))]
         self.metadata = {}
         file_list = []
 
@@ -100,7 +106,8 @@ class StackMetadata(object):
             file_list.append(self.metadata[d])
 
         self.file_list = [item for sublist in file_list for item in sublist]
-        self.stack_shape = (len(self.file_list), l.rasterio_geometry['height'], l.rasterio_geometry['width'])
+        self.stack_shape = (len(self.file_list), l.rasterio_geometry['height'],
+                            l.rasterio_geometry['width'])
 
 
 def concatenate_training_data(existing, new_data):
@@ -141,9 +148,10 @@ def check_dimensions():
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    build_training_feature_array()
-    model_path = build_model()
-    classify_rasters(model_path)
+    # build_training_feature_array()
+    model_path, training_data = build_model()
+    classify_rasters(model_path, training_data)
     # check_dimensions()
 
 # ========================= EOF ====================================================================
+#
