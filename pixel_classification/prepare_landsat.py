@@ -56,7 +56,7 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
 
                 dem = AwsDem(zoom=10, target_profile=profile, bounds=bb, clip_object=polygon)
 
-                dem.terrain(attribute='dem',
+                dem.terrain(attribute='elevation',
                             out_file=dem_name)
                 dem.terrain(attribute='slope',
                             out_file=slope_name)
