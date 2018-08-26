@@ -16,9 +16,8 @@
 
 import os
 import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from rasterio import open as rasopen
+abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(abspath)
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
@@ -127,10 +126,10 @@ def concatenate_training_data(existing, new_data):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    # build_training_feature_array()
-    data_path = '/tmp/data.pkl'
-    model = '/tmp/model.ckpt'
-    # model = build_model(data_path)
+    build_training_feature_array()
+    data_path = os.path.join(abspath, 'model_data', 'data.pkl')
+    model = os.path.join(abspath, 'model_data', 'model.ckpt')
+    model = build_model(data_path)
     classify_rasters(model, data_path)
     # check_dimensions()
 
