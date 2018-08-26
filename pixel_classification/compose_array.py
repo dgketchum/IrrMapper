@@ -304,11 +304,13 @@ class PixelTrainingArray(object):
             if key in data_array.columns.values:
                 self.model_map[key] = val
 
-        data = {'features': data_array.columns.values,
+        data = {'df': data_array,
+                'features': data_array.columns.values,
                 'data': data_array.values,
                 'target_values': targets,
                 'model_map': self.model_map,
                 'water_mask': self.water_mask}
+
         print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():
             setattr(self, key, val)
