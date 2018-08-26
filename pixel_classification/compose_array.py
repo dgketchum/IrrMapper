@@ -63,7 +63,7 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, root, geography, instances=None, pickle_path=None,
+    def __init__(self, root=None, geography=None, instances=None, from_pkl=False,
                  overwrite_array=False, overwrite_points=False, max_cloud=1.0, from_dict=None,
                  ancillary_rasters=None):
         """
@@ -78,36 +78,38 @@ class PixelTrainingArray(object):
         be sampled once.  As the sample size becomes large (perhaps 10**5), the dataset will approach
         feature balance. Each point is taken from a random spatial index within each polygon.  Approximate
         feature balance is hard-coded in this class.
-        :param pickle_path: If the data exists, specify this path to instantiate a data-filled instance
+        :param from_pkl: If the data exists, specify this path to instantiate a data-filled instance
         without repeating the time-consuming sampling process. (bool)
         :param overwrite_array:
         """
-        g = geography
-        self.root = root
-        self.path_row_dir = os.path.join(self.root, str(g.path), str(g.row))
-        self.year_dir = os.path.join(self.path_row_dir, str(g.year))
 
-        if pickle_path and not overwrite_array:
-            self._from_pickle(pickle_path)
+        try:
+            g = geography
+            self.root = root
+            self.path_row_dir = os.path.join(self.root, str(g.path), str(g.row))
+            self.year_dir = os.path.join(self.path_row_dir, str(g.year))
+        except AttributeError:
+            pass
+
+        self.overwrite_array = overwrite_array
+        self.overwrite_points = overwrite_points
+
+        if from_pkl and not overwrite_array:
+            self._from_pickle()
 
         elif from_dict and not overwrite_array:
             self._from_dict(from_dict)
 
         elif not overwrite_array and root:
-            if os.path.isfile(os.path.join(self.year, 'data.pkl')):
+            if os.path.isfile(os.path.join(self.year_dir, 'data.pkl')):
                 self.array_exists = True
-                self.overwrite_array = overwrite_array
-                self.overwrite_points = overwrite_points
 
         else:
-
             self.image_directory = root
             self.array_exists = False
             self.is_sampled = False
             self.has_data = False
             self.is_binary = None
-            self.overwrite_array = overwrite_array
-            self.overwrite_points = overwrite_points
 
             self.features = None
             self.data = None
@@ -359,8 +361,8 @@ class PixelTrainingArray(object):
                 pca.n_components * 100))
         return pca
 
-    def _from_pickle(self, path):
-        pkl = pickle.load(open(path, 'rb'))
+    def _from_pickle(self):
+        pkl = pickle.load(open(self.data_path, 'rb'))
         for key, val in pkl.items():
             setattr(self, key, val)
 
@@ -523,14 +525,7 @@ class PixelTrainingArray(object):
 
     @property
     def data_path(self):
-        if os.path.isfile(os.path.join(self.year_dir, 'data.pkl')):
-            if not self.overwrite_array:
-                return None
-            else:
-                os.remove(os.path.join(self.year_dir, 'data.pkl'))
-                return os.path.join(self.year_dir, 'data.pkl')
-        else:
-            return os.path.join(self.year_dir, 'data.pkl')
+        return os.path.join(self.year_dir, 'data.pkl')
 
     @property
     def shapefile_path(self):
