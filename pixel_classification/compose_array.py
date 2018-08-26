@@ -95,7 +95,7 @@ class PixelTrainingArray(object):
         self.overwrite_points = overwrite_points
 
         if from_pkl and not overwrite_array:
-            self._from_pickle()
+            self.from_pickle()
 
         elif from_dict and not overwrite_array:
             self._from_dict(from_dict)
@@ -105,38 +105,42 @@ class PixelTrainingArray(object):
                 self.array_exists = True
 
         else:
-            self.image_directory = root
-            self.array_exists = False
-            self.is_sampled = False
-            self.has_data = False
-            self.is_binary = None
-
-            self.features = None
-            self.data = None
-            self.target_values = None
-
-            self.m_instances = instances
-            self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
-            self.extract_paths = {}
-            self.model_map = {}
-
-            self.max_cloud = max_cloud
-            self.water_mask = None
-            self.object_id = 0
-
-            self.band_map = BandMap()
-            self.images = self._instantiate_images()
-            self.current_img = self.images[0]
-
-            self.ancillary_rasters = ancillary_rasters
-
             try:
-                self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
-            except AttributeError:
-                self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
+                self.image_directory = root
+                self.array_exists = False
+                self.is_sampled = False
+                self.has_data = False
+                self.is_binary = None
 
-            self.geography = geography
-            self.coord_system = self.current_img.rasterio_geometry['crs']
+                self.features = None
+                self.data = None
+                self.target_values = None
+
+                self.m_instances = instances
+                self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
+                self.extract_paths = {}
+                self.model_map = {}
+
+                self.max_cloud = max_cloud
+                self.water_mask = None
+                self.object_id = 0
+
+                self.band_map = BandMap()
+                self.images = self._instantiate_images()
+                self.current_img = self.images[0]
+
+                self.ancillary_rasters = ancillary_rasters
+
+                try:
+                    self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
+                except AttributeError:
+                    self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
+
+                self.geography = geography
+                self.coord_system = self.current_img.rasterio_geometry['crs']
+
+            except TypeError:
+                self.empty_training_array = True
 
     def extract_sample(self, save_points=False):
 
@@ -315,8 +319,7 @@ class PixelTrainingArray(object):
         for key, val in data.items():
             setattr(self, key, val)
 
-        with open(self.data_path, 'wb') as handle:
-            pickle.dump(data, handle, protocol=0)
+        self.to_pickle(data)
 
         self._check_targets(targets)
         self.has_data = True
@@ -337,34 +340,20 @@ class PixelTrainingArray(object):
                               'geometry': mapping(pt)})
         return None
 
-    def _principal_components(self, return_percentile=None, n_components=None):
-        """ Extract eigenvectors and eigenvalue, return desired PCAs""
-        :return:
-        """
+    def to_pickle(self, data, path=None):
+        if not path:
+            path = self.data_path
 
-        if not self.has_data:
-            warn('There is no data to perform PCA on.  Run make_data_array.')
-            return None
+        with open(path, 'wb') as handle:
+            pickle.dump(data, handle, protocol=0)
 
-        pca = None
+        return path
 
-        if n_components:
-            pca = PCA(n_components=n_components, copy=True, whiten=False)
-            pca.fit(self.data)
-            self.data = pca.transform(self.data)
-        elif return_percentile:
-            pca = PCA(return_percentile, copy=True, whiten=False)
-            pca.fit(self.data)
-            self.data = pca.transform(self.data)
-            print('Cumulative sum principal components: {}\n '
-                  '{} features \n {}'"%"' explained variance'.format(
-                cumsum(pca.explained_variance_ratio_),
-                pca.n_components_,
-                pca.n_components * 100))
-        return pca
+    def from_pickle(self, path=None):
+        if not path:
+            path = self.data_path
 
-    def _from_pickle(self):
-        pkl = pickle.load(open(self.data_path, 'rb'))
+        pkl = pickle.load(open(path, 'rb'))
         for key, val in pkl.items():
             setattr(self, key, val)
 
@@ -524,6 +513,32 @@ class PixelTrainingArray(object):
         objs = [LandsatImage(x).satellite for x in dirs]
         image_objs = [landsat_map[x](y) for x, y in zip(objs, dirs)]
         return image_objs
+
+    def _principal_components(self, return_percentile=None, n_components=None):
+        """ Extract eigenvectors and eigenvalue, return desired PCAs""
+        :return:
+        """
+
+        if not self.has_data:
+            warn('There is no data to perform PCA on.  Run make_data_array.')
+            return None
+
+        pca = None
+
+        if n_components:
+            pca = PCA(n_components=n_components, copy=True, whiten=False)
+            pca.fit(self.data)
+            self.data = pca.transform(self.data)
+        elif return_percentile:
+            pca = PCA(return_percentile, copy=True, whiten=False)
+            pca.fit(self.data)
+            self.data = pca.transform(self.data)
+            print('Cumulative sum principal components: {}\n '
+                  '{} features \n {}'"%"' explained variance'.format(
+                cumsum(pca.explained_variance_ratio_),
+                pca.n_components_,
+                pca.n_components * 100))
+        return pca
 
     @property
     def data_path(self):

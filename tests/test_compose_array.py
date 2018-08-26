@@ -33,15 +33,16 @@ class TestPointExtract(unittest.TestCase):
 
     def test_sample_points(self):
         montana = return_object('montana_test')
-        p = PixelTrainingArray(images=self.directory, instances=10, overwrite_existing=True, geography=montana)
-        p.extract_sample(save_points=True, limit_sample=True)
+        p = PixelTrainingArray(root=self.directory, geography=montana, instances=10,
+                               overwrite_array=True)
+        p.extract_sample(save_points=True)
         with fopen(p.shapefile_path, 'r') as src:
             points = [x for x in src]
         self.assertGreater(len(points), 40)
         self.assertGreater(p.extracted_points.shape[0], 40)
 
     def test_instantiate_w_pkl(self):
-        p = PixelTrainingArray(pickle_path=self.pkl)
+        p = PixelTrainingArray(from_pkl=self.pkl)
         self.assertIsInstance(p, PixelTrainingArray)
 
 

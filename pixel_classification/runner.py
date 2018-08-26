@@ -54,15 +54,14 @@ def build_training_feature_array():
             p.extract_sample()
 
 
-def build_model():
+def build_model(data_path):
     first = True
-
-    # concatenate data from all pickled PixelTrainingArray objects
     for key, obj in OBJECT_MAP.items():
-        path = os.path.join(ROOT, key)
-        geo = obj(path)
-        pkl_data = PixelTrainingArray(root=path, geography=geo, from_pkl=True)
+        model_path = os.path.join(ROOT, key)
+        geo = obj(model_path)
+        pkl_data = PixelTrainingArray(root=model_path, geography=geo, from_pkl=True)
         if first:
+            # TODO: add df
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
                              'features': pkl_data.features, 'model_map': pkl_data.model_map,
                              }
@@ -71,43 +70,21 @@ def build_model():
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-    path = mlp(p)
+    p.to_pickle(training_data, data_path)
+    model_path = mlp(p)
 
     for key, obj in OBJECT_MAP.items():
-
         dst = os.path.join(ROOT, key, 'classified_rasters')
         if not os.path.isdir(dst):
             os.mkdir(dst)
 
-    return path, training_data
+    return model_path
 
 
-def classify_rasters(model, data):
-    for key, obj in OBJECT_MAP.items():
-        path = os.path.join(ROOT, key)
-        geo = obj(path)
-        dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
-        meta = StackMetadata(dst, data)
-        classify_stack(meta, model=model, out_location=dst)
-
-
-class StackMetadata(object):
-
-    def __init__(self, directory, data):
-        # TODO: add a test for Landsat directory
-        self.dirs = [os.path.join(directory, x) for x in os.listdir(directory) if
-                     os.path.isdir(os.path.join(directory, x))]
-        self.metadata = {}
-        file_list = []
-
-        for d in self.dirs:
-            l = LandsatImage(d)
-            self.metadata[d] = [os.path.join(d, x) for x in l.tif_list if 'BQA' not in x]
-            file_list.append(self.metadata[d])
-
-        self.file_list = [item for sublist in file_list for item in sublist]
-        self.stack_shape = (len(self.file_list), l.rasterio_geometry['height'],
-                            l.rasterio_geometry['width'])
+def classify_rasters(model, path):
+    p = PixelTrainingArray()
+    p.from_pickle(path)
+    classify_stack(p, model=model, out_location=path)
 
 
 def concatenate_training_data(existing, new_data):
@@ -133,24 +110,26 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-def check_dimensions():
-    for key, obj in OBJECT_MAP.items():
-        path = os.path.join(ROOT, key)
-        geo = obj(path)
-        dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
-        stack_meta = StackMetadata(dst)
-        print(dst)
-        for i, feat in enumerate(stack_meta.file_list):
-            with rasopen(feat, mode='r') as src:
-                meta = src.meta.copy()
-            print(meta['height'], meta['width'])
+# def check_dimensions():
+#     for key, obj in OBJECT_MAP.items():
+#         path = os.path.join(ROOT, key)
+#         geo = obj(path)
+#         dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
+#         stack_meta = StackMetadata(dst)
+#         print(dst)
+#         for i, feat in enumerate(stack_meta.file_list):
+#             with rasopen(feat, mode='r') as src:
+#                 meta = src.meta.copy()
+#             print(meta['height'], meta['width'])
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array()
-    model_path, training_data = build_model()
-    classify_rasters(model_path, training_data)
+    data_path = '/tmp/data.pkl'
+    model = '/tmp/model.ckpt'
+    # model = build_model(data_path)
+    classify_rasters(model, data_path)
     # check_dimensions()
 
 # ========================= EOF ====================================================================
