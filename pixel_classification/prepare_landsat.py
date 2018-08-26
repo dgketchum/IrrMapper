@@ -21,6 +21,8 @@ from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
+from sat_image.bounds import RasterBounds
+from dem import AwsDem
 
 MAPPING_OBJECTS = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
 MAPPING_ABV = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -36,8 +38,26 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
 
     dirs = [x[0] for x in os.walk(sub_directory) if os.path.basename(x[0])[:3] in MAPPING_OBJECTS.keys()]
 
+    master = dirs[0]
+    first = True
     for d in dirs:
         satellite_abv = MAPPING_ABV[satellite]
+        if first:
+            l8 = MAPPING_OBJECTS[satellite_abv](master)
+            dem_name = os.path.join(os.path.dirname(master),
+                                    'dem.tif')
+            if not os.path.isfile(dem_name):
+                polygon = l8.get_tile_geometry()
+                profile = l8.rasterio_geometry
+                bb = RasterBounds(affine_transform=profile['transform'],
+                                  profile=profile, latlon=True)
+
+                dem = AwsDem(zoom=10, target_profile=profile, bounds=bb, clip_object=polygon)
+
+                dem.terrain(attribute='slope',
+                            out_file=dem_name)
+            first = False
+
         make_fmask(d, sat=satellite_abv)
 
     warp_vrt(sub_directory, delete_extra=True, use_band_map=True)

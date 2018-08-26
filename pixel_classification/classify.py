@@ -28,7 +28,7 @@ from sklearn.preprocessing import StandardScaler
 from tf_multilayer_perceptron import multilayer_perceptron
 
 
-def classify_stack(stack_meta, model, out_location=None):
+def classify_stack(stack_meta, model, out_location=None, out_name='classified_raster.tif'):
     stack = None
     arr = None
     first = True
@@ -93,7 +93,7 @@ def classify_stack(stack_meta, model, out_location=None):
 
     meta['count'] = 1
     meta['dtype'] = float32
-    with rasopen(os.path.join(out_location, 'binary_raster.tif'), 'w', **meta) as dst:
+    with rasopen(os.path.join(out_location, out_name), 'w', **meta) as dst:
         dst.write(new_array)
 
     return None

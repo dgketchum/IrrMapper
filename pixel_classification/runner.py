@@ -32,10 +32,10 @@ ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
 OBJECT_MAP = {
     'MT': Montana,
-    'NV': Nevada,
-    'OR': Oregon,
-    'UT': Utah,
-    'WA': Washington
+    # 'NV': Nevada,
+    # 'OR': Oregon,
+    # 'UT': Utah,
+    # 'WA': Washington
 }
 
 
@@ -46,7 +46,9 @@ def build_training_feature_array():
         geo = obj(path)
         if geo.sat == 8:
             prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
-            p = PixelTrainingArray(path, instances=1100, overwrite_existing=True, geography=geo)
+            dem = os.path.join(path, str(geo.path), str(geo.row), str(geo.year), 'dem.tif')
+            p = PixelTrainingArray(path, instances=5000, overwrite_existing=True, geography=geo,
+                                   ancillary_rasters=[dem])
             p.extract_sample(save_points=True, limit_sample=False)
 
 
@@ -139,7 +141,7 @@ def check_dimensions():
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    # build_training_feature_array()
+    build_training_feature_array()
     model_path = build_model()
     classify_rasters(model_path)
     # check_dimensions()

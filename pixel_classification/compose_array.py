@@ -63,7 +63,7 @@ class PixelTrainingArray(object):
     """
 
     def __init__(self, images=None, instances=None, pickle_path=None, overwrite_existing=False, geography=None,
-                 max_cloud=1.0, from_dict=None):
+                 max_cloud=1.0, from_dict=None, ancillary_rasters=None):
         """
 
         :param max_cloud:
@@ -118,6 +118,8 @@ class PixelTrainingArray(object):
             self.band_map = BandMap()
             self.images = self._instantiate_images()
             self.current_img = self.images[0]
+
+            self.ancillary_rasters = ancillary_rasters
 
             try:
                 self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
@@ -251,6 +253,11 @@ class PixelTrainingArray(object):
 
     def make_data_array(self):
 
+        if self.ancillary_rasters:
+            for ras in self.ancillary_rasters:
+                band_series = self._point_raster_extract(ras, image=False)
+                self.extracted_points = self.extracted_points.join(band_series,
+                                                                   how='outer')
         min_cloud = 1.
         for sat_image in self.images:
             self.current_img = sat_image
@@ -407,20 +414,26 @@ class PixelTrainingArray(object):
             warn('This dataset has {} target classes'.format(unique_targets))
             self.is_binary = False
 
-    def _point_raster_extract(self, raster):
+    def _point_raster_extract(self, raster, image=True):
 
-        basename = os.path.basename(raster)
-        name_split = basename.split(sep='_')
+        if image:
+            basename = os.path.basename(raster)
+            name_split = basename.split(sep='_')
 
-        try:
-            band = name_split[7].split(sep='.')[0]
-            date_string = name_split[3]
-        except IndexError:
+            try:
+                band = name_split[7].split(sep='.')[0]
+                date_string = name_split[3]
+            except IndexError:
+                band = basename.replace('.tif', '')
+                date_string = self.current_img.date_acquired_str
+
+            column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite, self.path,
+                                                         self.row, date_string, band)
+
+        else:
+            basename = os.path.basename(raster)
             band = basename.replace('.tif', '')
-            date_string = self.current_img.date_acquired_str
-
-        column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite, self.path,
-                                                     self.row, date_string, band)
+            column_name = os.path.basename(band)
 
         self.extract_paths[column_name] = raster
 
