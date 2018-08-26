@@ -46,6 +46,8 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
             l8 = MAPPING_OBJECTS[satellite_abv](master)
             dem_name = os.path.join(os.path.dirname(master),
                                     'dem.tif')
+            slope_name = os.path.join(os.path.dirname(master),
+                                      'slope.tif')
             if not os.path.isfile(dem_name):
                 polygon = l8.get_tile_geometry()
                 profile = l8.rasterio_geometry
@@ -54,8 +56,10 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
 
                 dem = AwsDem(zoom=10, target_profile=profile, bounds=bb, clip_object=polygon)
 
-                dem.terrain(attribute='slope',
+                dem.terrain(attribute='dem',
                             out_file=dem_name)
+                dem.terrain(attribute='slope',
+                            out_file=slope_name)
             first = False
 
         make_fmask(d, sat=satellite_abv)
