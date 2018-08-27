@@ -129,7 +129,7 @@ if __name__ == '__main__':
     # build_training_feature_array()
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
-    # model = build_model(data_path)
+    model = build_model(data_path)
     classify_rasters(model, data_path)
     # check_dimensions()
 
