@@ -32,7 +32,7 @@ from sklearn.preprocessing import StandardScaler
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def classify_stack(data, model, out_location=None, out_name='classified_raster.tif'):
+def classify_stack(data, model, out_location=None):
     stack = None
     arr = None
     first = True
@@ -104,7 +104,8 @@ def classify_stack(data, model, out_location=None, out_name='classified_raster.t
 
     meta['count'] = 1
     meta['dtype'] = float32
-    with rasopen(os.path.join(out_location, out_name), 'w', **meta) as dst:
+    out_ras = out_location.replace('data.pkl', 'classified_{}.tif'.format(datetime.now().date()))
+    with rasopen(out_ras, 'w', **meta) as dst:
         dst.write(new_array)
 
     return None
