@@ -32,21 +32,22 @@ home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
 OBJECT_MAP = {
-    'MT': Montana,
-    # 'NV': Nevada,
-    # 'OR': Oregon,
-    # 'UT': Utah,
-    # 'WA': Washington
+    # 'MT': Montana,
+    'NV': Nevada,
+    'OR': Oregon,
+    'UT': Utah,
+    'WA': Washington
 }
 
 
-def build_training_feature_array():
+def build_training_feature_array(skip_landsat=False):
     for key, obj in OBJECT_MAP.items():
         print(key)
         path = os.path.join(ROOT, key)
         geo = obj(path)
         if geo.sat == 8:
-            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat)
+            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat,
+                                skip_landsat=skip_landsat)
             dem = os.path.join(path, str(geo.path), str(geo.row), 'dem.tif')
             slope = os.path.join(path, str(geo.path), str(geo.row), 'slope.tif')
             p = PixelTrainingArray(root=path, geography=geo, instances=5000, overwrite_array=True,
@@ -126,7 +127,7 @@ def concatenate_training_data(existing, new_data):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    # build_training_feature_array()
+    build_training_feature_array(skip_landsat=True)
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
     model = build_model(data_path)

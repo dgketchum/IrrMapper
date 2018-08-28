@@ -1,7 +1,7 @@
 # =============================================================================================
 # Copyright 2018 dgketchum
 #
-# Licensed under the Apache License, Version 2.LE07_clip_L1TP_039027_20150529_20160902_01_T1_B1.TIF (the "License");
+# Licensed under the Apache License, Version 2 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -28,13 +28,16 @@ MAPPING_OBJECTS = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
 MAPPING_ABV = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
 
 
-def prepare_image_stack(path, row, year, outpath, satellite=8):
+def prepare_image_stack(path, row, year, outpath, satellite=8, skip_landsat=False):
     start, end = '{}-05-01'.format(year), '{}-10-15'.format(year)
-
+    year_dir = os.path.join(outpath, str(path), str(row))
     sub_directory = orgainize_directory(outpath, path, row, year)
     print('preparing landsat at: {}'.format(sub_directory))
-    g = GoogleDownload(start, end, satellite, path=path, row=row, output_path=sub_directory, max_cloud_percent=20)
-    g.download()
+
+    if not skip_landsat:
+        g = GoogleDownload(start, end, satellite, path=path, row=row,
+                           output_path=sub_directory, max_cloud_percent=20)
+        g.download()
 
     dirs = [x[0] for x in os.walk(sub_directory) if os.path.basename(x[0])[:3] in MAPPING_OBJECTS.keys()]
 
@@ -44,10 +47,8 @@ def prepare_image_stack(path, row, year, outpath, satellite=8):
         satellite_abv = MAPPING_ABV[satellite]
         if first:
             l8 = MAPPING_OBJECTS[satellite_abv](master)
-            dem_name = os.path.join(os.path.dirname(master),
-                                    'dem.tif')
-            slope_name = os.path.join(os.path.dirname(master),
-                                      'slope.tif')
+            dem_name = os.path.join(year_dir, 'dem.tif')
+            slope_name = os.path.join(year_dir, 'slope.tif')
             if not os.path.isfile(dem_name):
                 polygon = l8.get_tile_geometry()
                 profile = l8.rasterio_geometry
