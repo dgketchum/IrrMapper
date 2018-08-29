@@ -29,6 +29,7 @@ from numpy import zeros, array, float16
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 
+from pixel_classification.inference import infer
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
@@ -84,20 +85,22 @@ def classify_stack(data, model, out_location=None):
         ct_nan = 0
         ct_out = 0
 
-        for i in range(m_stack.shape[-1]):
-            if not np.ma.is_masked(m_stack[:, i]):
-                dat = m_stack[:, i]
-                dat = array(dat).reshape((1, dat.shape[0]))
-                loss = sess.run(classify, feed_dict={pixel: dat})
-                new_array[0, i] = np.argmax(loss, 1)
-                ct_out += 1
-            else:
-                new_array[0, i] = np.nan
-                ct_nan += 1
+        infer()
 
-            if i % 1000000 == 0:
-                print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
-                                                                   (datetime.now() - time).seconds))
+        # for i in range(m_stack.shape[-1]):
+        #     if not np.ma.is_masked(m_stack[:, i]):
+        #         dat = m_stack[:, i]
+        #         dat = array(dat).reshape((1, dat.shape[0]))
+        #         loss = sess.run(classify, feed_dict={pixel: dat})
+        #         new_array[0, i] = np.argmax(loss, 1)
+        #         ct_out += 1
+        #     else:
+        #         new_array[0, i] = np.nan
+        #         ct_nan += 1
+        #
+        #     if i % 1000000 == 0:
+        #         print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
+        #                                                            (datetime.now() - time).seconds))
 
     new_array = new_array.reshape(final_shape)
     new_array = array(new_array, dtype=float32)
