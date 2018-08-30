@@ -16,20 +16,19 @@
 
 import os
 import sys
+from datetime import datetime
+from multiprocessing import Pool
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
-from rasterio import open as rasopen
-from rasterio.dtypes import float32
-from rasterio.errors import RasterioIOError
-from datetime import datetime
-
 from numpy import zeros, array, float16
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
+from rasterio import open as rasopen
+from rasterio.dtypes import float32
+from rasterio.errors import RasterioIOError
 
-from pixel_classification.inference import infer
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
@@ -37,6 +36,7 @@ def classify_stack(data, model, out_location=None):
     stack = None
     arr = None
     first = True
+    meta = None
 
     for i, feat in enumerate(data.features):
         feature_raster = data.model_map[feat]
@@ -67,6 +67,12 @@ def classify_stack(data, model, out_location=None):
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
+    pool = Pool(processes=6)
+    new_array = pool.map(_classify(model, m_stack, new_array, final_shape, n))
+    write_raster(new_array, meta, out_location)
+
+
+def _classify(model, m_stack, new_array, final_shape, n):
     g = tf.get_default_graph()
 
     with tf.Session() as sess:
@@ -85,26 +91,28 @@ def classify_stack(data, model, out_location=None):
         ct_nan = 0
         ct_out = 0
 
-        infer()
+        for i in range(m_stack.shape[-1]):
+            if not np.ma.is_masked(m_stack[:, i]):
+                dat = m_stack[:, i]
+                dat = array(dat).reshape((1, dat.shape[0]))
+                loss = sess.run(classify, feed_dict={pixel: dat})
+                new_array[0, i] = np.argmax(loss, 1)
+                ct_out += 1
+            else:
+                new_array[0, i] = np.nan
+                ct_nan += 1
 
-        # for i in range(m_stack.shape[-1]):
-        #     if not np.ma.is_masked(m_stack[:, i]):
-        #         dat = m_stack[:, i]
-        #         dat = array(dat).reshape((1, dat.shape[0]))
-        #         loss = sess.run(classify, feed_dict={pixel: dat})
-        #         new_array[0, i] = np.argmax(loss, 1)
-        #         ct_out += 1
-        #     else:
-        #         new_array[0, i] = np.nan
-        #         ct_nan += 1
-        #
-        #     if i % 1000000 == 0:
-        #         print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
-        #                                                            (datetime.now() - time).seconds))
+            if i % 1000000 == 0:
+                print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
+                                                                   (datetime.now() - time).seconds))
 
     new_array = new_array.reshape(final_shape)
     new_array = array(new_array, dtype=float32)
 
+    return new_array
+
+
+def write_raster(new_array, meta, out_location):
     meta['count'] = 1
     meta['dtype'] = float32
     out_ras = out_location.replace('data.pkl', 'classified_{}.tif'.format(datetime.now().date()))
