@@ -67,8 +67,7 @@ def classify_stack(data, model, out_location=None):
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-    pool = Pool(processes=6)
-    new_array = pool.map(_classify(model, m_stack, new_array, final_shape, n))
+    new_array = _classify(model, m_stack, new_array, final_shape, n)
     write_raster(new_array, meta, out_location)
 
 

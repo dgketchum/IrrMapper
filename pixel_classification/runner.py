@@ -56,12 +56,12 @@ def build_training_feature_array(skip_landsat=False):
             p.extract_sample()
 
 
-def build_model(data_path):
+def build_model(data_path, model_path):
     first = True
     for key, obj in OBJECT_MAP.items():
-        model_path = os.path.join(ROOT, key)
-        geo = obj(model_path)
-        pkl_data = PixelTrainingArray(root=model_path, geography=geo, from_pkl=True)
+        root = os.path.join(ROOT, key)
+        geo = obj(root)
+        pkl_data = PixelTrainingArray(root=root, geography=geo, from_pkl=True)
         if first:
             # TODO: add df
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
@@ -73,7 +73,7 @@ def build_model(data_path):
 
     p = PixelTrainingArray(from_dict=training_data)
     p.to_pickle(training_data, data_path)
-    model_path = mlp(p)
+    model_path = mlp(p, model_path)
 
     for key, obj in OBJECT_MAP.items():
         dst = os.path.join(ROOT, key, 'classified_rasters')
@@ -112,27 +112,13 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-# def check_dimensions():
-#     for key, obj in OBJECT_MAP.items():
-#         path = os.path.join(ROOT, key)
-#         geo = obj(path)
-#         dst = os.path.join(geo.root, str(geo.path), str(geo.row), str(geo.year))
-#         stack_meta = StackMetadata(dst)
-#         print(dst)
-#         for i, feat in enumerate(stack_meta.file_list):
-#             with rasopen(feat, mode='r') as src:
-#                 meta = src.meta.copy()
-#             print(meta['height'], meta['width'])
-
-
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
-    model = build_model(data_path)
+    # model = build_model(data_path, model)
     classify_rasters(model, data_path)
-    # check_dimensions()
 
 # ========================= EOF ====================================================================
 #
