@@ -17,7 +17,6 @@
 import os
 import sys
 from datetime import datetime
-from multiprocessing import Pool
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
@@ -29,14 +28,18 @@ from rasterio import open as rasopen
 from rasterio.dtypes import float32
 from rasterio.errors import RasterioIOError
 
+from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def classify_stack(data, model, out_location=None):
+def build_stack(path):
     stack = None
     arr = None
     first = True
     meta = None
+
+    data = PixelTrainingArray()
+    data.from_pickle(path)
 
     for i, feat in enumerate(data.features):
         feature_raster = data.model_map[feat]
@@ -66,12 +69,10 @@ def classify_stack(data, model, out_location=None):
     del stack
 
     new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
-
-    new_array = _classify(model, m_stack, new_array, final_shape, n)
-    write_raster(new_array, meta, out_location)
+    return new_array, meta, final_shape, n
 
 
-def _classify(model, m_stack, new_array, final_shape, n):
+def classify(model, m_stack, new_array, n):
     g = tf.get_default_graph()
 
     with tf.Session() as sess:
@@ -105,7 +106,6 @@ def _classify(model, m_stack, new_array, final_shape, n):
                 print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
                                                                    (datetime.now() - time).seconds))
 
-    new_array = new_array.reshape(final_shape)
     new_array = array(new_array, dtype=float32)
 
     return new_array

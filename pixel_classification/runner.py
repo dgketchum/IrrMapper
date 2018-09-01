@@ -16,17 +16,16 @@
 
 import os
 import sys
+
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
+from numpy import vstack, array_split, concatenate
+
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import classify_stack
-
-from sat_image.image import LandsatImage
-
-from numpy import vstack
+from pixel_classification.classify import build_stack
 
 home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
@@ -56,14 +55,13 @@ def build_training_feature_array(skip_landsat=False):
             p.extract_sample()
 
 
-def build_model(data_path, model_path):
+def build_model(path, model_path):
     first = True
     for key, obj in OBJECT_MAP.items():
         root = os.path.join(ROOT, key)
         geo = obj(root)
         pkl_data = PixelTrainingArray(root=root, geography=geo, from_pkl=True)
         if first:
-            # TODO: add df
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
                              'features': pkl_data.features, 'model_map': pkl_data.model_map,
                              }
@@ -72,7 +70,7 @@ def build_model(data_path, model_path):
             training_data = concatenate_training_data(training_data, pkl_data)
 
     p = PixelTrainingArray(from_dict=training_data)
-    p.to_pickle(training_data, data_path)
+    p.to_pickle(training_data, path)
     model_path = mlp(p, model_path)
 
     for key, obj in OBJECT_MAP.items():
@@ -81,12 +79,6 @@ def build_model(data_path, model_path):
             os.mkdir(dst)
 
     return model_path
-
-
-def classify_rasters(model, path):
-    p = PixelTrainingArray()
-    p.from_pickle(path)
-    classify_stack(p, model=model, out_location=path)
 
 
 def concatenate_training_data(existing, new_data):
@@ -112,13 +104,33 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
+class ArrayDisAssembly(object):
+
+    def __init__(self, arr):
+        self.original = arr
+        self.shape = arr.shape
+
+        self.arrays = None
+        self.n_sections = None
+        self.assembled = None
+
+    def disassemble(self, n_sections):
+        self.arrays = array_split(self.original, n_sections)
+        self.n_sections = n_sections
+        return self.arrays
+
+    def assemble(self, *arrs):
+        self.assembled = concatenate((x for x in arrs), axis=0)
+        return self.assembled
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
     # model = build_model(data_path, model)
-    classify_rasters(model, data_path)
+    new_array, meta, final_shape, n = classify_rasters(data_path)
 
 # ========================= EOF ====================================================================
 #
