@@ -20,12 +20,14 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
+from functools import partial
+from multiprocessing import Pool, Lock
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import build_stack
+from pixel_classification.classify import get_stack, classify
 
 home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
@@ -107,15 +109,20 @@ def concatenate_training_data(existing, new_data):
 class ArrayDisAssembly(object):
 
     def __init__(self, arr):
-        self.original = arr
-        self.shape = arr.shape
-
         self.arrays = None
         self.n_sections = None
         self.assembled = None
+        self.axis = None
 
-    def disassemble(self, n_sections):
-        self.arrays = array_split(self.original, n_sections)
+        if isinstance(arr, list):
+            self.arrays = arr
+            self.assembled = self.assemble(arr)
+
+        self.original = arr
+        self.shape = arr.shape
+
+    def disassemble(self, n_sections, axis=1):
+        self.arrays = array_split(self.original, n_sections, axis=axis)
         self.n_sections = n_sections
         return self.arrays
 
@@ -130,7 +137,15 @@ if __name__ == '__main__':
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
     # model = build_model(data_path, model)
-    new_array, meta, final_shape, n = classify_rasters(data_path)
-
+    array_file = data_path.replace('data.pkl', 'array.pkl')
+    data_stack, meta, final_shape, n = get_stack(data_path, outfile=array_file)
+    cores = 4
+    a = ArrayDisAssembly(data_stack)
+    arrays = a.disassemble(n_sections=cores)
+    pool = Pool(processes=cores)
+    func = partial(classify, dict(model=model, m_stack=data_stack, new_array=final_shape))
+    with pool as p:
+        classified_arrays = pool.starmap(classify, arrays)
+    pass
 # ========================= EOF ====================================================================
 #

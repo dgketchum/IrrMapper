@@ -21,6 +21,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
+from pickle import load, dump
 from numpy import zeros, array, float16
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
@@ -32,11 +33,15 @@ from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def build_stack(path):
+def get_stack(path, saved=None, outfile=None):
     stack = None
     arr = None
     first = True
     meta = None
+
+    if saved:
+        with open(saved, 'rb') as handle:
+            load(stack, handle)
 
     data = PixelTrainingArray()
     data.from_pickle(path)
@@ -47,19 +52,24 @@ def build_stack(path):
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
                 meta = src.meta.copy()
+                if saved:
+                    break
         except RasterioIOError:
             feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
                 meta = src.meta.copy()
         if first:
-            print(os.path.dirname(feature_raster))
             empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
             stack = empty
             stack[i, :, :] = normalize_image_channel(arr)
             first = False
         else:
             stack[i, :, :] = normalize_image_channel(arr)
+
+    if outfile:
+        with open(outfile, 'wb') as handle:
+            dump(stack, handle, protocol=0)
 
     final_shape = 1, stack.shape[1], stack.shape[2]
     stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
@@ -72,9 +82,9 @@ def build_stack(path):
     return new_array, meta, final_shape, n
 
 
-def classify(model, m_stack, new_array, n):
+def classify(model, m_stack, new_array):
     g = tf.get_default_graph()
-
+    n = m_stack.shape[0]
     with tf.Session() as sess:
         saver = tf.train.import_meta_graph('{}.meta'.format(model))
         saver.restore(sess, model)
