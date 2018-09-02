@@ -42,7 +42,7 @@ class TestPointExtract(unittest.TestCase):
         self.assertGreater(p.extracted_points.shape[0], 40)
 
     def test_instantiate_w_pkl(self):
-        p = PixelTrainingArray(from_pkl=self.pkl)
+        p = PixelTrainingArray()
         self.assertIsInstance(p, PixelTrainingArray)
 
 

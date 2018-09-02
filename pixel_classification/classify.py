@@ -21,8 +21,8 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
-from pickle import load, dump
-from numpy import zeros, array, float16
+from pickle import load, dump, HIGHEST_PROTOCOL
+from numpy import zeros, array, float16, ndarray
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
@@ -33,20 +33,38 @@ from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
+class Result:
+
+    def __init__(self, idx, arr):
+        self.idx = idx
+        self.arr = arr
+
+
 class Classifier(object):
 
-    def __init__(self):
+    def __init__(self, idx=None, arr=None, model=None):
+        self.idx = idx
         self.sess = None
         self.model = None
         self.classifier = None
         self.pixel = None
         self.new_array = None
-        self.meta = None
+        self.raster_geo = None
         self.n = None
         self.final_shape = None
         self.masked_data_stack = None
 
+        if isinstance(arr, ndarray):
+            self.masked_data_stack = arr
+            self.n = self.masked_data_stack.shape[0]
+
+        if model:
+            self.model = model
+            self.load_model()
+
     def get_stack(self, path, saved=None, outfile=None):
+
+        first = True
 
         if saved:
             stack = load(open(saved, 'rb'))
@@ -59,14 +77,14 @@ class Classifier(object):
             try:
                 with rasopen(feature_raster, mode='r') as src:
                     arr = src.read()
-                    self.meta = src.meta.copy()
+                    self.raster_geo = src.meta.copy()
                     if saved:
                         break
             except RasterioIOError:
                 feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
                 with rasopen(feature_raster, mode='r') as src:
                     arr = src.read()
-                    meta = src.meta.copy()
+                    self.raster_geo = src.meta.copy()
             if first:
                 empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
                 stack = empty
@@ -77,7 +95,7 @@ class Classifier(object):
 
         if outfile:
             with open(outfile, 'wb') as handle:
-                    dump(stack, handle, protocol=0)
+                    dump(stack, handle, protocol=4)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
@@ -110,9 +128,9 @@ class Classifier(object):
         ct_nan = 0
         time = datetime.now()
 
-        for i in range(self.m_stack.shape[-1]):
-            if not np.ma.is_masked(self.m_stack[:, i]):
-                dat = self.m_stack[:, i]
+        for i in range(self.masked_data_stack.shape[-1]):
+            if not np.ma.is_masked(self.masked_data_stack[:, i]):
+                dat = self.masked_data_stack[:, i]
                 dat = array(dat).reshape((1, dat.shape[0]))
                 loss = self.sess.run(self.classify, feed_dict={self.pixel: dat})
                 self.new_array[0, i] = np.argmax(loss, 1)
@@ -123,20 +141,20 @@ class Classifier(object):
 
             if i == 1000000:
                 dif = (datetime.now() - time).min
-                total = dif * (i / self.m_stack.shape[-1])
+                total = dif * (i / self.masked_data_stack.shape[-1])
                 print('Estimated duration: {} min'.format(total))
 
         new_array = array(self.new_array, dtype=float32)
 
-        return new_array
+        return Result(self.idx, new_array)
 
-    def write_raster(self, new_array, meta, out_location):
-        meta['count'] = 1
-        meta['dtype'] = float32
+    def write_raster(self, out_location):
+        self.raster_geo['count'] = 1
+        self.raster_geo['dtype'] = float32
         out_ras = out_location.replace('data.pkl',
                                        'classified_{}.tif'.format(datetime.now().date()))
-        with rasopen(out_ras, 'w', **meta) as dst:
-            dst.write(new_array)
+        with rasopen(out_ras, 'w', **self.raster_geo) as dst:
+            dst.write(self.new_array)
 
         return None
 

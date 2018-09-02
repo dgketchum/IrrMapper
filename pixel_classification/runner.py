@@ -20,14 +20,14 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
-from functools import partial
+from subprocess import check_call, call
 from multiprocessing import Pool, Lock
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import get_stack, classify
+from pixel_classification.classify import Classifier
 
 home = os.path.expanduser('~')
 ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
@@ -134,18 +134,29 @@ class ArrayDisAssembly(object):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
+
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
-    # model = build_model(data_path, model)
+    model = build_model(data_path, model)
+
     array_file = data_path.replace('data.pkl', 'array.pkl')
-    data_stack, meta, final_shape, n = get_stack(data_path, outfile=array_file)
+    d = Classifier()
+    d.get_stack(data_path, saved=array_file)
+    data = d.masked_data_stack
+    raster_metadata = d.raster_geo
+
     cores = 4
-    a = ArrayDisAssembly(data_stack)
+    a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
+    classifiers = [Classifier(i, arr=a) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
-    func = partial(classify, dict(model=model, m_stack=data_stack, new_array=final_shape))
+
     with pool as p:
-        classified_arrays = pool.starmap(classify, arrays)
+        print('running pool on {} objects'.format(len(classifiers)))
+        results = [p.apply_async(c.classify, ()) for c in classifiers]
+        print('running get')
+        classified_arrays = [res.get() for res in results]
+        print(classified_arrays)
     pass
 # ========================= EOF ====================================================================
 #
