@@ -63,11 +63,12 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, root=None, geography=None, instances=None, from_pkl=False,
+    def __init__(self, root=None, geography=None, instances=None, from_pkl=False, pkl_path=None,
                  overwrite_array=False, overwrite_points=False, max_cloud=1.0, from_dict=None,
                  ancillary_rasters=None):
         """
 
+        :param pkl_path:
         :param overwrite_points:
         :param max_cloud:
         :param training_vectors: in the WGS84 EPSG 4326 coordinate reference system. (str)(.shp)
@@ -78,7 +79,7 @@ class PixelTrainingArray(object):
         be sampled once.  As the sample size becomes large (perhaps 10**5), the dataset will approach
         feature balance. Each point is taken from a random spatial index within each polygon.  Approximate
         feature balance is hard-coded in this class.
-        :param from_pkl: If the data exists, specify this path to instantiate a data-filled instance
+        :param pkl_path: If the data exists, specify this path to instantiate a data-filled instance
         without repeating the time-consuming sampling process. (bool)
         :param overwrite_array:
         """
@@ -93,6 +94,9 @@ class PixelTrainingArray(object):
 
         self.overwrite_array = overwrite_array
         self.overwrite_points = overwrite_points
+
+        if pkl_path:
+            self.from_pickle(pkl_path)
 
         if from_pkl and not overwrite_array:
             self.from_pickle()
