@@ -33,111 +33,121 @@ from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 
-def get_stack(path, saved=None, outfile=None):
-    stack = None
-    arr = None
-    first = True
-    meta = None
+class Classifier(object):
 
-    if saved:
-        with open(saved, 'rb') as handle:
-            load(stack, handle)
+    def __init__(self):
+        self.sess = None
+        self.model = None
+        self.classifier = None
+        self.pixel = None
+        self.new_array = None
+        self.meta = None
+        self.n = None
+        self.final_shape = None
+        self.masked_data_stack = None
 
-    data = PixelTrainingArray()
-    data.from_pickle(path)
+    def get_stack(self, path, saved=None, outfile=None):
 
-    for i, feat in enumerate(data.features):
-        feature_raster = data.model_map[feat]
-        try:
-            with rasopen(feature_raster, mode='r') as src:
-                arr = src.read()
-                meta = src.meta.copy()
-                if saved:
-                    break
-        except RasterioIOError:
-            feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
-            with rasopen(feature_raster, mode='r') as src:
-                arr = src.read()
-                meta = src.meta.copy()
-        if first:
-            empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
-            stack = empty
-            stack[i, :, :] = normalize_image_channel(arr)
-            first = False
-        else:
-            stack[i, :, :] = normalize_image_channel(arr)
+        if saved:
+            stack = load(open(saved, 'rb'))
 
-    if outfile:
-        with open(outfile, 'wb') as handle:
-            dump(stack, handle, protocol=0)
+        data = PixelTrainingArray()
+        data.from_pickle(path)
 
-    final_shape = 1, stack.shape[1], stack.shape[2]
-    stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
-    stack[stack == 0.] = np.nan
-    m_stack = marray(stack, mask=np.isnan(stack))
-    n = m_stack.shape[0]
-    del stack
+        for i, feat in enumerate(data.features):
+            feature_raster = data.model_map[feat]
+            try:
+                with rasopen(feature_raster, mode='r') as src:
+                    arr = src.read()
+                    self.meta = src.meta.copy()
+                    if saved:
+                        break
+            except RasterioIOError:
+                feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
+                with rasopen(feature_raster, mode='r') as src:
+                    arr = src.read()
+                    meta = src.meta.copy()
+            if first:
+                empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
+                stack = empty
+                stack[i, :, :] = self.normalize_image_channel(arr)
+                first = False
+            else:
+                stack[i, :, :] = self.normalize_image_channel(arr)
 
-    new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
-    return new_array, meta, final_shape, n
+        if outfile:
+            with open(outfile, 'wb') as handle:
+                    dump(stack, handle, protocol=0)
 
+        self.final_shape = 1, stack.shape[1], stack.shape[2]
+        stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
+        stack[stack == 0.] = np.nan
+        self.masked_data_stack = marray(stack, mask=np.isnan(stack))
+        self.n = self.masked_data_stack.shape[0]
+        del stack
 
-def classify(model, m_stack, new_array):
-    g = tf.get_default_graph()
-    n = m_stack.shape[0]
-    with tf.Session() as sess:
-        saver = tf.train.import_meta_graph('{}.meta'.format(model))
-        saver.restore(sess, model)
-        pixel = tf.placeholder("float", [None, n])
+        self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-        wh = sess.graph.get_tensor_by_name('Wh:0')
-        wo = sess.graph.get_tensor_by_name('Wo:0')
-        bh = sess.graph.get_tensor_by_name('Bh:0')
-        bo = sess.graph.get_tensor_by_name('Bo:0')
-        classify = tf.add(tf.matmul(multilayer_perceptron(pixel, wh, bh), wo), bo)
+    def load_model(self):
+        with tf.Session() as self.sess:
+            saver = tf.train.import_meta_graph('{}.meta'.format(self.model))
+            saver.restore(self.sess, self.model)
+            self.pixel = tf.placeholder("float", [None, self.n])
 
+            wh = self.sess.graph.get_tensor_by_name('Wh:0')
+            wo = self.sess.graph.get_tensor_by_name('Wo:0')
+            bh = self.sess.graph.get_tensor_by_name('Bh:0')
+            bo = self.sess.graph.get_tensor_by_name('Bo:0')
+            self.classifier = tf.add(tf.matmul(multilayer_perceptron(self.pixel, wh, bh), wo), bo)
+
+    def classify(self):
+
+        print(os.getpid())
+
+        g = tf.get_default_graph()
+
+        ct_out = 0
+        ct_nan = 0
         time = datetime.now()
 
-        ct_nan = 0
-        ct_out = 0
-
-        for i in range(m_stack.shape[-1]):
-            if not np.ma.is_masked(m_stack[:, i]):
-                dat = m_stack[:, i]
+        for i in range(self.m_stack.shape[-1]):
+            if not np.ma.is_masked(self.m_stack[:, i]):
+                dat = self.m_stack[:, i]
                 dat = array(dat).reshape((1, dat.shape[0]))
-                loss = sess.run(classify, feed_dict={pixel: dat})
-                new_array[0, i] = np.argmax(loss, 1)
+                loss = self.sess.run(self.classify, feed_dict={self.pixel: dat})
+                self.new_array[0, i] = np.argmax(loss, 1)
                 ct_out += 1
             else:
-                new_array[0, i] = np.nan
+                self.new_array[0, i] = np.nan
                 ct_nan += 1
 
-            if i % 1000000 == 0:
-                print('Count {} of {} pixels in {} seconds'.format(i, m_stack.shape[-1],
-                                                                   (datetime.now() - time).seconds))
+            if i == 1000000:
+                dif = (datetime.now() - time).min
+                total = dif * (i / self.m_stack.shape[-1])
+                print('Estimated duration: {} min'.format(total))
 
-    new_array = array(new_array, dtype=float32)
+        new_array = array(self.new_array, dtype=float32)
 
-    return new_array
+        return new_array
 
+    def write_raster(self, new_array, meta, out_location):
+        meta['count'] = 1
+        meta['dtype'] = float32
+        out_ras = out_location.replace('data.pkl',
+                                       'classified_{}.tif'.format(datetime.now().date()))
+        with rasopen(out_ras, 'w', **meta) as dst:
+            dst.write(new_array)
 
-def write_raster(new_array, meta, out_location):
-    meta['count'] = 1
-    meta['dtype'] = float32
-    out_ras = out_location.replace('data.pkl', 'classified_{}.tif'.format(datetime.now().date()))
-    with rasopen(out_ras, 'w', **meta) as dst:
-        dst.write(new_array)
+        return None
 
-    return None
-
-
-def normalize_image_channel(data):
-    data = data.reshape((data.shape[1], data.shape[2]))
-    scaler = StandardScaler()
-    scaler = scaler.fit(data)
-    data = scaler.transform(data)
-    data = data.reshape((1, data.shape[0], data.shape[1]))
-    return data
+    @staticmethod
+    def normalize_image_channel(data):
+        data = data.reshape((data.shape[1], data.shape[2]))
+        scaler = StandardScaler()
+        scaler = scaler.fit(data)
+        data = scaler.transform(data)
+        data = data.reshape((1, data.shape[0], data.shape[1]))
+        return data
 
 
 if __name__ == '__main__':
