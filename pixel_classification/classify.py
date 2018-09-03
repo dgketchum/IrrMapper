@@ -134,9 +134,11 @@ class Classifier(object):
                 dat = array(dat).reshape((1, dat.shape[0]))
                 loss = self.sess.run(self.classify, feed_dict={self.pixel: dat})
                 self.new_array[0, i] = np.argmax(loss, 1)
+                print('made it to valid')
                 ct_out += 1
             else:
                 self.new_array[0, i] = np.nan
+                print('made it to nan')
                 ct_nan += 1
 
             if i == 1000000:
