@@ -20,7 +20,7 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
-from multiprocessing import Pool, Lock
+from multiprocessing import Pool, cpu_count
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
@@ -151,16 +151,15 @@ if __name__ == '__main__':
     raster_metadata = d.raster_geo
     d = None
 
-    cores = 4
+    cores = cpu_count() - 1
     a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
-    arrays = [x[0:1000] for x in arrays]
-    # classifiers = [Classifier(i, arr=a, model=model) for i, a in enumerate(arrays)]
+    classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
 
     with pool as p:
-        # print('running pool on {} objects'.format(len(classifiers)))
-        results = [p.apply_async(add, c) for c in arrays]
+        print('running pool on {} objects'.format(len(classifiers)))
+        results = [p.apply_async(c.classify, ()) for c in classifiers]
         print('running get')
         classified_arrays = [res.get() for res in results]
         print(classified_arrays)
