@@ -131,6 +131,11 @@ class ArrayDisAssembly(object):
         return self.assembled
 
 
+def add(arr):
+    arr += 3
+    return arr
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
@@ -146,15 +151,15 @@ if __name__ == '__main__':
     raster_metadata = d.raster_geo
     d = None
 
-    cores = 6
+    cores = 4
     a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
-    classifiers = [Classifier(i, arr=a, model=model) for i, a in enumerate(arrays)]
+    # classifiers = [Classifier(i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
 
     with pool as p:
-        print('running pool on {} objects'.format(len(classifiers)))
-        results = [p.apply_async(c.classify, ) for c in classifiers]
+        # print('running pool on {} objects'.format(len(classifiers)))
+        results = [p.apply_async(add(), c) for c in arrays]
         print('running get')
         classified_arrays = [res.get() for res in results]
         print(classified_arrays)
