@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
 from pickle import load, dump, HIGHEST_PROTOCOL
-from numpy import zeros, array, float16, ndarray
+from numpy import zeros, array, float16, ndarray, nanmean
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
@@ -127,18 +127,19 @@ class Classifier(object):
         ct_out = 0
         ct_nan = 0
         time = datetime.now()
-
+        print('Classified array shape {}, nanmean {}'.format(self.new_array.shape,
+                                                             nanmean(self.new_array)))
         for i in range(self.masked_data_stack.shape[-1]):
             if not np.ma.is_masked(self.masked_data_stack[:, i]):
                 dat = self.masked_data_stack[:, i]
                 dat = array(dat).reshape((1, dat.shape[0]))
                 loss = self.sess.run(self.classify, feed_dict={self.pixel: dat})
-                self.new_array[0, i] = np.argmax(loss, 1)
                 print('made it to valid')
+                self.new_array[0, i] = np.argmax(loss, 1)
                 ct_out += 1
             else:
-                self.new_array[0, i] = np.nan
                 print('made it to nan')
+                self.new_array[0, i] = np.nan
                 ct_nan += 1
 
             if i == 1000000:
