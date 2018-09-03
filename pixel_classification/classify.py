@@ -131,7 +131,7 @@ class Classifier(object):
         if not self.new_array:
             self.new_array = np.zeros_like(self.masked_data_stack,
                                            dtype=float16)
-
+        return Result(self.idx, self.new_array)
         print('Classified array shape {}, nanmean {}'.format(self.new_array.shape,
                                                              nanmean(self.new_array)))
         for i in range(self.masked_data_stack.shape[-1]):

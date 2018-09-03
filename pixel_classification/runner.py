@@ -20,7 +20,6 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
-from subprocess import check_call, call
 from multiprocessing import Pool, Lock
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
@@ -155,7 +154,7 @@ if __name__ == '__main__':
 
     with pool as p:
         print('running pool on {} objects'.format(len(classifiers)))
-        results = [p.apply_async(c.classify, ()) for c in classifiers]
+        results = [p.apply_async(c.classify, ) for c in classifiers]
         print('running get')
         classified_arrays = [res.get() for res in results]
         print(classified_arrays)
