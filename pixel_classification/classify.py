@@ -21,7 +21,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
-from pickle import load, dump, HIGHEST_PROTOCOL
+from pickle import load, dump
 from numpy import zeros, array, float16, ndarray, nanmean
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
@@ -57,6 +57,8 @@ class Classifier(object):
         if isinstance(arr, ndarray):
             self.masked_data_stack = arr
             self.n = self.masked_data_stack.shape[0]
+            self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])),
+                                           dtype=float16)
 
         if model:
             self.model = model
@@ -147,9 +149,9 @@ class Classifier(object):
                 total = dif * (i / self.masked_data_stack.shape[-1])
                 print('Estimated duration: {} min'.format(total))
 
-        new_array = array(self.new_array, dtype=float32)
+        self.new_array = array(self.new_array, dtype=float32)
 
-        return Result(self.idx, new_array)
+        return Result(self.idx, self.new_array)
 
     def write_raster(self, out_location):
         self.raster_geo['count'] = 1
