@@ -154,6 +154,7 @@ if __name__ == '__main__':
     cores = 4
     a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
+    arrays = [x[0:1000] for x in arrays]
     # classifiers = [Classifier(i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
 
@@ -165,4 +166,3 @@ if __name__ == '__main__':
         print(classified_arrays)
     pass
 # ========================= EOF ====================================================================
-#
