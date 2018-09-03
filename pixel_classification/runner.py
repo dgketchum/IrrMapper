@@ -20,7 +20,8 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
-from multiprocessing import Pool, cpu_count
+# from multiprocessing import Pool, cpu_count
+from pathos.multiprocessing import Pool, cpu_count
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
@@ -129,11 +130,6 @@ class ArrayDisAssembly(object):
     def assemble(self, *arrs):
         self.assembled = concatenate((x for x in arrs), axis=0)
         return self.assembled
-
-
-def add(arr):
-    arr += 3
-    return arr
 
 
 if __name__ == '__main__':
