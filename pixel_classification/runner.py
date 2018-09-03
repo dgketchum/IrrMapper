@@ -21,7 +21,9 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
 # from multiprocessing import Pool, cpu_count
-from pathos.multiprocessing import Pool, cpu_count
+from pathos.multiprocessing import cpu_count
+from multiprocess.pool import Pool
+
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
