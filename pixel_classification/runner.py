@@ -123,6 +123,7 @@ class ArrayDisAssembly(object):
 
     def disassemble(self, n_sections, axis=1):
         self.arrays = array_split(self.original, n_sections, axis=axis)
+
         self.n_sections = n_sections
         return self.arrays
 
@@ -137,18 +138,19 @@ if __name__ == '__main__':
 
     data_path = os.path.join(abspath, 'model_data', 'data.pkl')
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
-    model = build_model(data_path, model)
+    # model = build_model(data_path, model)
 
     array_file = data_path.replace('data.pkl', 'array.pkl')
     d = Classifier()
     d.get_stack(data_path, saved=array_file)
     data = d.masked_data_stack
     raster_metadata = d.raster_geo
+    d = None
 
-    cores = 4
+    cores = 6
     a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
-    classifiers = [Classifier(i, arr=a) for i, a in enumerate(arrays)]
+    classifiers = [Classifier(i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
 
     with pool as p:

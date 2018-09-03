@@ -57,8 +57,6 @@ class Classifier(object):
         if isinstance(arr, ndarray):
             self.masked_data_stack = arr
             self.n = self.masked_data_stack.shape[0]
-            self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])),
-                                           dtype=float16)
 
         if model:
             self.model = model
@@ -129,6 +127,11 @@ class Classifier(object):
         ct_out = 0
         ct_nan = 0
         time = datetime.now()
+
+        if not self.new_array:
+            self.new_array = np.zeros_like(self.masked_data_stack,
+                                           dtype=float16)
+
         print('Classified array shape {}, nanmean {}'.format(self.new_array.shape,
                                                              nanmean(self.new_array)))
         for i in range(self.masked_data_stack.shape[-1]):
