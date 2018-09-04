@@ -20,6 +20,7 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
+from datetime import datetime
 # from multiprocessing import Pool, cpu_count
 from pathos.multiprocessing import cpu_count
 from multiprocess.pool import Pool
@@ -157,12 +158,12 @@ if __name__ == '__main__':
     arrays = a.disassemble(n_sections=cores)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
-
+    now = datetime.now()
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
-
+    print((datetime.now() - now).min)
     d.write_raster(out_location=model_data, out_name='cut_array.tif', new_array=final)
 # ========================= EOF ====================================================================
