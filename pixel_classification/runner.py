@@ -124,33 +124,33 @@ class ArrayDisAssembly(object):
 
     def disassemble(self, n_sections, axis=1):
         self.arrays = array_split(self.original, n_sections, axis=axis)
-
         self.n_sections = n_sections
         return self.arrays
 
-    def assemble(self, *arrs):
-        self.assembled = concatenate((x for x in arrs), axis=0)
+    def assemble(self, results, axis=1):
+        d = {r.idx: r.arr for r in results}
+        l = [d[k] for k in sorted(d.keys())]
+        self.assembled = concatenate(l, axis=axis)
         return self.assembled
 
 
-def get_classifier(obj):
-    return obj.classify()
+def get_classifier(obj, arr):
+    return obj.classify(arr)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
-
-    data_path = os.path.join(abspath, 'model_data', 'data.pkl')
-    model = os.path.join(abspath, 'model_data', 'model.ckpt')
+    model_data = os.path.join(abspath, 'model_data')
+    data_path = os.path.join(model_data, 'data.pkl')
+    model = os.path.join(model_data, 'model.ckpt')
     # model = build_model(data_path, model)
 
-    array_file = data_path.replace('data.pkl', 'cut_array.pkl')
+    array_file = data_path.replace('data.pkl', 'array.pkl')
     d = Classifier()
     d.get_stack(data_path, saved=array_file)
     data = d.masked_data_stack
     raster_metadata = d.raster_geo
-    d = None
 
     cores = cpu_count()
     a = ArrayDisAssembly(data)
@@ -159,10 +159,10 @@ if __name__ == '__main__':
     pool = Pool(processes=cores)
 
     with pool as p:
-        print('running pool on {} objects'.format(len(classifiers)))
-        results = [p.apply_async(get_classifier(c), ()) for c in classifiers]
-        print('running get')
-        classified_arrays = [res.get() for res in results]
-        print(classified_arrays)
-    pass
+        pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
+        classified_arrays = [res.get() for res in pool_results]
+        a.assemble(classified_arrays)
+        final = a.assembled.reshape(d.final_shape)
+
+    d.write_raster(out_location=model_data, out_name='cut_array.tif', new_array=final)
 # ========================= EOF ====================================================================

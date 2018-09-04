@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
 from pickle import load, dump
-from numpy import zeros, array, float16, ndarray, nanmean
+from numpy import zeros, array, float16, ndarray
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
@@ -106,7 +106,7 @@ class Classifier(object):
 
         self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-    def classify(self):
+    def classify(self, arr=None):
 
         sess = tf.Session()
         saver = tf.train.import_meta_graph('{}.meta'.format(self.model))
@@ -119,17 +119,22 @@ class Classifier(object):
         bo = sess.graph.get_tensor_by_name('Bo:0')
         classifier = tf.add(tf.matmul(multilayer_perceptron(self.pixel, wh, bh), wo), bo)
 
-        print(os.getpid())
+        if isinstance(arr, ndarray):
+            if len(arr.shape) > 2:
+                self.masked_data_stack = arr.reshape(arr.shape[0], arr.shape[1] * arr.shape[2])
+            elif len(arr.shape) == 2:
+                self.masked_data_stack = arr
+            else:
+                raise AttributeError('Invalid shape')
 
         g = tf.get_default_graph()
 
         ct_out = 0
         ct_nan = 0
-        time = datetime.now()
 
         if not self.new_array:
-            self.new_array = np.zeros_like(self.masked_data_stack,
-                                           dtype=float16)
+            self.new_array = zeros((1, self.masked_data_stack.shape[1]), dtype=float16)
+
         for i in range(self.masked_data_stack.shape[-1]):
             if not np.ma.is_masked(self.masked_data_stack[:, i]):
                 dat = self.masked_data_stack[:, i]
@@ -141,21 +146,29 @@ class Classifier(object):
                 self.new_array[0, i] = np.nan
                 ct_nan += 1
 
-            if i == 100000:
-                dif = (datetime.now() - time).min
-                print('{} min'.format(dif))
-
         sess.close()
 
         self.new_array = array(self.new_array, dtype=float32)
 
         return Result(self.idx, self.new_array)
 
-    def write_raster(self, out_location):
+    def write_raster(self, out_location, out_name, new_array=None):
+
+        if isinstance(new_array, ndarray):
+            self.new_array = new_array
+
+        try:
+            self.new_array = self.new_array.reshape(1, self.new_array.shape[1],
+                                                    self.new_array.shape[2])
+        except IndexError:
+            self.new_array = self.new_array.reshape(1, self.new_array.shape[0],
+                                                    self.new_array.shape[1])
+
+        self.raster_geo['dtype'] = str(array.dtype)
         self.raster_geo['count'] = 1
-        self.raster_geo['dtype'] = float32
-        out_ras = out_location.replace('data.pkl',
-                                       'classified_{}.tif'.format(datetime.now().date()))
+
+        out_ras = os.path.join(out_location, out_name)
+
         with rasopen(out_ras, 'w', **self.raster_geo) as dst:
             dst.write(self.new_array)
 
