@@ -60,7 +60,7 @@ class Classifier(object):
 
         if model:
             self.model = model
-            self.load_model()
+            # self.load_model()
 
     def get_stack(self, path, saved=None, outfile=None):
 
@@ -95,7 +95,7 @@ class Classifier(object):
 
         if outfile:
             with open(outfile, 'wb') as handle:
-                    dump(stack, handle, protocol=4)
+                dump(stack, handle, protocol=4)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
@@ -106,19 +106,18 @@ class Classifier(object):
 
         self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
 
-    def load_model(self):
-        with tf.Session() as self.sess:
-            saver = tf.train.import_meta_graph('{}.meta'.format(self.model))
-            saver.restore(self.sess, self.model)
-            self.pixel = tf.placeholder("float", [None, self.n])
-
-            wh = self.sess.graph.get_tensor_by_name('Wh:0')
-            wo = self.sess.graph.get_tensor_by_name('Wo:0')
-            bh = self.sess.graph.get_tensor_by_name('Bh:0')
-            bo = self.sess.graph.get_tensor_by_name('Bo:0')
-            self.classifier = tf.add(tf.matmul(multilayer_perceptron(self.pixel, wh, bh), wo), bo)
-
     def classify(self):
+
+        sess = tf.Session()
+        saver = tf.train.import_meta_graph('{}.meta'.format(self.model))
+        saver.restore(sess, self.model)
+        self.pixel = tf.placeholder("float", [None, self.n])
+
+        wh = sess.graph.get_tensor_by_name('Wh:0')
+        wo = sess.graph.get_tensor_by_name('Wo:0')
+        bh = sess.graph.get_tensor_by_name('Bh:0')
+        bo = sess.graph.get_tensor_by_name('Bo:0')
+        classifier = tf.add(tf.matmul(multilayer_perceptron(self.pixel, wh, bh), wo), bo)
 
         print(os.getpid())
 
@@ -131,18 +130,14 @@ class Classifier(object):
         if not self.new_array:
             self.new_array = np.zeros_like(self.masked_data_stack,
                                            dtype=float16)
-        print('Classified array shape {}, nanmean {}'.format(self.new_array.shape,
-                                                             nanmean(self.new_array)))
         for i in range(self.masked_data_stack.shape[-1]):
             if not np.ma.is_masked(self.masked_data_stack[:, i]):
                 dat = self.masked_data_stack[:, i]
                 dat = array(dat).reshape((1, dat.shape[0]))
-                loss = self.sess.run(self.classify, feed_dict={self.pixel: dat})
-                print('made it to valid')
+                loss = sess.run(classifier, feed_dict={self.pixel: dat})
                 self.new_array[0, i] = np.argmax(loss, 1)
                 ct_out += 1
             else:
-                print('made it to nan')
                 self.new_array[0, i] = np.nan
                 ct_nan += 1
 
@@ -150,6 +145,8 @@ class Classifier(object):
                 dif = (datetime.now() - time).min
                 total = dif * (i / self.masked_data_stack.shape[-1])
                 print('Estimated duration: {} min'.format(total))
+
+        sess.close()
 
         self.new_array = array(self.new_array, dtype=float32)
 
