@@ -143,8 +143,7 @@ class Classifier(object):
 
             if i == 100000:
                 dif = (datetime.now() - time).min
-                total = dif * (self.masked_data_stack.shape[-1] / i)
-                print('Estimated duration: {} min'.format(total))
+                print('{} min'.format(dif))
 
         sess.close()
 

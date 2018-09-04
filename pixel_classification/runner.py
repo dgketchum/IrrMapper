@@ -145,7 +145,7 @@ if __name__ == '__main__':
     model = os.path.join(abspath, 'model_data', 'model.ckpt')
     # model = build_model(data_path, model)
 
-    array_file = data_path.replace('data.pkl', 'array.pkl')
+    array_file = data_path.replace('data.pkl', 'cut_array.pkl')
     d = Classifier()
     d.get_stack(data_path, saved=array_file)
     data = d.masked_data_stack
