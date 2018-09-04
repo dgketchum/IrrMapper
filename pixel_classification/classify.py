@@ -141,9 +141,9 @@ class Classifier(object):
                 self.new_array[0, i] = np.nan
                 ct_nan += 1
 
-            if i == 1000000:
+            if i == 100000:
                 dif = (datetime.now() - time).min
-                total = dif * (i / self.masked_data_stack.shape[-1])
+                total = dif * (self.masked_data_stack.shape[-1] / i)
                 print('Estimated duration: {} min'.format(total))
 
         sess.close()

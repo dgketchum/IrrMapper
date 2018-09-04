@@ -24,7 +24,6 @@ from numpy import vstack, array_split, concatenate
 from pathos.multiprocessing import cpu_count
 from multiprocess.pool import Pool
 
-
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_landsat import prepare_image_stack
 from pixel_classification.compose_array import PixelTrainingArray
@@ -134,6 +133,10 @@ class ArrayDisAssembly(object):
         return self.assembled
 
 
+def get_classifier(obj):
+    return obj.classify()
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
@@ -149,7 +152,7 @@ if __name__ == '__main__':
     raster_metadata = d.raster_geo
     d = None
 
-    cores = cpu_count() - 1
+    cores = cpu_count()
     a = ArrayDisAssembly(data)
     arrays = a.disassemble(n_sections=cores)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
@@ -157,7 +160,7 @@ if __name__ == '__main__':
 
     with pool as p:
         print('running pool on {} objects'.format(len(classifiers)))
-        results = [p.apply_async(c.classify, ()) for c in classifiers]
+        results = [p.apply_async(get_classifier(c), ()) for c in classifiers]
         print('running get')
         classified_arrays = [res.get() for res in results]
         print(classified_arrays)
