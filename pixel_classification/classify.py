@@ -164,7 +164,7 @@ class Classifier(object):
             self.new_array = self.new_array.reshape(1, self.new_array.shape[0],
                                                     self.new_array.shape[1])
 
-        self.raster_geo['dtype'] = str(array.dtype)
+        self.raster_geo['dtype'] = str(self.new_array.dtype)
         self.raster_geo['count'] = 1
 
         out_ras = os.path.join(out_location, out_name)
