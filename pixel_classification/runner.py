@@ -139,6 +139,29 @@ def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
+def classify_multiproc(model, data, array):
+    d = Classifier()
+    d.get_stack(data, saved=array)
+    data = d.masked_data_stack
+
+    cores = cpu_count()
+    a = ArrayDisAssembly(data)
+    arrays = a.disassemble(n_sections=cores)
+    classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
+    pool = Pool(processes=cores)
+    time = datetime.now()
+    with pool as p:
+        pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
+        classified_arrays = [res.get() for res in pool_results]
+        a.assemble(classified_arrays)
+        final = a.assembled.reshape(d.final_shape)
+    td = (datetime.now() - time)
+    print(td.days, td.seconds // 3600, (td.seconds // 60) % 60)
+    d.write_raster(out_location=model_data, out_name='test_classified.tif', new_array=final)
+
+    return None
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     # build_training_feature_array(skip_landsat=True)
@@ -146,24 +169,7 @@ if __name__ == '__main__':
     data_path = os.path.join(model_data, 'data.pkl')
     model = os.path.join(model_data, 'model.ckpt')
     # model = build_model(data_path, model)
-
     array_file = data_path.replace('data.pkl', 'array.pkl')
-    d = Classifier()
-    d.get_stack(data_path, saved=array_file)
-    data = d.masked_data_stack
-    raster_metadata = d.raster_geo
+    classify_multiproc(model, data_path, array_file)
 
-    cores = cpu_count()
-    a = ArrayDisAssembly(data)
-    arrays = a.disassemble(n_sections=cores)
-    classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
-    pool = Pool(processes=cores)
-    now = datetime.now()
-    with pool as p:
-        pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
-        classified_arrays = [res.get() for res in pool_results]
-        a.assemble(classified_arrays)
-        final = a.assembled.reshape(d.final_shape)
-    print((datetime.now() - now).min)
-    d.write_raster(out_location=model_data, out_name='cut_array.tif', new_array=final)
 # ========================= EOF ====================================================================
