@@ -26,7 +26,7 @@ from pathos.multiprocessing import cpu_count
 from multiprocess.pool import Pool
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
-from pixel_classification.prepare_landsat import prepare_image_stack
+from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import Classifier
@@ -36,26 +36,25 @@ ROOT = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
 
 OBJECT_MAP = {
     'MT': Montana,
-    # 'NV': Nevada,
-    # 'OR': Oregon,
-    # 'UT': Utah,
-    # 'WA': Washington
+    'NV': Nevada,
+    'OR': Oregon,
+    'UT': Utah,
+    'WA': Washington
 }
 
 
-def build_training_feature_array(skip_landsat=False):
+def build_training_feature_array():
     for key, obj in OBJECT_MAP.items():
-        print(key)
-        path = os.path.join(ROOT, key)
-        geo = obj(path)
+        root = os.path.join(ROOT, key)
+        geo = obj(root)
         if geo.sat == 8:
-            prepare_image_stack(geo.path, geo.row, geo.year, path, geo.sat,
-                                skip_landsat=skip_landsat)
-            dem = os.path.join(path, str(geo.path), str(geo.row), 'dem.tif')
-            slope = os.path.join(path, str(geo.path), str(geo.row), 'slope.tif')
-            p = PixelTrainingArray(root=path, geography=geo, instances=5000, overwrite_array=True,
-                                   overwrite_points=False, ancillary_rasters=[dem,
-                                                                              slope])
+            # TODO: add path for multi-scene root, add more parameters to ImageStack instance
+            i = ImageStack(satellite=geo.sat, path=geo.path, row=geo.row)
+
+            p = PixelTrainingArray(root=i.root, geography=geo, instances=5000,
+                                   overwrite_array=True, overwrite_points=True,
+                                   ancillary_rasters=[dem, slope])
+
             p.extract_sample()
 
 

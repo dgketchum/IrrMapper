@@ -23,6 +23,7 @@ from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 from sat_image.bounds import RasterBounds
 from dem import AwsDem
+from ssebop_app.image import get_image
 
 
 class ImageStack(object):
@@ -30,7 +31,7 @@ class ImageStack(object):
     Prepare a stack of images from Landsat, terrain, etc. Save stack in identical geometry.
     """
 
-    def __init__(self, satellite, path, row, max_cloud_pct=None, start=None, end=None,
+    def __init__(self, satellite, path, row, root=None, max_cloud_pct=None, start=None, end=None,
                  year=None, output_directory=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
@@ -47,6 +48,7 @@ class ImageStack(object):
         self.max_cloud = max_cloud_pct
         self.start = start
         self.end = end
+        self.root = root
         self.out_dir = output_directory
 
         self.profile = None
@@ -70,7 +72,7 @@ class ImageStack(object):
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
 
         self.get_geography()
-        [self.make_fmask(d, sat=self.sat_abv) for d in self.image_dirs]
+        [self.make_fmask(d) for d in self.image_dirs]
 
     def get_geography(self):
 
@@ -94,11 +96,14 @@ class ImageStack(object):
             dem.terrain(attribute='slope',
                         out_file=slope_name)
 
-        warp_vrt(sub_directory, delete_extra=True, use_band_map=True)
+    def get_et(self):
+        get_image(self.out_dir, self.root, image_exists=True, satellite=self.sat, path=self.path,
+                  row=self.row)
 
-        return None
+    def warp_vrt(self):
+        warp_vrt(self.out_dir, delete_extra=True, use_band_map=True)
 
-    def make_fmask(self, image_dir, sat='LC8'):
+    def make_fmask(self, image_dir):
         self.dst_path_cloud = os.path.join(image_dir, 'cloud_fmask.tif')
         self.dst_path_water = os.path.join(image_dir, 'water_fmask.tif')
 
