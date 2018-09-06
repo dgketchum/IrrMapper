@@ -21,7 +21,6 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack, array_split, concatenate
 from datetime import datetime
-# from multiprocessing import Pool, cpu_count
 from pathos.multiprocessing import cpu_count
 from multiprocess.pool import Pool
 
@@ -43,13 +42,14 @@ OBJECT_MAP = {
 }
 
 
-def build_training_feature_array():
+def build_training_feature_array(root):
     for key, obj in OBJECT_MAP.items():
-        root = os.path.join(ROOT, key)
-        geo = obj(root)
+        geography = os.path.join(ROOT, key)
+        geo = obj(geography)
         if geo.sat == 8:
             # TODO: add path for multi-scene root, add more parameters to ImageStack instance
-            i = ImageStack(satellite=geo.sat, path=geo.path, row=geo.row)
+            i = ImageStack(root=root, satellite=geo.sat, path=geo.path, row=geo.row,
+                           max_cloud_pct=40, year=geo.year)
 
             p = PixelTrainingArray(root=i.root, geography=geo, instances=5000,
                                    overwrite_array=True, overwrite_points=True,
@@ -163,7 +163,8 @@ def classify_multiproc(model, data, array):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    # build_training_feature_array(skip_landsat=True)
+
+    build_training_feature_array()
     model_data = os.path.join(abspath, 'model_data')
     data_path = os.path.join(model_data, 'data.pkl')
     model = os.path.join(model_data, 'model.ckpt')
