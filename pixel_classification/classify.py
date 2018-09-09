@@ -22,8 +22,6 @@ from multiprocessing import cpu_count
 from multiprocess.pool import Pool
 from numpy.core.multiarray import concatenate
 
-from pixel_classification.runner import model_data
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
@@ -44,6 +42,33 @@ class Result:
     def __init__(self, idx, arr):
         self.idx = idx
         self.arr = arr
+
+
+class ArrayDisAssembly(object):
+
+    def __init__(self, arr):
+        self.arrays = None
+        self.n_sections = None
+        self.assembled = None
+        self.axis = None
+
+        if isinstance(arr, list):
+            self.arrays = arr
+            self.assembled = self.assemble(arr)
+
+        self.original = arr
+        self.shape = arr.shape
+
+    def disassemble(self, n_sections, axis=1):
+        self.arrays = array_split(self.original, n_sections, axis=axis)
+        self.n_sections = n_sections
+        return self.arrays
+
+    def assemble(self, results, axis=1):
+        d = {r.idx: r.arr for r in results}
+        l = [d[k] for k in sorted(d.keys())]
+        self.assembled = concatenate(l, axis=axis)
+        return self.assembled
 
 
 class Classifier(object):
@@ -190,9 +215,6 @@ class Classifier(object):
         return data
 
 
-if __name__ == '__main__':
-    pass
-# ========================= EOF ====================================================================
 def get_classifier(obj, arr):
     return obj.classify(arr)
 
@@ -214,34 +236,13 @@ def classify_multiproc(model, data, array):
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
     td = (datetime.now() - time)
+
     print(td.days, td.seconds // 3600, (td.seconds // 60) % 60)
-    d.write_raster(out_location=model_data, out_name='test_classified.tif', new_array=final)
+    d.write_raster(out_location=os.path.dirname(array), out_name='test_classified.tif', new_array=final)
 
     return None
 
 
-class ArrayDisAssembly(object):
-
-    def __init__(self, arr):
-        self.arrays = None
-        self.n_sections = None
-        self.assembled = None
-        self.axis = None
-
-        if isinstance(arr, list):
-            self.arrays = arr
-            self.assembled = self.assemble(arr)
-
-        self.original = arr
-        self.shape = arr.shape
-
-    def disassemble(self, n_sections, axis=1):
-        self.arrays = array_split(self.original, n_sections, axis=axis)
-        self.n_sections = n_sections
-        return self.arrays
-
-    def assemble(self, results, axis=1):
-        d = {r.idx: r.arr for r in results}
-        l = [d[k] for k in sorted(d.keys())]
-        self.assembled = concatenate(l, axis=axis)
-        return self.assembled
+if __name__ == '__main__':
+    pass
+# ========================= EOF ====================================================================
