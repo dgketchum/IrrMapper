@@ -17,11 +17,13 @@
 
 import os
 
+from numpy import mean
+
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
-from sat_image.bounds import RasterBounds
+from bounds import RasterBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
 
@@ -32,7 +34,7 @@ class ImageStack(object):
     """
 
     def __init__(self, satellite, path, row, root=None, max_cloud_pct=None, start=None, end=None,
-                 year=None, overwrite_landsat=False):
+                 year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -51,12 +53,16 @@ class ImageStack(object):
         self.root = root
 
         self.profile = None
-        self.image_dir = None
         self.dst_path_cloud = None
         self.dst_path_water = None
         self.landsat = None
+        self.scenes = None
         self.image_dirs = None
         self.image_paths = None
+
+        self.n = n_landsat
+
+        self.ancillary_rasters = []
 
         if year and not start and not end:
             self.start = '{}-05-01'.format(self.year)
@@ -69,7 +75,10 @@ class ImageStack(object):
     def get_landsat(self):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
                            output_path=self.root, max_cloud_percent=self.max_cloud)
-        g.download()
+
+        g.select_scenes(self.n)
+        self.scenes = g.selected_scenes
+        g.download(list_type='selected')
 
         self.image_dirs = [x[0] for x in os.walk(self.root) if
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
@@ -80,6 +89,9 @@ class ImageStack(object):
     def get_terrain(self):
 
         slope_name = os.path.join(self.root, 'slope.tif')
+        dif_elev = os.path.join(self.root, 'elevation_diff.tif')
+        self.ancillary_rasters.append(slope_name)
+        self.ancillary_rasters.append(dif_elev)
 
         if not os.path.isfile(slope_name):
             polygon = self.landsat.get_tile_geometry()
@@ -92,11 +104,19 @@ class ImageStack(object):
                          clip_object=polygon)
 
             dem.terrain(attribute='slope',
-                        out_file=slope_name)
+                        out_file=slope_name, save_and_return=True)
+
+            elev = dem.terrain(attribute='elevation')
+            elev = elev - mean(elev)
+            dem.save(elev, geometry=dem.target_profile, output_filename=dif_elev)
 
     def get_et(self):
-        get_image(self.image_dir, self.root, image_exists=True, satellite=self.sat, path=self.path,
-                  row=self.row)
+        for i, d in enumerate(self.image_dirs):
+            date = self.scenes.iloc[i]['DATE_ACQUIRED']
+            _id = self.scenes.iloc[i]['SCENE_ID']
+            get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
+                      satellite=self.sat, path=self.path, row=self.row, image_date=date,
+                      landsat_object=self.landsat)
 
     def warp_vrt(self):
         warp_vrt(self.root, delete_extra=True, use_band_map=True)

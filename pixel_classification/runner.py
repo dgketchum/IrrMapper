@@ -25,6 +25,7 @@ from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washingt
 from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
+from pixel_classification.classify import classify_multiproc
 
 OBJECT_MAP = {
     'MT': Montana,
@@ -35,7 +36,6 @@ OBJECT_MAP = {
 
 
 def build_training_feature_array(project_root, training_root, sat=8):
-
     for key, obj in OBJECT_MAP.items():
 
         project_state_dir = os.path.join(project_root, key)
@@ -46,10 +46,9 @@ def build_training_feature_array(project_root, training_root, sat=8):
         geo = obj(geography)
 
         if geo.sat == sat:
-
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
-                           max_cloud_pct=40, year=geo.year)
-
+                           n_landsat=3, year=geo.year, max_cloud_pct=70)
+            i.build_all()
             p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=True,
                     overwrite_points=True, ancillary_rasters=[dem, slope])
 
@@ -117,10 +116,10 @@ if __name__ == '__main__':
 
     build_training_feature_array(project_root=project, training_root=training)
 
-    data_path = os.path.join(model_data, 'data.pkl')
-    model = os.path.join(model_data, 'model.ckpt')
+    # data_path = os.path.join(model_data, 'data.pkl')
+    # model = os.path.join(model_data, 'model.ckpt')
     # model = build_model(data_path, model)
-    array_file = data_path.replace('data.pkl', 'array.pkl')
+    # array_file = data_path.replace('data.pkl', 'array.pkl')
     # classify_multiproc(model, data_path, array_file)
 
 # ========================= EOF ====================================================================
