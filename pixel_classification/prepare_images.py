@@ -32,7 +32,7 @@ class ImageStack(object):
     """
 
     def __init__(self, satellite, path, row, root=None, max_cloud_pct=None, start=None, end=None,
-                 year=None):
+                 year=None, overwrite_landsat=False):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
