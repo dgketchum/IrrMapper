@@ -15,6 +15,10 @@
 # =============================================================================================
 
 import os
+import sys
+
+abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(abspath)
 import pickle
 from copy import deepcopy
 from datetime import datetime

@@ -16,7 +16,10 @@
 
 
 import os
+import sys
 
+abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(abspath)
 from numpy import mean
 
 from landsat.google_download import GoogleDownload
