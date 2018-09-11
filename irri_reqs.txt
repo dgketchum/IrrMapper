@@ -53,7 +53,7 @@ pytz==2018.4
 PyYAML==3.12
 rasterio==1.0a12
 requests==2.18.4
-SatelliteImage==0.1.22
+SatelliteImage==0.1.26
 scikit-learn==0.19.1
 scipy==1.1.0
 setuptools-yaml==0.4

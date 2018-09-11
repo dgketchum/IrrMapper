@@ -546,7 +546,7 @@ class PixelTrainingArray(object):
 
     @property
     def data_path(self):
-        return os.path.join(self.year_dir, 'data.pkl')
+        return os.path.join(self.root, 'data.pkl')
 
     @property
     def shapefile_path(self):

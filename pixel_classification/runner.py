@@ -49,10 +49,14 @@ def build_training_feature_array(project_root, training_root, sat=8):
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                            n_landsat=3, year=geo.year, max_cloud_pct=70)
             i.build_all()
-            p = Pta(root=i.root, geography=geo, instances=10, overwrite_array=True,
-                    overwrite_points=False, ancillary_rasters=i.ancillary_rasters)
-
+            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=True,
+                    overwrite_points=True, ancillary_rasters=i.ancillary_rasters)
             p.extract_sample()
+        else:
+            i = None
+            p = None
+
+        i.warp_vrt()
 
 
 def build_model(root, path, model_path):
@@ -116,8 +120,8 @@ if __name__ == '__main__':
 
     build_training_feature_array(project_root=project, training_root=training)
 
-    # data_path = os.path.join(model_data, 'data.pkl')
-    # model = os.path.join(model_data, 'model.ckpt')
+    data_path = os.path.join(model_data, 'data.pkl')
+    model = os.path.join(model_data, 'model.ckpt')
     # model = build_model(data_path, model)
     # array_file = data_path.replace('data.pkl', 'array.pkl')
     # classify_multiproc(model, data_path, array_file)
