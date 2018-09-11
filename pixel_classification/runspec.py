@@ -57,12 +57,12 @@ class Montana(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['MT_Sun_River_2013_3927.shp', 'MT_FLU_2017_Fallow_3927.shp',
-                       'MT_FLU_2017_Forrest_3927.shp', 'MT_other_3927.shp']
+        self.shapes = ['MT_Huntley_Main_2013_3728.shp', 'MT_FLU_2017_Fallow_3728.shp',
+                       'MT_FLU_2017_Forrest_3728.shp', 'MT_other_3728.shp']
         self.add_paths()
 
-        self.path = 39
-        self.row = 27
+        self.path = 37
+        self.row = 28
         self.year = 2013
         self.sat = 8
 

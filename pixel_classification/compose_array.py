@@ -97,12 +97,15 @@ class PixelTrainingArray(object):
 
         if pkl_path:
             self.from_pickle(pkl_path)
+            self.array_exists = True
 
         if from_pkl and not overwrite_array:
             self.from_pickle()
+            self.array_exists = True
 
         elif from_dict and not overwrite_array:
             self._from_dict(from_dict)
+            self.array_exists = True
 
         elif not overwrite_array and root:
             if os.path.isfile(os.path.join(self.year_dir, 'data.pkl')):
@@ -349,7 +352,7 @@ class PixelTrainingArray(object):
             path = self.data_path
 
         with open(path, 'wb') as handle:
-            pickle.dump(data, handle, protocol=0)
+            pickle.dump(data, handle, protocol=2)
 
         return path
 
@@ -503,9 +506,6 @@ class PixelTrainingArray(object):
                     polys.append(geo)
                 except AttributeError:
                     bad_geo_count += 1
-
-        # print('Found {} bad (e.g., zero-area) geometries'.format(bad_geo_count))
-        # print('Found {} valid geometries'.format(len(polys)))
 
         return polys
 

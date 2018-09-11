@@ -71,6 +71,8 @@ class ImageStack(object):
     def build_all(self):
         self.get_landsat()
         self.get_et()
+        self.get_terrain()
+        self.warp_vrt()
 
     def get_landsat(self):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
@@ -117,9 +119,12 @@ class ImageStack(object):
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=date,
                       landsat_object=self.landsat)
+            products = ['ssebop_et_mskd', 'pet', 'lst', 'ssebop_etrf']
+            for p in products:
+                self.ancillary_rasters.append(os.path.join(d, '{}.tif'.format(p)))
 
     def warp_vrt(self):
-        warp_vrt(self.root, delete_extra=True, use_band_map=True)
+        warp_vrt(self.root, delete_extra=False, use_band_map=False, remove_bqa=True)
 
     def _get_geography(self):
 
