@@ -20,7 +20,11 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 
-from requests import get
+try:
+    from urllib.request import urlretrieve
+except ImportError:
+    from urllib import urlretrieve
+
 import copy
 from numpy import empty, float32, array
 from rasterio import open as rasopen
@@ -35,25 +39,41 @@ from bounds import RasterBounds
 
 class CropDataLayer(object):
 
-    def __init__(self, target_profile, year):
-        self.url_base = 'ftp.nass.usda.gov/download/res'
-        self.url_year = '{}_30m_cdls.zip'.format(year)
-        self.url = os.path.join(self.url_base, self.url_year)
+    def __init__(self, target_profile, year, out_loc=None):
+
+        self.url_base = 'https://nassgeodata.gmu.edu/CropScapeService'
+        self.req_string = 'wms_cdlall.cgi?' \
+                          'service=wcs&version=1.0.0&request=getcoverage&coverage=cdl_' \
+                          '{year}_ia&crs=epsg:102004&bbox={wsen}1&resx=30&resy=30&format=gtiff'
+
+        self.url = os.path.join(self.url_base, self.req_string)
         self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
-        self.zip_file = os.path.join(os.path.dirname(__file__), 'model_data', '{}_30m_cdls.zip'.format(year))
+        self.zip_file = os.path.join(os.path.dirname(__file__), 'model_data',
+                                     '{}_30m_cdls.zip'.format(year))
+        self.output = out_loc
+
+        if not self.output:
+            self.output = self.cdl_location
 
         self.temp_dir = mkdtemp()
 
         self.target_profile = target_profile
-        self.bbox = RasterBounds(profile=self.target_profile)
-        self.src_bounds_wsen = None
+        self.bbox = RasterBounds(profile=self.target_profile,
+                                 affine_transform=self.target_profile['transform'])
+        self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
+        bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
 
+        self.url = '{}/{}'.format(self.url_base, self.req_string.format(year=year, wsen=bb_str))
+        print(self.url)
+        print('https://nassgeodata.gmu.edu/CropScapeService/wms_cdl_ia.cgi?service=wcs&version=1.0.0&'
+              'request=getcoverage&coverage=cdl_2012_ia&crs=epsg:102004&bbox=130783,2203171,153923,2217961'
+              '&resx=30&resy=30&format=gtiff')
         self.projection = None
         self.reprojection = None
 
     def download_zipped_cdl(self):
         if not os.path.isfile(self.zip_file):
-            req = get(self.url, stream=True)
+            req = urlretrieve(self.url, self.cdl_location)
             if req.status_code != 200:
                 raise ValueError('Bad response {} from request.'.format(req.status_code))
 
@@ -198,15 +218,18 @@ class CropDataLayer(object):
             return arr
 
     @staticmethod
-    def save_raster(arr, geometry, output_filename):
+    def save(array, geometry, output_filename, crs=None, return_array=False):
         try:
-            arr = arr.reshape(1, arr.shape[1], arr.shape[2])
+            array = array.reshape(1, array.shape[1], array.shape[2])
         except IndexError:
-            arr = arr.reshape(1, arr.shape[0], arr.shape[1])
-        geometry['dtype'] = str(arr.dtype)
-
+            array = array.reshape(1, array.shape[0], array.shape[1])
+        geometry['dtype'] = str(array.dtype)
+        if crs:
+            geometry['crs'] = CRS({'init': crs})
         with rasopen(output_filename, 'w', **geometry) as dst:
-            dst.write(arr)
+            dst.write(array)
+        if return_array:
+            return array
         return None
 
 

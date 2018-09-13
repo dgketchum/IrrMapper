@@ -15,14 +15,30 @@
 # ===============================================================================
 import unittest
 
+from rasterio.crs import CRS
+from rasterio.transform import Affine
 
+from pixel_classification.crop_data_layer import CropDataLayer as Cdl
+
+
+# noinspection PyTypeChecker
 class MyTestCase(unittest.TestCase):
 
     def setUp(self):
-        pass
+        self.year = 2014
+        self.target_profile = {'driver': 'GTiff',
+                               'dtype': 'uint16',
+                               'nodata': None,
+                               'width': 7671,
+                               'height': 7791,
+                               'count': 1,
+                               'crs': CRS({'init': 'epsg:32612'}),
+                               'transform': Affine(30.0, 0.0, 582285.0,
+                                                   0.0, -30.0, 5216715.0)}
 
-    def test_something(self):
-        self.assertEqual(True, False)
+    def test_download(self):
+        cdl = Cdl(target_profile=self.target_profile, year=self.year)
+        cdl.download_zipped_cdl()
 
 
 if __name__ == '__main__':
