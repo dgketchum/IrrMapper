@@ -24,9 +24,11 @@ try:
     from urllib.request import urlretrieve
 except ImportError:
     from urllib import urlretrieve
-
+import re
 import copy
-from numpy import empty, float32, array
+from xml.etree import ElementTree
+from requests import get
+from numpy import empty, float32
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.transform import Affine
@@ -39,21 +41,17 @@ from bounds import RasterBounds
 
 class CropDataLayer(object):
 
-    def __init__(self, target_profile, year, out_loc=None):
+    def __init__(self, target_profile, year, out_file=None):
 
-        self.url_base = 'https://nassgeodata.gmu.edu/CropScapeService'
-        self.req_string = 'wms_cdlall.cgi?' \
-                          'service=wcs&version=1.0.0&request=getcoverage&coverage=cdl_' \
-                          '{year}_ia&crs=epsg:102004&bbox={wsen}1&resx=30&resy=30&format=gtiff'
+        self.url_base = 'https://nassgeodata.gmu.edu/axis2/services/CDLService/' \
+                        'GetCDLFile?year={year}&bbox={wsen}'
 
-        self.url = os.path.join(self.url_base, self.req_string)
-        self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
-        self.zip_file = os.path.join(os.path.dirname(__file__), 'model_data',
-                                     '{}_30m_cdls.zip'.format(year))
-        self.output = out_loc
-
-        if not self.output:
-            self.output = self.cdl_location
+        if not out_file:
+            self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
+        else:
+            self.out_file = out_file
+            self.cdl_location = out_file
+        self.zip_file = os.path.join(self.cdl_location, '{}_30m_cdls.zip'.format(year))
 
         self.temp_dir = mkdtemp()
 
@@ -62,73 +60,48 @@ class CropDataLayer(object):
                                  affine_transform=self.target_profile['transform'])
         self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
         bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
+        self.request_url = self.url_base.format(year=year, wsen=bb_str)
+        self.data_url = self._get_data_url()
 
-        self.url = '{}/{}'.format(self.url_base, self.req_string.format(year=year, wsen=bb_str))
-        print(self.url)
-        print('https://nassgeodata.gmu.edu/CropScapeService/wms_cdl_ia.cgi?service=wcs&version=1.0.0&'
-              'request=getcoverage&coverage=cdl_2012_ia&crs=epsg:102004&bbox=130783,2203171,153923,2217961'
-              '&resx=30&resy=30&format=gtiff')
+        self.original_tif = None
+        self.mask = None
         self.projection = None
         self.reprojection = None
 
-    def download_zipped_cdl(self):
-        if not os.path.isfile(self.zip_file):
-            req = urlretrieve(self.url, self.cdl_location)
-            if req.status_code != 200:
-                raise ValueError('Bad response {} from request.'.format(req.status_code))
+    def get_original_tif(self):
 
-            with open(self.zip_file, 'wb') as f:
-                print('Downloading {}'.format(self.url))
-                for chunk in req.iter_content(chunk_size=1024):
-                    if chunk:
-                        f.write(chunk)
+        req = get(self.data_url, verify=False)
 
-    def conform(self, subset, out_file=None):
-        if subset.dtype != float32:
-            subset = array(subset, dtype=float32)
-        self._project(subset)
+        if req.status_code != 200:
+            raise ValueError('Bad response {} from request.'.format(req.status_code))
+
+        if self.out_file:
+            self.original_tif = os.path.join(self.out_file, os.path.basename(self.data_url))
+        else:
+            self.original_tif = os.path.join(self.temp_dir, os.path.basename(self.data_url))
+
+        with open(self.original_tif, 'wb') as f:
+            print('Downloading {}'.format(self.data_url))
+            for chunk in req.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+
+    def conform_data(self):
+        self.get_original_tif()
         self._reproject()
         self._mask()
         result = self._resample()
-        if out_file:
-            self.save_raster(result, self.target_profile, output_filename=out_file)
+
+        if self.out_file:
+            self.save(result, self.target_profile, output_filename=self.out_file)
+
         return result
-
-    def _project(self, subset):
-
-        proj_path = os.path.join(self.temp_dir, 'tiled_proj.tif')
-        setattr(self, 'projection', proj_path)
-
-        profile = copy.deepcopy(self.target_profile)
-        profile['dtype'] = float32
-        bb = self.bbox.as_tuple()
-
-        if self.src_bounds_wsen:
-            bounds = self.src_bounds_wsen
-        else:
-            bounds = (bb[0], bb[1],
-                      bb[2], bb[3])
-
-        dst_affine, dst_width, dst_height = cdt(CRS({'init': 'epsg:4326'}),
-                                                CRS({'init': 'epsg:4326'}),
-                                                subset.shape[1],
-                                                subset.shape[2],
-                                                *bounds)
-
-        profile.update({'crs': CRS({'init': 'epsg:4326'}),
-                        'transform': dst_affine,
-                        'width': dst_width,
-                        'height': dst_height})
-
-        with rasopen(proj_path, 'w', **profile) as dst:
-            dst.write(subset)
 
     def _reproject(self):
 
-        reproj_path = os.path.join(self.temp_dir, 'reproj.tif')
-        setattr(self, 'reprojection', reproj_path)
+        self.reprojection = os.path.join(self.temp_dir, 'cdl_reprojection.tif')
 
-        with rasopen(self.projection, 'r') as src:
+        with rasopen(self.original_tif, 'r') as src:
             src_profile = src.profile
             src_bounds = src.bounds
             src_array = src.read(1)
@@ -147,7 +120,7 @@ class CropDataLayer(object):
                             'width': dst_width,
                             'height': dst_height})
 
-        with rasopen(reproj_path, 'w', **dst_profile) as dst:
+        with rasopen(self.reprojection, 'w', **dst_profile) as dst:
             dst_array = empty((1, dst_height, dst_width), dtype=float32)
 
             reproject(src_array, dst_array, src_transform=src_profile['transform'],
@@ -177,9 +150,6 @@ class CropDataLayer(object):
         delattr(self, 'reprojection')
 
     def _resample(self):
-
-        # home = os.path.expanduser('~')
-        # resample_path = os.path.join(home, 'images', 'sandbox', 'thredds', 'resamp_twx_{}.tif'.format(var))
 
         resample_path = os.path.join(self.temp_dir, 'resample.tif')
 
@@ -231,6 +201,25 @@ class CropDataLayer(object):
         if return_array:
             return array
         return None
+
+    def download_zipped_cdl(self):
+        if not os.path.isfile(self.zip_file):
+            req = urlretrieve(self.request_url, self.cdl_location)
+            if req.status_code != 200:
+                raise ValueError('Bad response {} from request.'.format(req.status_code))
+
+            with open(self.zip_file, 'wb') as f:
+                print('Downloading {}'.format(self.request_url))
+                for chunk in req.iter_content(chunk_size=1024):
+                    if chunk:
+                        f.write(chunk)
+
+    def _get_data_url(self):
+        r = get(self.request_url, verify=False)
+        tree = ElementTree.fromstring(r.content)
+        u = [ElementTree.tostring(e) for e in tree][0].decode("utf-8")
+        result = re.search('<returnURL>(.*)</returnURL>', u).group(1)
+        return result
 
 
 if __name__ == '__main__':
