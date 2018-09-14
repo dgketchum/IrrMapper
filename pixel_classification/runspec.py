@@ -15,7 +15,10 @@
 # =============================================================================================
 
 import os
+import sys
 
+abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(abspath)
 
 class TrainingAssignments(object):
     def __init__(self, root):

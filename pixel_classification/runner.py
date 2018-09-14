@@ -122,8 +122,8 @@ if __name__ == '__main__':
 
     data_path = os.path.join(model_data, 'data.pkl')
     model = os.path.join(model_data, 'model.ckpt')
-    # model = build_model(data_path, model)
-    # array_file = data_path.replace('data.pkl', 'array.pkl')
-    # classify_multiproc(model, data_path, array_file)
+    model = build_model(data_path, model)
+    array_file = data_path.replace('data.pkl', 'array.pkl')
+    classify_multiproc(model, data_path, array_file)
 
 # ========================= EOF ====================================================================
