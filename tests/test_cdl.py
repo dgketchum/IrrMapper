@@ -20,8 +20,6 @@ from rasterio.transform import Affine
 
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
 
-
-# noinspection PyTypeChecker
 class MyTestCase(unittest.TestCase):
 
     def setUp(self):

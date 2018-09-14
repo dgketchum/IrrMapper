@@ -163,7 +163,7 @@ class PixelTrainingArray(object):
             print(
                 'The feature array has already been sampled to {}, '
                 'use overwrite=True to resample '
-                'this image stack'.format(self.image_directory))
+                'this image stack'.format(self.root))
             return None
 
         if not os.path.isfile(self.shapefile_path):
