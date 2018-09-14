@@ -112,8 +112,12 @@ class PixelTrainingArray(object):
             self.array_exists = True
 
         elif not overwrite_array and root:
-            if os.path.isfile(os.path.join(self.year_dir, 'data.pkl')):
+            d = os.path.join(self.root, 'data.pkl')
+            if os.path.isfile(d):
+                print('Found feature data at {}'.format(d))
                 self.array_exists = True
+            else:
+                print('Did not find data at {}'.format(d))
 
         else:
             try:
