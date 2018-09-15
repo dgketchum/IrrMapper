@@ -558,11 +558,11 @@ class PixelTrainingArray(object):
 
     @property
     def shapefile_path(self):
-        return os.path.join(self.path_row_dir, 'sample_points.shp')
+        return os.path.join(self.root, 'sample_points.shp')
 
     @property
     def model_path(self):
-        return os.path.join(self.year_dir, 'model.pkl')
+        return os.path.join(self.root, 'model.pkl')
 
     @property
     def tile_geometry(self):
