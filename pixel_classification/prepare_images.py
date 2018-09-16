@@ -30,6 +30,8 @@ from bounds import RasterBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
 
+from pixel_classification.crop_data_layer import CropDataLayer as Cdl
+
 
 class ImageStack(object):
     """
@@ -63,6 +65,8 @@ class ImageStack(object):
         self.image_dirs = None
         self.image_paths = None
 
+        self.cdl_tif = None
+
         self.n = n_landsat
 
         self.ancillary_rasters = []
@@ -73,8 +77,19 @@ class ImageStack(object):
 
     def build_all(self):
         self.get_landsat()
+        self.profile = self.landsat.rasterio_geometry
         self.get_et()
         self.get_terrain()
+        self.get_cdl()
+
+    def get_cdl(self):
+        self.cdl_tif = os.path.join(self.root, 'cdl.tif')
+        if not os.path.isfile(self.cdl_tif):
+            polygon = self.landsat.get_tile_geometry()
+            cdl = Cdl(year=self.year, target_profile=self.landsat.profile, out_dir=self.root)
+            _ = cdl.get_conforming_data(polygon)
+        else:
+            print('{} exists'.format(self.cdl_tif))
 
     def get_landsat(self):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
@@ -100,7 +115,6 @@ class ImageStack(object):
 
         if not os.path.isfile(slope_name) or not os.path.isfile(dif_elev):
             polygon = self.landsat.get_tile_geometry()
-            self.profile = self.landsat.rasterio_geometry
 
             bb = RasterBounds(affine_transform=self.profile['transform'],
                               profile=self.profile, latlon=True)
