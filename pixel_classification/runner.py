@@ -119,7 +119,7 @@ if __name__ == '__main__':
 
     data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    build_model(project, data_path, model)
+    # build_model(project, data_path, model)
 
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)

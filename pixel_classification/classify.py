@@ -104,7 +104,7 @@ class Classifier(object):
         data.from_pickle(path)
 
         for i, feat in enumerate(data.features):
-            feature_raster = data.model_map[feat]
+            feature_raster = data.model_map[feat[0]]
             try:
                 with rasopen(feature_raster, mode='r') as src:
                     arr = src.read()
