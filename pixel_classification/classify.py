@@ -26,7 +26,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
 from pickle import load, dump
-from numpy import zeros, array, float16, ndarray, array_split
+from numpy import zeros, array, float16, ndarray, array_split, float64
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
@@ -106,6 +106,7 @@ class Classifier(object):
 
         for i, feat in enumerate(data.features):
             self.feature_ras = data.model_map[feat[0]]
+            print(os.path.basename(self.feature_ras))
             try:
                 with rasopen(self.feature_ras, mode='r') as src:
                     arr = src.read()
@@ -117,7 +118,6 @@ class Classifier(object):
                 with rasopen(self.feature_ras, mode='r') as src:
                     arr = src.read()
                     self.raster_geo = src.meta.copy()
-            arr = arr.astype(dtype=float16)
             if first:
                 empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
                 stack = empty
@@ -209,20 +209,24 @@ class Classifier(object):
 
     def normalize_image_channel(self, data):
         data = data.reshape((data.shape[1], data.shape[2]))
-        print('{}\n{} nan\n{} infinite'.format(self.feature_ras,
-                                               np.count_nonzero(np.isnan(data)),
-                                               np.count_nonzero(~np.isfinite(data))))
+
+        data[data == np.nan] = 0.
+        data[data == np.inf] = 0.
         scaler = StandardScaler()
+
         try:
             scaler = scaler.fit(data)
+            data = scaler.transform(data)
         except ValueError:
-            print('ValueError')
-            data[data == np.nan] = 0.
-            data[data == np.inf] = 0.
-            scaler = scaler.fit(data)
+            data = data.astype(dtype=float64)
+            _nan = np.count_nonzero(np.isnan(data))
+            _inf = np.count_nonzero(~np.isfinite(data))
+            print('{}\n{} nan\n{} infinite'.format(self.feature_ras, _nan, _inf))
+            data = (data - np.nanmean(data)) / np.nanstd(data)
+            print(np.nanstd(data), np.nanmean(data))
 
-        data = scaler.transform(data)
         data = data.reshape((1, data.shape[0], data.shape[1]))
+        data = data.astype(dtype=float16)
         return data
 
 
