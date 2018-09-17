@@ -41,16 +41,17 @@ from bounds import RasterBounds
 
 class CropDataLayer(object):
 
-    def __init__(self, target_profile, year, out_file=None):
+    def __init__(self, target_profile, year, out_dir=None):
 
         self.url_base = 'https://nassgeodata.gmu.edu/axis2/services/CDLService/' \
                         'GetCDLFile?year={year}&bbox={wsen}'
 
-        if not out_file:
+        if not out_dir:
             self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
         else:
-            self.out_file = out_file
-            self.cdl_location = out_file
+            self.out_file = os.path.join(out_dir, 'cdl.tif')
+            self.cdl_location = out_dir
+
         self.zip_file = os.path.join(self.cdl_location, '{}_30m_cdls.zip'.format(year))
 
         self.temp_dir = mkdtemp()
@@ -58,6 +59,7 @@ class CropDataLayer(object):
         self.target_profile = target_profile
         self.bbox = RasterBounds(profile=self.target_profile,
                                  affine_transform=self.target_profile['transform'])
+        self.bbox.expand(**{'east': 0.1, 'west': -0.1, 'north': 0.2, 'south': -0.2})
         self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
         bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
         self.request_url = self.url_base.format(year=year, wsen=bb_str)
@@ -68,17 +70,17 @@ class CropDataLayer(object):
         self.projection = None
         self.reprojection = None
 
-    def get_original_tif(self):
+    def get_original_tif(self, out_file=None):
 
         req = get(self.data_url, verify=False)
 
         if req.status_code != 200:
             raise ValueError('Bad response {} from request.'.format(req.status_code))
 
-        if self.out_file:
-            self.original_tif = os.path.join(self.out_file, os.path.basename(self.data_url))
-        else:
+        if not out_file:
             self.original_tif = os.path.join(self.temp_dir, os.path.basename(self.data_url))
+        else:
+            self.original_tif = out_file
 
         with open(self.original_tif, 'wb') as f:
             print('Downloading {}'.format(self.data_url))
@@ -86,14 +88,18 @@ class CropDataLayer(object):
                 if chunk:
                     f.write(chunk)
 
-    def conform_data(self):
+    def get_conforming_data(self, clip_geometry, keep_original=False):
         self.get_original_tif()
         self._reproject()
-        self._mask()
+        self._mask(clip_geometry)
         result = self._resample()
 
+        if not keep_original:
+            os.remove(self.original_tif)
+
         if self.out_file:
-            self.save(result, self.target_profile, output_filename=self.out_file)
+            self.save(result, self.target_profile, output_filename=os.path.join(self.cdl_location,
+                                                                                'cdl.tif'))
 
         return result
 
@@ -130,12 +136,12 @@ class CropDataLayer(object):
 
             dst.write(dst_array.reshape(1, dst_array.shape[1], dst_array.shape[2]))
 
-    def _mask(self):
+    def _mask(self, clip):
 
         mask_path = os.path.join(self.temp_dir, 'masked.tif')
 
         with rasopen(self.reprojection) as src:
-            out_arr, out_trans = mask(src, self.clip_feature, crop=True,
+            out_arr, out_trans = mask(src, clip, crop=True,
                                       all_touched=True)
             out_meta = src.meta.copy()
             out_meta.update({'driver': 'GTiff',
@@ -166,7 +172,7 @@ class CropDataLayer(object):
 
             new_array = empty(shape=(1, round(array.shape[0] * res_coeff),
                                      round(array.shape[1] * res_coeff)), dtype=float32)
-            aff = src.affine
+            aff = src.transform
             new_affine = Affine(aff.a / res_coeff, aff.b, aff.c, aff.d, aff.e / res_coeff, aff.f)
 
             profile['transform'] = self.target_profile['transform']
@@ -204,7 +210,7 @@ class CropDataLayer(object):
 
     def download_zipped_cdl(self):
         if not os.path.isfile(self.zip_file):
-            req = urlretrieve(self.request_url, self.cdl_location)
+            req = urlretrieve(self.request_url, self.cdl_location, verify=False)
             if req.status_code != 200:
                 raise ValueError('Bad response {} from request.'.format(req.status_code))
 
@@ -220,6 +226,107 @@ class CropDataLayer(object):
         u = [ElementTree.tostring(e) for e in tree][0].decode("utf-8")
         result = re.search('<returnURL>(.*)</returnURL>', u).group(1)
         return result
+
+    @property
+    def crop(self):
+        return {48: 'Watermelons',
+                49: 'Onions',
+                50: 'Cucumbers',
+                51: 'Chick Peas',
+                52: 'Lentils',
+                53: 'Peas',
+                54: 'Tomatoes',
+                55: 'Caneberries',
+                56: 'Hops',
+                57: 'Herbs',
+                58: 'Clover/Wildflowers',
+                61: 'Fallow/Idle Cropland',
+                66: 'Cherries',
+                67: 'Peaches',
+                68: 'Apples',
+                69: 'Grapes',
+                70: 'Christmas Trees',
+                71: 'Other Tree Crops',
+                72: 'Citrus',
+                74: 'Pecans',
+                75: 'Almonds',
+                76: 'Walnuts',
+                77: 'Pears',
+                204: 'Pistachios',
+                205: 'Triticale',
+                206: 'Carrots',
+                207: 'Asparagus',
+                208: 'Garlic',
+                209: 'Cantaloupes',
+                210: 'Prunes',
+                211: 'Olives',
+                212: 'Oranges',
+                213: 'Honeydew Melons',
+                214: 'Broccoli',
+                216: 'Peppers',
+                217: 'Pomegranates',
+                218: 'Nectarines',
+                219: 'Greens',
+                220: 'Plums',
+                221: 'Strawberries',
+                222: 'Squash',
+                223: 'Apricots',
+                224: 'Vetch',
+                225: 'Dbl Crop WinWht/Corn',
+                226: 'Dbl Crop Oats/Corn',
+                227: 'Lettuce',
+                229: 'Pumpkins',
+                230: 'Dbl Crop Lettuce/Durum Wht',
+                231: 'Dbl Crop Lettuce/Cantaloupe',
+                232: 'Dbl Crop Lettuce/Cotton',
+                233: 'Dbl Crop Lettuce/Barley',
+                234: 'Dbl Crop Durum Wht/Sorghum',
+                235: 'Dbl Crop Barley/Sorghum',
+                236: 'Dbl Crop WinWht/Sorghum',
+                237: 'Dbl Crop Barley/Corn',
+                238: 'Dbl Crop WinWht/Cotton',
+                239: 'Dbl Crop Soybeans/Cotton',
+                240: 'Dbl Crop Soybeans/Oats',
+                241: 'Dbl Crop Corn/Soybeans',
+                242: 'Blueberries',
+                243: 'Cabbage',
+                244: 'Cauliflower',
+                245: 'Celery',
+                246: 'Radishes',
+                247: 'Turnips',
+                248: 'Eggplants',
+                249: 'Gourds',
+                250: 'Cranberries',
+                254: 'Dbl Crop Barley/Soybeans'}
+
+    @property
+    def non_crop(self):
+        return {37: 'Other Hay/Non Alfalfa',
+                59: 'Sod/Grass Seed',
+                60: 'Switchgrass',
+                63: 'Forest',
+                64: 'Shrubland',
+                65: 'Barren',
+                81: 'Clouds/No Data',
+                82: 'Developed',
+                83: 'Water',
+                87: 'Wetlands',
+                88: 'Nonag/Undefined',
+                92: 'Aquaculture',
+                111: 'Open Water',
+                112: 'Perennial Ice/Snow',
+                121: 'Developed/Open Space',
+                122: 'Developed/Low Intensity',
+                123: 'Developed/Med Intensity',
+                124: 'Developed/High Intensity',
+                131: 'Barren',
+                141: 'Deciduous Forest',
+                142: 'Evergreen Forest',
+                143: 'Mixed Forest',
+                152: 'Shrubland',
+                176: 'Grass/Pasture',
+                190: 'Woody Wetlands',
+                195: 'Herbaceous Wetlands'}
 
 
 if __name__ == '__main__':

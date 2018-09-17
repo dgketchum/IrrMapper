@@ -90,7 +90,7 @@ def mlp(data, model_path):
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 print('Test accuracy: {}, loss {}'.format(accuracy.eval({X: x_test, Y: y_test}), loss))
 
-        path = saver.save(sess,model_path)
+        path = saver.save(sess, model_path)
         print('Model saved to {}'.format(path))
 
     return None

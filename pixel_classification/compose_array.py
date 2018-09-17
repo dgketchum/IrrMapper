@@ -114,7 +114,6 @@ class PixelTrainingArray(object):
         elif not overwrite_array and root:
             d = os.path.join(self.root, 'data.pkl')
             if os.path.isfile(d):
-                print('Found feature data at {}'.format(d))
                 self.array_exists = True
             else:
                 print('Did not find data at {}'.format(d))
@@ -178,7 +177,7 @@ class PixelTrainingArray(object):
         if save_points and self.overwrite_points:
             self.save_sample_points()
 
-        self.make_data_array()
+        self.populate_data_array()
 
     def populate_array_from_points(self):
         # TODO: replace with geopandas.shp_to_dataframe
@@ -275,14 +274,15 @@ class PixelTrainingArray(object):
         self.extracted_points.infer_objects()
         self.is_sampled = True
 
-    def make_data_array(self):
+    def populate_data_array(self):
 
         min_cloud = 1.
         for sat_image in self.images:
             self.current_img = sat_image
+            masks = [os.path.join(sat_image.obj, x) for x in sat_image.file_list if x.endswith('fmask.tif')]
             scn = self.current_img.landsat_scene_id
             try:
-                for path in sat_image.masks:
+                for path in masks:
                     mask_series = self._point_raster_extract(path)
                     is_cloud_mask = path.endswith('cloud_fmask.tif')
                     if is_cloud_mask:
@@ -308,7 +308,8 @@ class PixelTrainingArray(object):
                         self.extracted_points = self.extracted_points.join(band_series,
                                                                            how='outer')
 
-            except Exception:
+            except AttributeError as e:
+                print(e)
                 pass
 
         if self.ancillary_rasters:
@@ -328,7 +329,8 @@ class PixelTrainingArray(object):
                 'data': data_array.values,
                 'target_values': targets,
                 'model_map': self.model_map,
-                'water_mask': self.water_mask}
+                'water_mask': self.water_mask,
+                }
 
         print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():
@@ -440,7 +442,7 @@ class PixelTrainingArray(object):
                 date_string = name_split[3]
             except IndexError:
                 band = basename.replace('.tif', '')
-                date_string = self.current_img.date_acquired_str
+                date_string = datetime.strftime(self.current_img.date_acquired, '%Y%m%d')
 
             column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite,
                                                          self.path,

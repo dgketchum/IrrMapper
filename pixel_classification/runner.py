@@ -36,35 +36,35 @@ OBJECT_MAP = {
 
 
 def build_training_feature_array(project_root, training_root, sat=8):
+
     for key, obj in OBJECT_MAP.items():
 
         project_state_dir = os.path.join(project_root, key)
+
         if not os.path.isdir(project_state_dir):
             os.mkdir(project_state_dir)
 
         geography = os.path.join(training_root, key)
         geo = obj(geography)
 
+        i = None
         if geo.sat == sat:
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                            n_landsat=3, year=geo.year, max_cloud_pct=70)
             i.build_all()
-            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=False,
-                    overwrite_points=False, ancillary_rasters=i.ancillary_rasters)
-            p.extract_sample()
-        else:
-            i = None
-            p = None
+            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=True,
+                    overwrite_points=True, ancillary_rasters=i.ancillary_rasters)
+            p.extract_sample(save_points=True)
 
         i.warp_vrt()
 
 
-def build_model(root, path, model_path):
+def build_model(project_root, path, model_path):
     first = True
     for key, obj in OBJECT_MAP.items():
-        root = os.path.join(root, key)
+        root = os.path.join(project_root, key)
         geo = obj(root)
-        pkl_data = Pta(root=root, geography=geo, from_pkl=True)
+        pkl_data = Pta(root=root, geography=geo, pkl_path=os.path.join(root, 'data.pkl'))
         if first:
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
                              'features': pkl_data.features, 'model_map': pkl_data.model_map,
@@ -73,12 +73,14 @@ def build_model(root, path, model_path):
         else:
             training_data = concatenate_training_data(training_data, pkl_data)
 
+        print('Shape {}: {}'.format(key, pkl_data.data.shape))
+
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, path)
     model_path = mlp(p, model_path)
 
     for key, obj in OBJECT_MAP.items():
-        dst = os.path.join(root, key, 'classified_rasters')
+        dst = os.path.join(project_root, key, 'classified_rasters')
         if not os.path.isdir(dst):
             os.mkdir(dst)
 
@@ -111,19 +113,20 @@ def concatenate_training_data(existing, new_data):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-    training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
+    # training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     model_data = os.path.join(abspath, 'model_data')
     project = os.path.join(model_data, 'allstates_3')
 
     if not os.path.isdir(project):
         os.mkdir(project)
 
-    build_training_feature_array(project_root=project, training_root=training)
+    # build_training_feature_array(project_root=project, training_root=training)
 
-    data_path = os.path.join(model_data, 'data.pkl')
-    model = os.path.join(model_data, 'model.ckpt')
-    model = build_model(data_path, model)
-    array_file = data_path.replace('data.pkl', 'array.pkl')
-    classify_multiproc(model, data_path, array_file)
+    data_path = os.path.join(project, 'data.pkl')
+    model = os.path.join(project, 'model.ckpt')
+    model = build_model(project, data_path, model)
+
+    # array_file = data_path.replace('data.pkl', 'array.pkl')
+    # classify_multiproc(model, data_path, array_file)
 
 # ========================= EOF ====================================================================

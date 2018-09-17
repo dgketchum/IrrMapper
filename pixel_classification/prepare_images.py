@@ -136,7 +136,7 @@ class ImageStack(object):
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
-            products = ['ssebop_et_mskd', 'pet', 'lst', 'ssebop_etrf']
+            products = ['ssebop_et', 'pet', 'lst', 'ssebop_etrf']
             for p in products:
                 self.ancillary_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, p)))
 
@@ -149,21 +149,23 @@ class ImageStack(object):
         self.landsat = self.landsat_mapping[self.sat_abv](master)
 
     def _make_fmask(self, image_dir):
+
         self.dst_path_cloud = os.path.join(image_dir, 'cloud_fmask.tif')
         self.dst_path_water = os.path.join(image_dir, 'water_fmask.tif')
 
         if os.path.isfile(self.dst_path_cloud) and os.path.isfile(self.dst_path_water):
-            print('{} and {} exist'.format(os.path.basename(self.dst_path_cloud),
-                                           os.path.basename(self.dst_path_water)))
+            print('{} and {} exist for {}'.format(os.path.basename(self.dst_path_cloud),
+                                                  os.path.basename(self.dst_path_water),
+                                                  image_dir))
 
         else:
-
+            print('fmask for {}'.format(image_dir))
             lst_image = self.landsat_mapping[self.sat_abv](image_dir)
 
             f = Fmask(lst_image)
 
             c, shadow, water = f.cloud_mask()
-            cloud = f.cloud_mask(cloud_and_shadow=True)
+            cloud = c | shadow
 
             f.save_array(cloud, self.dst_path_cloud)
             f.save_array(water, self.dst_path_water)
