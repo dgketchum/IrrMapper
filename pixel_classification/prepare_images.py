@@ -131,10 +131,10 @@ class ImageStack(object):
 
     def get_et(self):
         for i, d in enumerate(self.image_dirs):
-            date = self.scenes.iloc[i]['DATE_ACQUIRED']
-            _id = self.scenes.iloc[i]['SCENE_ID']
+            l = self.landsat_mapping[self.sat_abv](d)
+            _id = l.landsat_scene_id
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
-                      satellite=self.sat, path=self.path, row=self.row, image_date=date,
+                      satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
             products = ['ssebop_et_mskd', 'pet', 'lst', 'ssebop_etrf']
             for p in products:
