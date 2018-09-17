@@ -219,9 +219,9 @@ def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, array):
+def classify_multiproc(model, data, saved_array=None, array_outfile=None):
     d = Classifier()
-    d.get_stack(data, saved=array)
+    d.get_stack(data, outfile=array_outfile, saved=saved_array)
     data = d.masked_data_stack
 
     cores = cpu_count()
@@ -238,7 +238,13 @@ def classify_multiproc(model, data, array):
     td = (datetime.now() - time)
 
     print(td.days, td.seconds // 3600, (td.seconds // 60) % 60)
-    d.write_raster(out_location=os.path.dirname(array), out_name='test_classified.tif', new_array=final)
+
+    if saved_array:
+        out_loc = os.path.dirname(saved_array)
+    if array_outfile:
+        out_loc = os.path.dirname(array_outfile)
+
+    d.write_raster(out_location=out_loc, out_name='test_classified.tif', new_array=final)
 
     return None
 
