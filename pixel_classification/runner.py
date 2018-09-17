@@ -79,11 +79,6 @@ def build_model(project_root, path, model_path):
     p.to_pickle(training_data, path)
     model_path = mlp(p, model_path)
 
-    for key, obj in OBJECT_MAP.items():
-        dst = os.path.join(project_root, key, 'classified_rasters')
-        if not os.path.isdir(dst):
-            os.mkdir(dst)
-
     return model_path
 
 
@@ -124,9 +119,11 @@ if __name__ == '__main__':
 
     data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    model = build_model(project, data_path, model)
+    build_model(project, data_path, model)
 
-    # array_file = data_path.replace('data.pkl', 'array.pkl')
-    # classify_multiproc(model, data_path, array_file)
+    for key, val in OBJECT_MAP.items():
+        geo_folder = os.path.join(project, key)
+        save_array = os.path.join(geo_folder, 'array.pkl')
+        classify_multiproc(model, data_path, array_outfile=save_array)
 
 # ========================= EOF ====================================================================
