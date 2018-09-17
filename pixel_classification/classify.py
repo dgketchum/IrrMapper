@@ -16,6 +16,7 @@
 
 import os
 import sys
+from copy import deepcopy
 from datetime import datetime
 from multiprocessing import cpu_count
 
@@ -32,6 +33,8 @@ from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
 from rasterio.dtypes import float32
 from rasterio.errors import RasterioIOError
+
+from sat_image.warped_vrt import warp_single_image
 
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
@@ -105,7 +108,12 @@ class Classifier(object):
         data.from_pickle(path)
 
         for i, feat in enumerate(data.features):
-            self.feature_ras = data.model_map[feat[0]]
+
+            try:
+                self.feature_ras = data.model_map[feat[0]]
+            except KeyError:
+                self.feature_ras = data.model_map[feat]
+
             print(os.path.basename(self.feature_ras))
             try:
                 with rasopen(self.feature_ras, mode='r') as src:
@@ -119,12 +127,19 @@ class Classifier(object):
                     arr = src.read()
                     self.raster_geo = src.meta.copy()
             if first:
+                first_geo = deepcopy(self.raster_geo)
                 empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
                 stack = empty
                 stack[i, :, :] = self.normalize_image_channel(arr)
                 first = False
             else:
-                stack[i, :, :] = self.normalize_image_channel(arr)
+                try:
+                    stack[i, :, :] = self.normalize_image_channel(arr)
+                except ValueError:
+                    print('Bad shape {}, need {}'.format(arr.shape, (stack.shape[1], stack.shape[2])))
+                    arr = warp_single_image(self.feature_ras, first_geo)
+                    print('Got {} after warp single image'.format(arr.shape))
+                    stack[i, :, :] = self.normalize_image_channel(arr)
 
         if outfile:
             with open(outfile, 'wb') as handle:
@@ -218,12 +233,9 @@ class Classifier(object):
             scaler = scaler.fit(data)
             data = scaler.transform(data)
         except ValueError:
+            # this handles large float arrays
             data = data.astype(dtype=float64)
-            _nan = np.count_nonzero(np.isnan(data))
-            _inf = np.count_nonzero(~np.isfinite(data))
-            print('{}\n{} nan\n{} infinite'.format(self.feature_ras, _nan, _inf))
             data = (data - np.nanmean(data)) / np.nanstd(data)
-            print(np.nanstd(data), np.nanmean(data))
 
         data = data.reshape((1, data.shape[0], data.shape[1]))
         data = data.astype(dtype=float16)

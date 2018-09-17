@@ -52,8 +52,8 @@ def build_training_feature_array(project_root, training_root, sat=8):
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                            n_landsat=3, year=geo.year, max_cloud_pct=70)
             i.build_all()
-            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=True,
-                    overwrite_points=True, ancillary_rasters=i.ancillary_rasters)
+            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=False,
+                    overwrite_points=False, ancillary_rasters=i.ancillary_rasters)
             p.extract_sample(save_points=True)
 
         i.warp_vrt()
@@ -112,8 +112,8 @@ if __name__ == '__main__':
     model_data = os.path.join(abspath, 'model_data')
     project = os.path.join(model_data, 'allstates_3')
 
-    if not os.path.isdir(project):
-        os.mkdir(project)
+    # if not os.path.isdir(project):
+    #     os.mkdir(project)
 
     # build_training_feature_array(project_root=project, training_root=training)
 
@@ -124,6 +124,7 @@ if __name__ == '__main__':
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)
         save_array = os.path.join(geo_folder, 'array.pkl')
-        classify_multiproc(model, data_path, array_outfile=save_array)
+        geo_data = os.path.join(project, key, 'data.pkl')
+        classify_multiproc(model, geo_data, array_outfile=save_array)
 
 # ========================= EOF ====================================================================
