@@ -84,6 +84,7 @@ class Classifier(object):
         self.n = None
         self.final_shape = None
         self.masked_data_stack = None
+        self.feature_ras = None
 
         if isinstance(arr, ndarray):
             self.masked_data_stack = arr
@@ -104,18 +105,19 @@ class Classifier(object):
         data.from_pickle(path)
 
         for i, feat in enumerate(data.features):
-            feature_raster = data.model_map[feat[0]]
+            self.feature_ras = data.model_map[feat[0]]
             try:
-                with rasopen(feature_raster, mode='r') as src:
+                with rasopen(self.feature_ras, mode='r') as src:
                     arr = src.read()
                     self.raster_geo = src.meta.copy()
                     if saved:
                         break
             except RasterioIOError:
-                feature_raster = feature_raster.replace('dgketchum', 'david.ketchum')
-                with rasopen(feature_raster, mode='r') as src:
+                self.feature_ras = self.feature_ras.replace('dgketchum', 'david.ketchum')
+                with rasopen(self.feature_ras, mode='r') as src:
                     arr = src.read()
                     self.raster_geo = src.meta.copy()
+            arr = arr.astype(dtype=float16)
             if first:
                 empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
                 stack = empty
@@ -205,11 +207,19 @@ class Classifier(object):
 
         return None
 
-    @staticmethod
-    def normalize_image_channel(data):
+    def normalize_image_channel(self, data):
         data = data.reshape((data.shape[1], data.shape[2]))
         scaler = StandardScaler()
-        scaler = scaler.fit(data)
+        try:
+            scaler = scaler.fit(data)
+        except ValueError:
+            print('{}\n{} nan\n{} infinite'.format(self.feature_ras,
+                                                   np.count_nonzero(np.isnan(data)),
+                                                   np.count_nonzero(~np.isfinite(data))))
+            data[data == np.nan] = 0.
+            data[data == np.inf] = 0.
+            scaler = scaler.fit(data)
+
         data = scaler.transform(data)
         data = data.reshape((1, data.shape[0], data.shape[1]))
         return data
