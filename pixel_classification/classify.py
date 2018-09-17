@@ -209,13 +209,14 @@ class Classifier(object):
 
     def normalize_image_channel(self, data):
         data = data.reshape((data.shape[1], data.shape[2]))
+        print('{}\n{} nan\n{} infinite'.format(self.feature_ras,
+                                               np.count_nonzero(np.isnan(data)),
+                                               np.count_nonzero(~np.isfinite(data))))
         scaler = StandardScaler()
         try:
             scaler = scaler.fit(data)
         except ValueError:
-            print('{}\n{} nan\n{} infinite'.format(self.feature_ras,
-                                                   np.count_nonzero(np.isnan(data)),
-                                                   np.count_nonzero(~np.isfinite(data))))
+            print('ValueError')
             data[data == np.nan] = 0.
             data[data == np.inf] = 0.
             scaler = scaler.fit(data)
