@@ -29,10 +29,11 @@ from pixel_classification.classify import classify_multiproc
 
 OBJECT_MAP = {
     'MT': Montana,
-    'NV': Nevada,
-    'OR': Oregon,
-    'UT': Utah,
-    'WA': Washington}
+    # 'NV': Nevada,
+    # 'OR': Oregon,
+    # 'UT': Utah,
+    # 'WA': Washington
+}
 
 
 def build_training_feature_array(project_root, training_root, sat=8):
@@ -118,13 +119,13 @@ if __name__ == '__main__':
     # build_training_feature_array(project_root=project, training_root=training)
 
     data_path = os.path.join(project, 'data.pkl')
-    model = os.path.join(project, 'model.ckpt')
-    # build_model(project, data_path, model)
+    model = os.path.join(project, 'model-mt.ckpt')
+    build_model(project, data_path, model)
 
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)
         save_array = os.path.join(geo_folder, 'array.pkl')
         geo_data = os.path.join(project, key, 'data.pkl')
-        classify_multiproc(model, geo_data, array_outfile=save_array)
+        classify_multiproc(model, geo_data, saved_array=save_array)
 
 # ========================= EOF ====================================================================

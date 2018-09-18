@@ -97,7 +97,7 @@ class Classifier(object):
             self.model = model
             # self.load_model()
 
-    def get_stack(self, path, saved=None, outfile=None):
+    def get_stack(self, path, saved=None, outfile=None, extra_mask=None):
 
         first = True
 
@@ -148,7 +148,10 @@ class Classifier(object):
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
-        self.masked_data_stack = marray(stack, mask=np.isnan(stack))
+        if extra_mask:
+            pass
+        else:
+            self.masked_data_stack = marray(stack, mask=np.isnan(stack))
         self.n = self.masked_data_stack.shape[0]
         del stack
 
@@ -246,8 +249,10 @@ def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, saved_array=None, array_outfile=None):
+def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask_cdl=False):
     d = Classifier()
+    if mask_cdl:
+        pass
     d.get_stack(data, outfile=array_outfile, saved=saved_array)
     data = d.masked_data_stack
 
