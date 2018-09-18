@@ -121,7 +121,7 @@ class CropDataLayer(object):
 
         if self.cdl_empty:
             try:
-                arr = self.get_conforming_data(self.target_profile, clip_geometry)
+                arr = self.get_conforming_data(clip_geometry=clip_geometry)
             except ValueError:
                 print('Need clip geometry to build cdl')
         else:

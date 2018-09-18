@@ -88,7 +88,7 @@ class ImageStack(object):
         if not os.path.isfile(self.cdl_mask):
             polygon = self.landsat.get_tile_geometry()
             cdl = Cdl(year=self.year, target_profile=self.landsat.profile)
-            cdl.get_mask(polygon, self.cdl_mask)
+            cdl.get_mask(clip_geometry=polygon, out_file=self.cdl_mask)
         else:
             print('{} exists'.format(self.cdl_mask))
 
