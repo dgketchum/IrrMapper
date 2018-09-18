@@ -29,6 +29,7 @@ import tensorflow as tf
 from pickle import load, dump
 from numpy import zeros, array, float16, ndarray, array_split, float64
 from numpy.ma import array as marray
+from numpy.ma import MaskedArray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
 from rasterio.dtypes import float32
@@ -90,7 +91,7 @@ class Classifier(object):
         self.feature_ras = None
         self.data = None
         self.saved_array = None
-        self.extra_mask = None
+        self.mask = None
 
         if isinstance(arr, ndarray):
             self.masked_data_stack = arr
@@ -100,10 +101,10 @@ class Classifier(object):
             self.model = model
             # self.load_model()
 
-    def get_stack(self, path, saved=None, outfile=None, extra_mask=None):
+    def get_stack(self, path, saved=None, outfile=None, mask_path=None):
 
-        if extra_mask:
-            self.extra_mask = self._get_mask_from_raster(extra_mask)
+        if mask_path:
+            self.mask = self._get_mask_from_raster(mask_path)
 
         if saved:
             self.saved_array = saved
@@ -122,8 +123,11 @@ class Classifier(object):
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
 
-        if extra_mask:
-            stack[self.extra_mask == 0] = np.nan
+        if mask_path:
+            ms = self.mask.shape
+            msk = np.repeat(self.mask.reshape((ms[0], ms[1] * ms[2])), stack.shape[0], axis=0)
+            stack = marray(stack, mask=msk)
+
         self.masked_data_stack = marray(stack, mask=np.isnan(stack))
 
         self.n = self.masked_data_stack.shape[0]
@@ -282,7 +286,7 @@ def get_classifier(obj, arr):
 
 def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=None):
     d = Classifier()
-    d.get_stack(data, outfile=array_outfile, saved=saved_array, extra_mask=mask)
+    d.get_stack(data, outfile=array_outfile, saved=saved_array, mask_path=mask)
     data = d.masked_data_stack
 
     cores = cpu_count()
