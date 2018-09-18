@@ -29,7 +29,9 @@ import copy
 from xml.etree import ElementTree
 from requests import get
 from numpy import empty, float32
+from numpy import isin
 from rasterio import open as rasopen
+from rasterio.dtypes import uint8
 from rasterio.crs import CRS
 from rasterio.transform import Affine
 from rasterio.mask import mask
@@ -41,34 +43,44 @@ from bounds import RasterBounds
 
 class CropDataLayer(object):
 
-    def __init__(self, target_profile, year, out_dir=None):
+    def __init__(self, target_profile=None, year=None, out_dir=None, from_file=None):
 
         self.url_base = 'https://nassgeodata.gmu.edu/axis2/services/CDLService/' \
                         'GetCDLFile?year={year}&bbox={wsen}'
 
-        if not out_dir:
-            self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
+        if from_file:
+            self.from_file = from_file
+            with rasopen(from_file) as src:
+                self.cdl = src.read()
+                self.target_profile = src.profile
+                self.cdl_empty = False
+
         else:
-            self.out_file = os.path.join(out_dir, 'cdl.tif')
-            self.cdl_location = out_dir
+            self.cdl_empty = True
+            self.cdl = None
+            if not out_dir:
+                self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
+            else:
+                self.out_file = os.path.join(out_dir, 'cdl.tif')
+                self.cdl_location = out_dir
+            self.data_url = self._get_data_url()
 
-        self.zip_file = os.path.join(self.cdl_location, '{}_30m_cdls.zip'.format(year))
+            self.zip_file = os.path.join(self.cdl_location, '{}_30m_cdls.zip'.format(year))
 
-        self.temp_dir = mkdtemp()
+            self.temp_dir = mkdtemp()
 
-        self.target_profile = target_profile
-        self.bbox = RasterBounds(profile=self.target_profile,
-                                 affine_transform=self.target_profile['transform'])
-        self.bbox.expand(**{'east': 0.1, 'west': -0.1, 'north': 0.2, 'south': -0.2})
-        self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
-        bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
-        self.request_url = self.url_base.format(year=year, wsen=bb_str)
-        self.data_url = self._get_data_url()
+            self.target_profile = target_profile
+            self.bbox = RasterBounds(profile=self.target_profile,
+                                     affine_transform=self.target_profile['transform'])
+            self.bbox.expand(**{'east': 0.1, 'west': -0.1, 'north': 0.2, 'south': -0.2})
+            self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
+            bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
+            self.request_url = self.url_base.format(year=year, wsen=bb_str)
 
-        self.original_tif = None
-        self.mask = None
-        self.projection = None
-        self.reprojection = None
+            self.original_tif = None
+            self.mask = None
+            self.projection = None
+            self.reprojection = None
 
     def get_original_tif(self, out_file=None):
 
@@ -100,8 +112,31 @@ class CropDataLayer(object):
         if self.out_file:
             self.save(result, self.target_profile, output_filename=os.path.join(self.cdl_location,
                                                                                 'cdl.tif'))
-
+        self.cdl = result
         return result
+
+    def get_mask(self, clip_geometry=None, out_file=None):
+
+        arr = None
+
+        if self.cdl_empty:
+            try:
+                arr = self.get_conforming_data(self.target_profile, clip_geometry)
+            except ValueError:
+                print('Need clip geometry to build cdl')
+        else:
+            arr = self.cdl
+
+        crop = list(self.crop.keys())
+        msk = isin(arr, crop)
+        msk = msk.astype(uint8)
+        profile = copy.deepcopy(self.target_profile)
+        profile['dtype'] = uint8
+        if out_file:
+            with rasopen(out_file, 'w', **profile) as dst:
+                dst.write(msk)
+
+        return msk
 
     def _reproject(self):
 
@@ -210,7 +245,7 @@ class CropDataLayer(object):
 
     def download_zipped_cdl(self):
         if not os.path.isfile(self.zip_file):
-            req = urlretrieve(self.request_url, self.cdl_location, verify=False)
+            req = urlretrieve(self.request_url, self.cdl_location)
             if req.status_code != 200:
                 raise ValueError('Bad response {} from request.'.format(req.status_code))
 
@@ -229,7 +264,44 @@ class CropDataLayer(object):
 
     @property
     def crop(self):
-        return {48: 'Watermelons',
+        return {1: 'Corn',
+                2: 'Cotton',
+                3: 'Rice',
+                4: 'Sorghum',
+                5: 'Soybeans',
+                6: 'Sunflower',
+                10: 'Peanuts',
+                11: 'Tobacco',
+                12: 'Sweet Corn',
+                13: 'Pop or Orn Corn',
+                14: 'Mint',
+                21: 'Barley',
+                22: 'Durum Wheat',
+                23: 'Spring Wheat',
+                24: 'Winter Wheat',
+                25: 'Other Small Grains',
+                26: 'Dbl Crop WinWht / Soybeans',
+                27: 'Rye',
+                28: 'Oats',
+                29: 'Millet',
+                30: 'Speltz',
+                31: 'Canola',
+                32: 'Flaxseed',
+                33: 'Safflower',
+                34: 'Rape Seed',
+                35: 'Mustard',
+                36: 'Alfalfa',
+                37: 'Other Hay / NonAlfalfa',
+                38: 'Camelina',
+                39: 'Buckwheat',
+                41: 'Sugarbeets',
+                42: 'Dry Beans',
+                43: 'Potatoes',
+                44: 'Other Crops',
+                45: 'Sugarcane',
+                46: 'Sweet Potatoes',
+                47: 'Misc Vegs & Fruits',
+                48: 'Watermelons',
                 49: 'Onions',
                 50: 'Cucumbers',
                 51: 'Chick Peas',

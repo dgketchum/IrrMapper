@@ -64,6 +64,16 @@ class MyTestCase(unittest.TestCase):
 
         self.assertEqual(arr.shape, shape)
 
+    def test_mask(self):
+        l8 = Landsat8(self.dir_name_LC8)
+        shape = 1, l8.rasterio_geometry['height'], l8.rasterio_geometry['width']
+        polygon = l8.get_tile_geometry()
+        cdl = Cdl(from_file=os.path.join(self.dir_name_LC8, 'cdl.tif'))
+        arr = cdl.get_mask(polygon, out_file=os.path.join(self.dir_name_LC8, 'cdl_mask.tif'))
+        self.assertEqual(shape, arr.shape)
+        self.assertEqual(arr.max(), 1)
+        self.assertEqual(arr.min(), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
