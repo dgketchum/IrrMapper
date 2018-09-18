@@ -88,6 +88,9 @@ class Classifier(object):
         self.final_shape = None
         self.masked_data_stack = None
         self.feature_ras = None
+        self.data = None
+        self.saved_array = None
+        self.extra_mask = None
 
         if isinstance(arr, ndarray):
             self.masked_data_stack = arr
@@ -99,47 +102,17 @@ class Classifier(object):
 
     def get_stack(self, path, saved=None, outfile=None, extra_mask=None):
 
-        first = True
+        if extra_mask:
+            self.extra_mask = self._get_mask_from_raster(extra_mask)
 
         if saved:
+            self.saved_array = saved
             stack = load(open(saved, 'rb'))
+        else:
+            self.data = PixelTrainingArray()
+            self.data.from_pickle(path)
 
-        data = PixelTrainingArray()
-        data.from_pickle(path)
-
-        for i, feat in enumerate(data.features):
-
-            try:
-                self.feature_ras = data.model_map[feat[0]]
-            except KeyError:
-                self.feature_ras = data.model_map[feat]
-
-            print(os.path.basename(self.feature_ras))
-            try:
-                with rasopen(self.feature_ras, mode='r') as src:
-                    arr = src.read()
-                    self.raster_geo = src.meta.copy()
-                    if saved:
-                        break
-            except RasterioIOError:
-                self.feature_ras = self.feature_ras.replace('dgketchum', 'david.ketchum')
-                with rasopen(self.feature_ras, mode='r') as src:
-                    arr = src.read()
-                    self.raster_geo = src.meta.copy()
-            if first:
-                first_geo = deepcopy(self.raster_geo)
-                empty = zeros((len(data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
-                stack = empty
-                stack[i, :, :] = self.normalize_image_channel(arr)
-                first = False
-            else:
-                try:
-                    stack[i, :, :] = self.normalize_image_channel(arr)
-                except ValueError:
-                    print('Bad shape {}, need {}'.format(arr.shape, (stack.shape[1], stack.shape[2])))
-                    arr = warp_single_image(self.feature_ras, first_geo)
-                    print('Got {} after warp single image'.format(arr.shape))
-                    stack[i, :, :] = self.normalize_image_channel(arr)
+            stack = self._get_stack_channels()
 
         if outfile:
             with open(outfile, 'wb') as handle:
@@ -148,14 +121,16 @@ class Classifier(object):
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
+
         if extra_mask:
-            pass
-        else:
-            self.masked_data_stack = marray(stack, mask=np.isnan(stack))
+            stack[self.extra_mask == 0] = np.nan
+        self.masked_data_stack = marray(stack, mask=np.isnan(stack))
+
         self.n = self.masked_data_stack.shape[0]
         del stack
 
-        self.new_array = np.zeros_like(arr.reshape((1, arr.shape[1] * arr.shape[2])), dtype=float16)
+        single = stack[0, :, :]
+        self.new_array = np.zeros_like(single.reshape((1, single.shape[1] * single.shape[2])), dtype=float16)
 
     def classify(self, arr=None):
 
@@ -244,16 +219,70 @@ class Classifier(object):
         data = data.astype(dtype=float16)
         return data
 
+    def _get_mask_from_raster(self, extra_mask):
+        try:
+            with rasopen(extra_mask, mode='r') as src:
+                arr = src.read()
+                self.raster_geo = src.meta.copy()
+
+        except RasterioIOError:
+            extra_mask = extra_mask.replace('dgketchum', 'david.ketchum')
+            with rasopen(extra_mask, mode='r') as src:
+                arr = src.read()
+                self.raster_geo = src.meta.copy()
+
+        return arr
+
+    def _get_stack_channels(self):
+
+        first = True
+
+        for i, feat in enumerate(self.data.features):
+
+            try:
+                self.feature_ras = self.data.model_map[feat[0]]
+            except KeyError:
+                self.feature_ras = self.data.model_map[feat]
+
+            print(os.path.basename(self.feature_ras))
+            try:
+                with rasopen(self.feature_ras, mode='r') as src:
+                    arr = src.read()
+                    self.raster_geo = src.meta.copy()
+                    if self.saved_array:
+                        break
+
+            except RasterioIOError:
+                self.feature_ras = self.feature_ras.replace('dgketchum', 'david.ketchum')
+                with rasopen(self.feature_ras, mode='r') as src:
+                    arr = src.read()
+                    self.raster_geo = src.meta.copy()
+
+            if first:
+                first_geo = deepcopy(self.raster_geo)
+                empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
+                stack = empty
+                stack[i, :, :] = self.normalize_image_channel(arr)
+                first = False
+            else:
+                try:
+                    stack[i, :, :] = self.normalize_image_channel(arr)
+                except ValueError:
+                    print('Bad shape {}, need {}'.format(arr.shape, (stack.shape[1], stack.shape[2])))
+                    arr = warp_single_image(self.feature_ras, first_geo)
+                    print('Got {} after warp single image'.format(arr.shape))
+                    stack[i, :, :] = self.normalize_image_channel(arr)
+
+        return stack
+
 
 def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask_cdl=False):
+def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=None):
     d = Classifier()
-    if mask_cdl:
-        pass
-    d.get_stack(data, outfile=array_outfile, saved=saved_array)
+    d.get_stack(data, outfile=array_outfile, saved=saved_array, extra_mask=mask)
     data = d.masked_data_stack
 
     cores = cpu_count()
