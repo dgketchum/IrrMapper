@@ -66,6 +66,7 @@ class ImageStack(object):
         self.image_paths = None
 
         self.cdl_tif = None
+        self.cdl_mask = None
 
         self.n = n_landsat
 
@@ -83,13 +84,13 @@ class ImageStack(object):
         self.get_cdl()
 
     def get_cdl(self):
-        self.cdl_tif = os.path.join(self.root, 'cdl.tif')
-        if not os.path.isfile(self.cdl_tif):
+        self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
+        if not os.path.isfile(self.cdl_mask):
             polygon = self.landsat.get_tile_geometry()
-            cdl = Cdl(year=self.year, target_profile=self.landsat.profile, out_dir=self.root)
-            _ = cdl.get_conforming_data(polygon)
+            cdl = Cdl(year=self.year, target_profile=self.landsat.profile)
+            cdl.get_mask(polygon, self.cdl_mask)
         else:
-            print('{} exists'.format(self.cdl_tif))
+            print('{} exists'.format(self.cdl_mask))
 
     def get_landsat(self):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
