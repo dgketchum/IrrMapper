@@ -61,21 +61,21 @@ class CropDataLayer(object):
             if not out_dir:
                 self.cdl_location = os.path.join(os.path.dirname(__file__), 'model_data')
             else:
-                self.out_file = os.path.join(out_dir, 'cdl.tif')
                 self.cdl_location = out_dir
-            self.data_url = self._get_data_url()
 
             self.zip_file = os.path.join(self.cdl_location, '{}_30m_cdls.zip'.format(year))
 
             self.temp_dir = mkdtemp()
 
-            self.target_profile = target_profile
-            self.bbox = RasterBounds(profile=self.target_profile,
-                                     affine_transform=self.target_profile['transform'])
-            self.bbox.expand(**{'east': 0.1, 'west': -0.1, 'north': 0.2, 'south': -0.2})
-            self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
-            bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
-            self.request_url = self.url_base.format(year=year, wsen=bb_str)
+            if target_profile and year:
+                self.target_profile = target_profile
+                self.bbox = RasterBounds(profile=self.target_profile,
+                                         affine_transform=self.target_profile['transform'])
+                self.bbox.expand(**{'east': 0.1, 'west': -0.1, 'north': 0.2, 'south': -0.2})
+                self.bbox_projected = bb = self.bbox.to_lambert_conformal_conic()
+                bb_str = '{},{},{},{}'.format(bb[0], bb[1], bb[2], bb[3])
+                self.request_url = self.url_base.format(year=year, wsen=bb_str)
+                self.data_url = self._get_data_url()
 
             self.original_tif = None
             self.mask = None
@@ -100,7 +100,7 @@ class CropDataLayer(object):
                 if chunk:
                     f.write(chunk)
 
-    def get_conforming_data(self, clip_geometry, keep_original=False):
+    def get_conforming_data(self, clip_geometry, keep_original=False, out_file=None):
         self.get_original_tif()
         self._reproject()
         self._mask(clip_geometry)
@@ -109,7 +109,7 @@ class CropDataLayer(object):
         if not keep_original:
             os.remove(self.original_tif)
 
-        if self.out_file:
+        if out_file:
             self.save(result, self.target_profile, output_filename=os.path.join(self.cdl_location,
                                                                                 'cdl.tif'))
         self.cdl = result
