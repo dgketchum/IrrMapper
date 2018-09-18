@@ -123,11 +123,11 @@ if __name__ == '__main__':
     model = os.path.join(project, 'model.ckpt')
     build_model(project, data_path, model)
 
-    # for key, val in OBJECT_MAP.items():
-    #     geo_folder = os.path.join(project, key)
-    #     save_array = os.path.join(geo_folder, 'array.pkl')
-    #     geo_data = os.path.join(geo_folder, 'data.pkl')
-    #     cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
-    #     classify_multiproc(model, geo_data, saved_array=save_array, mask=cdl_path)
+    for key, val in OBJECT_MAP.items():
+        geo_folder = os.path.join(project, key)
+        save_array = os.path.join(geo_folder, 'array.pkl')
+        geo_data = os.path.join(geo_folder, 'data.pkl')
+        cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
+        classify_multiproc(model, geo_data, saved_array=save_array, mask=cdl_path)
 
 # ========================= EOF ====================================================================
