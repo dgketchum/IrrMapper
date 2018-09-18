@@ -137,7 +137,7 @@ class ImageStack(object):
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
-            products = ['ssebop_et', 'pet', 'lst', 'ssebop_etrf']
+            products = ['lst', 'ssebop_etrf']
             for p in products:
                 self.ancillary_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, p)))
 
