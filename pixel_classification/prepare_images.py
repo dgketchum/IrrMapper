@@ -39,7 +39,7 @@ class ImageStack(object):
     """
 
     def __init__(self, satellite, path, row, root=None, max_cloud_pct=None, start=None, end=None,
-                 year=None, n_landsat=None):
+            year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -109,23 +109,26 @@ class ImageStack(object):
     def get_terrain(self):
 
         slope_name = os.path.join(self.root, 'slope.tif')
+        aspect_name = os.path.join(self.root, 'aspect.tif')
         dif_elev = os.path.join(self.root, 'elevation_diff.tif')
 
         self.ancillary_rasters.append(slope_name)
+        self.ancillary_rasters.append(aspect_name)
         self.ancillary_rasters.append(dif_elev)
 
-        if not os.path.isfile(slope_name) or not os.path.isfile(dif_elev):
-            polygon = self.landsat.get_tile_geometry()
+        check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev]]
 
+        if False in check:
+            polygon = self.landsat.get_tile_geometry()
             bb = RasterBounds(affine_transform=self.profile['transform'],
                               profile=self.profile, latlon=True)
-
             dem = AwsDem(zoom=10, target_profile=self.profile, bounds=bb,
                          clip_object=polygon)
 
             dem.terrain(attribute='slope',
                         out_file=slope_name, save_and_return=True)
-
+            dem.terrain(attribute='aspect',
+                        out_file=aspect_name, save_and_return=True)
             elev = dem.terrain(attribute='elevation')
             elev = elev - mean(elev)
             dem.save(elev, geometry=dem.target_profile, output_filename=dif_elev)
