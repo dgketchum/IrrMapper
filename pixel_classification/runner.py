@@ -116,12 +116,12 @@ if __name__ == '__main__':
 
     # if not os.path.isdir(project):
     #     os.mkdir(project)
-
-    build_training_feature_array(project_root=project, training_root=training)
-
-    data_path = os.path.join(project, 'data.pkl')
+    #
+    # build_training_feature_array(project_root=project, training_root=training)
+    #
+    # data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    build_model(project, data_path, model)
+    # build_model(project, data_path, model)
 
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)

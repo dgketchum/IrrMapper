@@ -122,6 +122,7 @@ class Classifier(object):
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
+        single = stack[0, :, :]
 
         if mask_path:
             ms = self.mask.shape
@@ -129,12 +130,11 @@ class Classifier(object):
             stack = marray(stack, mask=msk)
 
         self.masked_data_stack = marray(stack, mask=np.isnan(stack))
-
         self.n = self.masked_data_stack.shape[0]
         del stack
 
-        single = stack[0, :, :]
-        self.new_array = np.zeros_like(single.reshape((1, single.shape[1] * single.shape[2])), dtype=float16)
+        self.new_array = np.zeros_like(single.reshape((1, single.shape[1] * single.shape[2])),
+                                       dtype=float16)
 
     def classify(self, arr=None):
 
@@ -224,17 +224,9 @@ class Classifier(object):
         return data
 
     def _get_mask_from_raster(self, extra_mask):
-        try:
-            with rasopen(extra_mask, mode='r') as src:
-                arr = src.read()
-                self.raster_geo = src.meta.copy()
-
-        except RasterioIOError:
-            extra_mask = extra_mask.replace('dgketchum', 'david.ketchum')
-            with rasopen(extra_mask, mode='r') as src:
-                arr = src.read()
-                self.raster_geo = src.meta.copy()
-
+        with rasopen(extra_mask, mode='r') as src:
+            arr = src.read()
+            self.raster_geo = src.meta.copy()
         return arr
 
     def _get_stack_channels(self):
@@ -249,19 +241,12 @@ class Classifier(object):
                 self.feature_ras = self.data.model_map[feat]
 
             print(os.path.basename(self.feature_ras))
-            try:
-                with rasopen(self.feature_ras, mode='r') as src:
-                    arr = src.read()
-                    self.raster_geo = src.meta.copy()
-                    if self.saved_array:
+
+            with rasopen(self.feature_ras, mode='r') as src:
+                arr = src.read()
+                self.raster_geo = src.meta.copy()
+                if self.saved_array:
                         break
-
-            except RasterioIOError:
-                self.feature_ras = self.feature_ras.replace('dgketchum', 'david.ketchum')
-                with rasopen(self.feature_ras, mode='r') as src:
-                    arr = src.read()
-                    self.raster_geo = src.meta.copy()
-
             if first:
                 first_geo = deepcopy(self.raster_geo)
                 empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
