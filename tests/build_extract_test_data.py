@@ -124,10 +124,27 @@ def _geo_to_projected(x, y, out_crs):
     return x, y
 
 
+def get_fiona(shapefile):
+    lats = []
+    lons = []
+    with fiona.open(shapefile, 'r') as src:
+        for feat in src:
+            coords = feat['geometry']['coordinates'][0]
+            [(lons.append(x), lats.append(y)) for x, y in coords]
+
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
+    print('South extent: {}\nNorth extent: {}\nWest extent: {}\nEast extent: {}'.format(min_lat,
+                                                                                        max_lat,
+                                                                                        min_lon,
+                                                                                        max_lon))
+
+
+
 if __name__ == '__main__':
+    home = os.path.expanduser('~')
     coords = -111.67, 47.17, -111.20, 47.48
-    geo = MontanaTest()
-    _dir = os.path.join(os.path.dirname(__file__).replace('tests', 'landsat_data'), '39', '27', '2015')
-    test_dir = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
-    make_test_dataset(coords, _dir, test_dir, geo)
+    shp = os.path.join(home, 'IrrigationGIS', 'OE_Shapefiles_WGS', 'Broadwater_Missouri_Canal.shp')
+    get_fiona(shp)
+    # make_test_dataset(coords, _dir, test_dir, geo)
 # ========================= EOF ====================================================================

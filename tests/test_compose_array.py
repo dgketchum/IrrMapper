@@ -22,7 +22,9 @@ from fiona import open as fopen
 
 from pixel_classification.compose_array import PixelTrainingArray
 from tests.build_extract_test_data import make_test_dataset
-from pixel_classification.runspec import return_object
+from pixel_classification.runspec import MontanaTest
+
+home = os.path.expanduser('~')
 
 
 class TestPointExtract(unittest.TestCase):
@@ -32,7 +34,7 @@ class TestPointExtract(unittest.TestCase):
         self.directory = os.path.join(os.path.dirname(__file__), 'data', 'pixel_extract_test')
 
     def test_sample_points(self):
-        montana = return_object('montana_test')
+        montana = MontanaTest()
         p = PixelTrainingArray(root=self.directory, geography=montana, instances=10,
                                overwrite_array=True)
         p.extract_sample(save_points=True)
