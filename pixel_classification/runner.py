@@ -28,8 +28,10 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.crop_data_layer import CropDataLayer
 
+
+
 OBJECT_MAP = {
-    'MT': Montana,
+    # 'MT': Montana,
     'NV': Nevada,
     'OR': Oregon,
     'UT': Utah,
@@ -54,7 +56,7 @@ def build_training_feature_array(project_root, training_root, sat=8):
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                            n_landsat=3, year=geo.year, max_cloud_pct=70)
             i.build_all()
-            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=False,
+            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=True,
                     overwrite_points=False, ancillary_rasters=i.ancillary_rasters)
             p.extract_sample(save_points=True)
 
@@ -117,17 +119,17 @@ if __name__ == '__main__':
     # if not os.path.isdir(project):
     #     os.mkdir(project)
     #
-    # build_training_feature_array(project_root=project, training_root=training)
-    #
-    # data_path = os.path.join(project, 'data.pkl')
+    build_training_feature_array(project_root=project, training_root=training)
+
+    data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    # build_model(project, data_path, model)
+    build_model(project, data_path, model)
 
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)
-        save_array = os.path.join(geo_folder, 'array.pkl')
+        save_array = os.path.join(geo_folder, 'array_d.pkl')
         geo_data = os.path.join(geo_folder, 'data.pkl')
         cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
-        classify_multiproc(model, geo_data, saved_array=save_array, mask=cdl_path)
+        classify_multiproc(model, geo_data, array_outfile=save_array, mask=cdl_path)
 
 # ========================= EOF ====================================================================
