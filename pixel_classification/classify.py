@@ -120,9 +120,9 @@ class Classifier(object):
                 dump(stack, handle, protocol=4)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
+        single = stack[0, :, :]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
-        single = stack[0, :, :]
 
         if mask_path:
             ms = self.mask.shape
@@ -133,8 +133,7 @@ class Classifier(object):
         self.n = self.masked_data_stack.shape[0]
         del stack
 
-        self.new_array = np.zeros_like(single.reshape((1, single.shape[1] * single.shape[2])),
-                                       dtype=float16)
+        self.new_array = zeros((1, self.masked_data_stack.shape[1]), dtype=float16)
 
     def classify(self, arr=None):
 
