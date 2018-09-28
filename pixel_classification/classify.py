@@ -240,8 +240,6 @@ class Classifier(object):
             except KeyError:
                 self.feature_ras = self.data.model_map[feat]
 
-            print(os.path.basename(self.feature_ras))
-
             with rasopen(self.feature_ras, mode='r') as src:
                 arr = src.read()
                 self.raster_geo = src.meta.copy()
@@ -259,7 +257,7 @@ class Classifier(object):
                 except ValueError:
                     print('Bad shape {}, need {}'.format(arr.shape, (stack.shape[1], stack.shape[2])))
                     arr = warp_single_image(self.feature_ras, first_geo)
-                    print('Got {} after warp single image'.format(arr.shape))
+                    print('Got {} after warp single image {}'.format(arr.shape, self.feature_ras))
                     stack[i, :, :] = self.normalize_image_channel(arr)
 
         return stack
