@@ -109,6 +109,7 @@ class Classifier(object):
             self.mask = self._get_mask_from_raster(mask_path)
 
         if saved:
+            print('load {}'.format(saved))
             self.saved_array = saved
             stack = load(saved)
         else:
@@ -118,7 +119,7 @@ class Classifier(object):
             stack = self._get_stack_channels()
 
         if outfile:
-            'saving image stack {}'.format(outfile)
+            print('saving image stack {}'.format(outfile))
             save(outfile, stack)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
