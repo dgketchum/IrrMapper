@@ -26,7 +26,7 @@ from numpy.core.multiarray import concatenate
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import tensorflow as tf
-from pickle import load, dump
+from numpy import load, save
 from numpy import zeros, array, float16, ndarray, array_split, float64
 from numpy.ma import array as marray
 from sklearn.preprocessing import StandardScaler
@@ -110,7 +110,7 @@ class Classifier(object):
 
         if saved:
             self.saved_array = saved
-            stack = load(open(saved, 'rb'))
+            stack = load(saved)
         else:
             self.data = PixelTrainingArray()
             self.data.from_pickle(path)
@@ -118,8 +118,7 @@ class Classifier(object):
             stack = self._get_stack_channels()
 
         if outfile:
-            with open(outfile, 'wb') as handle:
-                dump(stack, handle, protocol=4)
+            save(outfile, stack)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
