@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     for key, val in OBJECT_MAP.items():
         geo_folder = os.path.join(project, key)
-        save_array = os.path.join(geo_folder, 'array_d.pkl')
+        save_array = os.path.join(geo_folder, 'array.npy')
         geo_data = os.path.join(geo_folder, 'data.pkl')
         cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
         classify_multiproc(model, geo_data, array_outfile=save_array, mask=cdl_path)
