@@ -128,7 +128,8 @@ class CropDataLayer(object):
             arr = self.cdl
 
         crop = list(self.crop.keys())
-        msk = isin(arr, ~crop)
+        msk = isin(arr, crop)
+        msk = ~msk
         msk = msk.astype(uint8)
         profile = copy.deepcopy(self.target_profile)
         profile['dtype'] = uint8
