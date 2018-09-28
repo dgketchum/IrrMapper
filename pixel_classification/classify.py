@@ -118,6 +118,7 @@ class Classifier(object):
             stack = self._get_stack_channels()
 
         if outfile:
+            'saving image stack {}'.format(outfile)
             save(outfile, stack)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
