@@ -423,7 +423,7 @@ class PixelTrainingArray(object):
             pass
         elif unique_targets == 2:
             self.is_binary = True
-        elif unique_targets < 2:
+        elif 0 < unique_targets < 2:
             warn('This dataset has fewer than two target classes,'
                  'classification is meaningless.')
         elif unique_targets > 2:
