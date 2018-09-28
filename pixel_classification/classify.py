@@ -29,16 +29,18 @@ import tensorflow as tf
 from pickle import load, dump
 from numpy import zeros, array, float16, ndarray, array_split, float64
 from numpy.ma import array as marray
-from numpy.ma import MaskedArray
 from sklearn.preprocessing import StandardScaler
 from rasterio import open as rasopen
 from rasterio.dtypes import float32
-from rasterio.errors import RasterioIOError
 
 from sat_image.warped_vrt import warp_single_image
-
 from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
+
+import warnings
+from sklearn.exceptions import DataConversionWarning
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=DataConversionWarning)
 
 
 class Result:
@@ -120,7 +122,6 @@ class Classifier(object):
                 dump(stack, handle, protocol=4)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
-        single = stack[0, :, :]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
         stack[stack == 0.] = np.nan
 
@@ -245,7 +246,7 @@ class Classifier(object):
                 arr = src.read()
                 self.raster_geo = src.meta.copy()
                 if self.saved_array:
-                        break
+                    break
             if first:
                 first_geo = deepcopy(self.raster_geo)
                 empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
