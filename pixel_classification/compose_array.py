@@ -174,7 +174,7 @@ class PixelTrainingArray(object):
         else:
             self.populate_array_from_points()
 
-        if save_points and self.overwrite_points:
+        if save_points:
             self.save_sample_points()
 
         self.populate_data_array()

@@ -26,21 +26,17 @@ from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
-from pixel_classification.crop_data_layer import CropDataLayer
-
-
 
 OBJECT_MAP = {
     # 'MT': Montana,
     'NV': Nevada,
-    'OR': Oregon,
-    'UT': Utah,
-    'WA': Washington
+    # 'OR': Oregon,
+    # 'UT': Utah,
+    # 'WA': Washington
 }
 
 
 def build_training_feature_array(project_root, training_root, sat=8):
-
     for key, obj in OBJECT_MAP.items():
 
         project_state_dir = os.path.join(project_root, key)
@@ -121,15 +117,15 @@ if __name__ == '__main__':
     #
     build_training_feature_array(project_root=project, training_root=training)
 
-    data_path = os.path.join(project, 'data.pkl')
+    # data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    build_model(project, data_path, model)
+    # build_model(project, data_path, model)
 
-    for key, val in OBJECT_MAP.items():
-        geo_folder = os.path.join(project, key)
-        save_array = os.path.join(geo_folder, 'array.npy')
-        geo_data = os.path.join(geo_folder, 'data.pkl')
-        cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
-        classify_multiproc(model, geo_data, array_outfile=save_array, mask=cdl_path)
+    # for key, val in OBJECT_MAP.items():
+    #     geo_folder = os.path.join(project, key)
+    #     save_array = os.path.join(geo_folder, 'array.npy')
+    #     geo_data = os.path.join(geo_folder, 'data.pkl')
+    #     cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
+    #     classify_multiproc(model, geo_data, array_outfile=save_array, mask=cdl_path)
 
 # ========================= EOF ====================================================================
