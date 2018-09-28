@@ -127,7 +127,7 @@ class Classifier(object):
         if mask_path:
             ms = self.mask.shape
             msk = np.repeat(self.mask.reshape((ms[0], ms[1] * ms[2])), stack.shape[0], axis=0)
-            stack = marray(stack, mask=msk)
+            stack = marray(stack, mask=~msk)
 
         self.masked_data_stack = marray(stack, mask=np.isnan(stack))
         self.n = self.masked_data_stack.shape[0]
@@ -286,7 +286,7 @@ def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=N
         final = a.assembled.reshape(d.final_shape)
     td = (datetime.now() - time)
 
-    print(td.days, td.seconds // 3600, (td.seconds // 60) % 60)
+    print('time', td.days, td.seconds // 3600, (td.seconds // 60) % 60)
 
     if saved_array:
         out_loc = os.path.dirname(saved_array)
