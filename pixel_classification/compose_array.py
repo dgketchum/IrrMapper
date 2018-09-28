@@ -419,13 +419,14 @@ class PixelTrainingArray(object):
 
         unique_targets = len(unique(target_vals))
 
-        if unique_targets == 2:
+        if not target_vals.any():
+            pass
+        elif unique_targets == 2:
             self.is_binary = True
         elif unique_targets < 2:
             warn('This dataset has fewer than two target classes,'
                  'classification is meaningless.')
         elif unique_targets > 2:
-            # print('This dataset has {} unique target classes'.format(unique_targets))
             self.is_binary = False
         else:
             warn('This dataset has {} target classes'.format(unique_targets))
