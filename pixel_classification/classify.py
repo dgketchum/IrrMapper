@@ -183,7 +183,7 @@ class Classifier(object):
 
         return Result(self.idx, self.new_array)
 
-    def write_raster(self, out_location, out_name, new_array=None):
+    def write_raster(self, out_file, new_array=None):
 
         if isinstance(new_array, ndarray):
             self.new_array = new_array
@@ -198,9 +198,7 @@ class Classifier(object):
         self.raster_geo['dtype'] = str(self.new_array.dtype)
         self.raster_geo['count'] = 1
 
-        out_ras = os.path.join(out_location, out_name)
-
-        with rasopen(out_ras, 'w', **self.raster_geo) as dst:
+        with rasopen(out_file, 'w', **self.raster_geo) as dst:
             dst.write(self.new_array)
 
         return None
@@ -268,7 +266,7 @@ def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=None, result=None):
+def classify_multiproc(model, data, result, saved_array=None, array_outfile=None, mask=None):
     d = Classifier()
     d.get_stack(data, outfile=array_outfile, saved=saved_array, mask_path=mask)
     data = d.masked_data_stack
@@ -288,15 +286,7 @@ def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=N
 
     print('time', td.days, td.seconds // 3600, (td.seconds // 60) % 60)
 
-    out_loc = None
-    if saved_array:
-        out_loc = os.path.dirname(saved_array)
-    if array_outfile:
-        out_loc = os.path.dirname(array_outfile)
-    if result:
-        out_loc = result
-
-    d.write_raster(out_location=out_loc, out_name='test_classified.tif', new_array=final)
+    d.write_raster(out_file=result, new_array=final)
 
     return None
 

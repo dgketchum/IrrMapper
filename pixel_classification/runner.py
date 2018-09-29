@@ -20,6 +20,7 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack
+from datetime import datetime
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_images import ImageStack
@@ -28,11 +29,11 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 
 OBJECT_MAP = {
-    # 'MT': Montana,
-    # 'NV': Nevada,
+    'MT': Montana,
+    'NV': Nevada,
     'OR': Oregon,
-    # 'UT': Utah,
-    # 'WA': Washington
+    'UT': Utah,
+    'WA': Washington
 }
 
 
@@ -109,7 +110,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
 
     training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
-    classified = os.path.join(home, 'IrrigationGIS', 'classified')
+    classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
     model_data = os.path.join(abspath, 'model_data')
     project = os.path.join(model_data, 'allstates_3')
 
@@ -120,14 +121,18 @@ if __name__ == '__main__':
 
     data_path = os.path.join(project, 'data.pkl')
     model = os.path.join(project, 'model.ckpt')
-    # build_model(project, data_path, model)
+    build_model(project, data_path, model)
 
     for key, val in OBJECT_MAP.items():
         print('Classify {}'.format(key))
+        dt = '{}_{}{}'.format(key, datetime.now().month, datetime.now().day)
+        classified_tif = os.path.join(classified_dir, dt)
         geo_folder = os.path.join(project, key)
         save_array = os.path.join(geo_folder, 'array.npy')
         geo_data = os.path.join(geo_folder, 'data.pkl')
         cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
-        classify_multiproc(model, geo_data, array_outfile=save_array, mask=cdl_path, result=classified)
+
+        classify_multiproc(model, geo_data, saved_array=save_array,
+                           mask=cdl_path, result=classified_tif)
 
 # ========================= EOF ====================================================================
