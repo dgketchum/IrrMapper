@@ -129,7 +129,7 @@ class Classifier(object):
         if mask_path:
             ms = self.mask.shape
             msk = np.repeat(self.mask.reshape((ms[0], ms[1] * ms[2])), stack.shape[0], axis=0)
-            stack = marray(stack, mask=~msk)
+            stack = marray(stack, mask=msk)
 
         self.masked_data_stack = marray(stack, mask=np.isnan(stack))
         self.n = self.masked_data_stack.shape[0]
@@ -268,7 +268,7 @@ def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=None):
+def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=None, result=None):
     d = Classifier()
     d.get_stack(data, outfile=array_outfile, saved=saved_array, mask_path=mask)
     data = d.masked_data_stack
@@ -288,10 +288,13 @@ def classify_multiproc(model, data, saved_array=None, array_outfile=None, mask=N
 
     print('time', td.days, td.seconds // 3600, (td.seconds // 60) % 60)
 
+    out_loc = None
     if saved_array:
         out_loc = os.path.dirname(saved_array)
     if array_outfile:
         out_loc = os.path.dirname(array_outfile)
+    if result:
+        out_loc = result
 
     d.write_raster(out_location=out_loc, out_name='test_classified.tif', new_array=final)
 
