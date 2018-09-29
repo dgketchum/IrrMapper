@@ -86,6 +86,7 @@ class ImageStack(object):
     def get_cdl(self):
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
         if not os.path.isfile(self.cdl_mask):
+            print('get {}'.format(self.cdl_mask))
             polygon = self.landsat.get_tile_geometry()
             cdl = Cdl(year=self.year, target_profile=self.landsat.profile)
             cdl.get_mask(clip_geometry=polygon, out_file=self.cdl_mask)
