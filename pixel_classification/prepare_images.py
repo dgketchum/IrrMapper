@@ -165,8 +165,8 @@ class ImageStack(object):
 
     def _make_fmask(self, image_dir):
 
-        self.dst_path_cloud = os.path.join(image_dir, 'cloud_fmask.tif')
-        self.dst_path_water = os.path.join(image_dir, 'water_fmask.tif')
+        self.dst_path_cloud = os.path.join(image_dir, '{}_cloud_fmask.tif'.format(image_dir))
+        self.dst_path_water = os.path.join(image_dir, '{}_water_fmask.tif'.format(image_dir))
 
         if os.path.isfile(self.dst_path_cloud) and os.path.isfile(self.dst_path_water):
             print('{} and {} exist for {}'.format(os.path.basename(self.dst_path_cloud),
@@ -226,8 +226,7 @@ class ImageStack(object):
             for p in paths:
                 dct[os.path.basename(p).split('.')[0]] = p
 
-        self.stack_features = dct
-        return self.stack_features
+        self.model_map = dct
 
 
 if __name__ == '__main__':

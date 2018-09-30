@@ -246,34 +246,6 @@ class PixelTrainingArray(object):
 
                 class_count += poly_pt_ct
 
-    def create_negative_sample_points(self):
-        """
-        Create an inverse training set from the inverse of the polygon shapefiles.
-        """
-
-        shell = self.tile_bbox['coordinates'][0]
-        inverse_polygon = Polygon(shell=shell, holes=self.interior_rings)
-        inverse_polygon = inverse_polygon.buffer(0)
-        inverse_polygon = unary_union(inverse_polygon)
-        coords = inverse_polygon.bounds
-        x_range, y_range = self._random_points_array(coords)
-        count = 0
-        time = datetime.now()
-        for coord in zip(x_range, y_range):
-            if count < self.m_instances:
-                if Point(coord[0], coord[1]).within(inverse_polygon):
-                    self._add_entry(coord, val=-1)
-                    count += 1
-                    if count % 1000 == 0:
-                        print('Count {} of {} negative instances'
-                              ' in {} seconds'.format(count, int(self.m_instances),
-                                                      (datetime.now() - time).seconds))
-            else:
-                break
-
-        self.extracted_points.infer_objects()
-        self.is_sampled = True
-
     def populate_data_array(self):
 
         min_cloud = 1.
