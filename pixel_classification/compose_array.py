@@ -21,7 +21,6 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 import pickle
 from copy import deepcopy
-from datetime import datetime
 from warnings import warn
 
 from fiona import open as fopen
@@ -30,11 +29,10 @@ from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
 from rasterio import open as rasopen
-from shapely.geometry import shape, Polygon, Point, mapping
+from shapely.geometry import shape, Point, mapping
 from shapely.ops import unary_union
 from sklearn.decomposition import PCA
 
-from sat_image.band_map import BandMap
 from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
 loc = os.path.dirname(__file__)
@@ -67,9 +65,9 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, root=None, geography=None, instances=None, from_pkl=False, pkl_path=None,
-                 overwrite_array=False, overwrite_points=False, max_cloud=1.0, from_dict=None,
-                 ancillary_rasters=None):
+    def __init__(self, root=None, geography=None, instances=None, from_dict=None, pkl_path=None,
+                 overwrite_array=False, overwrite_points=False):
+
         """
 
         :param pkl_path:
@@ -88,82 +86,34 @@ class PixelTrainingArray(object):
         :param overwrite_array:
         """
 
-        try:
+        self.overwrite_array = overwrite_array
+        self.overwrite_points = overwrite_points
+
+        if pkl_path and not overwrite_array:
+            self.from_pickle(pkl_path)
+            self.array_exists = True
+
+        elif from_dict:
+            self._from_dict(from_dict)
+            self.array_exists = True
+
+        else:
             g = geography
             self.root = root
             self.path_row_dir = os.path.join(self.root, str(g.path), str(g.row))
             self.year_dir = os.path.join(self.path_row_dir, str(g.year))
-        except AttributeError:
-            pass
+            self.image_directory = root
+            self.is_binary = None
 
-        self.overwrite_array = overwrite_array
-        self.overwrite_points = overwrite_points
+            self.features = None
+            self.data = None
+            self.target_values = None
 
-        if pkl_path:
-            self.from_pickle(pkl_path)
-            self.array_exists = True
-
-        if from_pkl and not overwrite_array:
-            self.from_pickle()
-            self.array_exists = True
-
-        elif from_dict and not overwrite_array:
-            self._from_dict(from_dict)
-            self.array_exists = True
-
-        elif not overwrite_array and root:
-            d = os.path.join(self.root, 'data.pkl')
-            if os.path.isfile(d):
-                self.array_exists = True
-            else:
-                print('Did not find data at {}'.format(d))
-
-        else:
-            try:
-                self.image_directory = root
-                self.array_exists = False
-                self.is_sampled = False
-                self.has_data = False
-                self.is_binary = None
-
-                self.features = None
-                self.data = None
-                self.target_values = None
-
-                self.m_instances = instances
-                self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
-                self.extract_paths = {}
-                self.model_map = {}
-
-                self.max_cloud = max_cloud
-                self.water_mask = None
-                self.object_id = 0
-
-                self.band_map = BandMap()
-                self.images = self._instantiate_images()
-                self.current_img = self.images[0]
-
-                self.ancillary_rasters = ancillary_rasters
-
-                try:
-                    self.path, self.row = self.current_img.target_wrs_path, self.current_img.target_wrs_row
-                except AttributeError:
-                    self.path, self.row = self.current_img.wrs_path, self.current_img.wrs_row
-
-                self.geography = geography
-                self.coord_system = self.current_img.rasterio_geometry['crs']
-
-            except TypeError:
-                self.empty_training_array = True
+            self.m_instances = instances
+            self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
+            self.object_id = 0
 
     def extract_sample(self, save_points=False):
-
-        if self.array_exists and not self.overwrite_array and not self.overwrite_points:
-            print(
-                'The feature array has already been sampled to {}, '
-                'use overwrite=True to resample '
-                'this image stack'.format(self.root))
-            return None
 
         if not os.path.isfile(self.shapefile_path):
             self.create_sample_points()
@@ -217,16 +167,12 @@ class PixelTrainingArray(object):
                 polygons = [x for x, y in srt[:self.m_instances]]
 
             polygons = unary_union(polygons)
-
             positive_area = sum([x.area for x in polygons])
-
             class_count = 0
 
             for i, poly in enumerate(polygons):
-
                 if class_count >= self.m_instances:
                     break
-
                 fractional_area = poly.area / positive_area
                 required_points = max([1, fractional_area * self.m_instances])
                 x_range, y_range = self._random_points_array(poly.bounds)
@@ -248,47 +194,14 @@ class PixelTrainingArray(object):
 
     def populate_data_array(self):
 
-        min_cloud = 1.
-        for sat_image in self.images:
-            self.current_img = sat_image
-            masks = [os.path.join(sat_image.obj, x) for x in sat_image.file_list if x.endswith('fmask.tif')]
-            scn = self.current_img.landsat_scene_id
+        for key, val in self.model_map.items():
             try:
-                for path in masks:
-                    mask_series = self._point_raster_extract(path)
-                    is_cloud_mask = path.endswith('cloud_fmask.tif')
-                    if is_cloud_mask:
-                        fraction_masked = mask_series.sum() / len(mask_series)
-                        excessive_clouds = fraction_masked > self.max_cloud
-                        if fraction_masked < min_cloud:
-                            min_cloud = fraction_masked
-                            self.water_mask = path.replace('cloud', 'water')
-
-                        if excessive_clouds:
-                            raise ExcessiveCloudsError(
-                                '{} has {:.2f}% clouds, skipping'.format(scn,
-                                                                         fraction_masked * 100.))
-                        else:
-                            print('Extracting {}'.format(scn))
-
-                        self.extracted_points = self.extracted_points.join(mask_series,
-                                                                           how='outer')
-
-                for band, path in sat_image.tif_dict.items():
-                    if band.replace('b', '') in self.band_map.selected[sat_image.satellite]:
-                        band_series = self._point_raster_extract(path)
-                        self.extracted_points = self.extracted_points.join(band_series,
-                                                                           how='outer')
-
+                mask_series = self._point_raster_extract(val)
+                print('Extracting {}'.format(key))
+                self.extracted_points = self.extracted_points.join(mask_series, how='outer')
             except AttributeError as e:
                 print(e)
-                pass
-
-        if self.ancillary_rasters:
-            for ras in self.ancillary_rasters:
-                band_series = self._point_raster_extract(ras, image=False)
-                self.extracted_points = self.extracted_points.join(band_series,
-                                                                   how='outer')
+            pass
 
         data_array, targets = self._purge_array()
         data = {'df': data_array,
@@ -296,8 +209,7 @@ class PixelTrainingArray(object):
                 'data': data_array.values,
                 'target_values': targets,
                 'model_map': self.model_map,
-                'water_mask': self.water_mask,
-                }
+                'water_mask': self.water_mask}
 
         print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():
@@ -306,7 +218,6 @@ class PixelTrainingArray(object):
         self.to_pickle(data)
 
         self._check_targets(targets)
-        self.has_data = True
 
     def save_sample_points(self):
 
@@ -342,7 +253,28 @@ class PixelTrainingArray(object):
             setattr(self, key, val)
 
         self._check_targets(self.target_values)
-        self.has_data = True
+
+    def _purge_array(self):
+
+        data_array = deepcopy(self.extracted_points)
+        target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
+        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
+
+        for msk in self.masks:
+            data_array[data_array[msk] == 1.] = nan
+
+        for bnd in self.bands:
+            data_array[data_array[bnd] == 0.] = nan
+
+        data_array = data_array.join(target_vals, how='outer')
+
+        data_array.dropna(axis=0, inplace=True)
+        data_array.drop(self.masks, axis=1, inplace=True)
+        target_vals = data_array.POINT_TYPE.values
+
+        data_array = data_array.drop(['POINT_TYPE'],
+                                     axis=1, inplace=False)
+        return data_array, target_vals
 
     def _from_dict(self, data):
 
@@ -350,37 +282,6 @@ class PixelTrainingArray(object):
             setattr(self, key, val)
 
         self._check_targets(self.target_values)
-        self.has_data = True
-
-    def _purge_array(self):
-
-        data_array = deepcopy(self.extracted_points)
-
-        target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
-
-        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
-        masks = [x for x in data_array.columns.tolist() if x.endswith('mask')]
-        bands = [x for x in data_array.columns.tolist() if not x.endswith('mask')]
-
-        for msk in masks:
-            data_array[data_array[msk] == 1.] = nan
-
-        for bnd in bands:
-            data_array[data_array[bnd] == 0.] = nan
-
-        data_array = data_array.join(target_vals,
-                                     how='outer')
-
-        data_array.dropna(axis=0, inplace=True)
-
-        data_array.drop(masks, axis=1, inplace=True)
-
-        target_vals = data_array.POINT_TYPE.values
-
-        data_array = data_array.drop(['POINT_TYPE'],
-                                     axis=1, inplace=False)
-
-        return data_array, target_vals
 
     def _check_targets(self, target_vals):
 
@@ -399,34 +300,14 @@ class PixelTrainingArray(object):
             warn('This dataset has {} target classes'.format(unique_targets))
             self.is_binary = False
 
-    def _point_raster_extract(self, raster, image=True):
-
-        if image:
-            basename = os.path.basename(raster)
-            name_split = basename.split(sep='_')
-
-            try:
-                band = name_split[7].split(sep='.')[0]
-                date_string = name_split[3]
-            except IndexError:
-                band = basename.replace('.tif', '')
-                date_string = datetime.strftime(self.current_img.date_acquired, '%Y%m%d')
-
-            column_name = '{}_{:03d}{:03d}_{}_{}'.format(self.current_img.satellite,
-                                                         self.path,
-                                                         self.row, date_string, band)
-
-        else:
-            basename = os.path.basename(raster)
-            band = basename.replace('.tif', '')
-            column_name = os.path.basename(band)
+    def _point_raster_extract(self, raster):
 
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
             affine = rsrc.transform
 
-        s = Series(index=range(0, self.extracted_points.shape[0]), name=column_name)
+        s = Series(index=range(0, self.extracted_points.shape[0]))
         for ind, row in self.extracted_points.iterrows():
             x, y = self._geo_point_to_projected_coords(row['X'], row['Y'])
             c, r = ~affine * (x, y)
