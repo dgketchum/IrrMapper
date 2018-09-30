@@ -35,6 +35,7 @@ from rasterio.dtypes import float32
 
 from sat_image.warped_vrt import warp_single_image
 from pixel_classification.compose_array import PixelTrainingArray
+from pixel_classification.prepare_images import ImageStack
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 import warnings
@@ -103,7 +104,8 @@ class Classifier(object):
         if model:
             self.model = model
 
-    def get_stack(self, feature_data, saved=None, outfile=None, mask_path=None):
+    def get_stack(self, image_data, saved=None, outfile=None, mask_path=None):
+        stack = None
 
         if mask_path:
             self.mask = self._get_mask_from_raster(mask_path)
@@ -113,13 +115,14 @@ class Classifier(object):
             self.saved_array = saved
             stack = load(saved)
 
-        elif feature_data.endswith('.pkl'):
-            self.data = PixelTrainingArray()
-            self.data.from_pickle(feature_data)
+        elif isinstance(image_data, PixelTrainingArray):
+            self.data = image_data
             stack = self._get_stack_channels()
 
-        elif isinstance(feature_data, dict):
-            self.data.features = feature_data
+        elif isinstance(image_data, ImageStack):
+            self.data = image_data
+            self.data.features = image_data.stack_features
+            self.data.model_map = image_data.model_map
             stack = self._get_stack_channels()
 
         if outfile:
