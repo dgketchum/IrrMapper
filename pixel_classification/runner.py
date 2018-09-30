@@ -143,6 +143,6 @@ if __name__ == '__main__':
     project_dir = os.path.join(model_data, 'allstates_3')
     data_path = os.path.join(project_dir, 'data.pkl')
     model_name = os.path.join(project_dir, 'model.ckpt')
-    # run_training_scenes(model_name, project_dir,_build_training=False, _build_model=False)
+    run_training_scenes(model_name, project_dir, _build_training=False, _build_model=False)
 
 # ========================= EOF ====================================================================
