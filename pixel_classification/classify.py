@@ -34,7 +34,6 @@ from rasterio import open as rasopen
 from rasterio.dtypes import float32
 
 from sat_image.warped_vrt import warp_single_image
-from pixel_classification.compose_array import PixelTrainingArray
 from pixel_classification.prepare_images import ImageStack
 from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
@@ -104,26 +103,22 @@ class Classifier(object):
         if model:
             self.model = model
 
-    def get_stack(self, image_data, saved=None, outfile=None, mask_path=None):
-        stack = None
+    def get_stack(self, image_data, outfile=None, mask_path=None):
 
         if mask_path:
             self.mask = self._get_mask_from_raster(mask_path)
 
-        if saved:
-            print('load {}'.format(saved))
-            self.saved_array = saved
-            stack = load(saved)
-
-        elif isinstance(image_data, PixelTrainingArray):
-            self.data = image_data
-            stack = self._get_stack_channels()
+        if os.path.isfile(image_data):
+            print('load {}'.format(image_data))
+            self.saved_array = image_data
+            stack = load(image_data)
 
         elif isinstance(image_data, ImageStack):
             self.data = image_data
-            self.data.features = image_data.stack_features
-            self.data.model_map = image_data.model_map
             stack = self._get_stack_channels()
+
+        else:
+            raise NotImplementedError('Must pass ImageStack or path to saved array (.npy)')
 
         if outfile:
             print('saving image stack {}'.format(outfile))
@@ -167,9 +162,6 @@ class Classifier(object):
 
         g = tf.get_default_graph()
 
-        ct_out = 0
-        ct_nan = 0
-
         if not self.new_array:
             self.new_array = zeros((1, self.masked_data_stack.shape[1]), dtype=float16)
 
@@ -179,10 +171,8 @@ class Classifier(object):
                 dat = array(dat).reshape((1, dat.shape[0]))
                 loss = sess.run(classifier, feed_dict={self.pixel: dat})
                 self.new_array[0, i] = np.argmax(loss, 1)
-                ct_out += 1
             else:
                 self.new_array[0, i] = np.nan
-                ct_nan += 1
 
         sess.close()
 
@@ -210,7 +200,43 @@ class Classifier(object):
 
         return None
 
-    def normalize_image_channel(self, data):
+    def _get_mask_from_raster(self, extra_mask):
+        with rasopen(extra_mask, mode='r') as src:
+            arr = src.read()
+            self.raster_geo = src.meta.copy()
+        return arr
+
+    def _get_stack_channels(self):
+
+        stack = None
+        first = True
+
+        for i, feat in enumerate(self.data.model_map.keys()):
+
+            self.feature_ras = self.data.model_map[feat]
+
+            with rasopen(self.feature_ras, mode='r') as src:
+                arr = src.read()
+                self.raster_geo = src.meta.copy()
+                if self.saved_array:
+                    break
+            if first:
+                first_geo = deepcopy(self.raster_geo)
+                empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
+                stack = empty
+                stack[i, :, :] = self.normalize_image_channel(arr)
+                first = False
+            else:
+                try:
+                    stack[i, :, :] = self.normalize_image_channel(arr)
+                except ValueError:
+                    arr = warp_single_image(self.feature_ras, first_geo)
+                    stack[i, :, :] = self.normalize_image_channel(arr)
+
+        return stack
+
+    @staticmethod
+    def normalize_image_channel(data):
         data = data.reshape((data.shape[1], data.shape[2]))
 
         data[data == np.nan] = 0.
@@ -229,57 +255,18 @@ class Classifier(object):
         data = data.astype(dtype=float16)
         return data
 
-    def _get_mask_from_raster(self, extra_mask):
-        with rasopen(extra_mask, mode='r') as src:
-            arr = src.read()
-            self.raster_geo = src.meta.copy()
-        return arr
-
-    def _get_stack_channels(self):
-
-        first = True
-
-        for i, feat in enumerate(self.data.features):
-
-            try:
-                self.feature_ras = self.data.model_map[feat[0]]
-            except KeyError:
-                self.feature_ras = self.data.model_map[feat]
-
-            with rasopen(self.feature_ras, mode='r') as src:
-                arr = src.read()
-                self.raster_geo = src.meta.copy()
-                if self.saved_array:
-                    break
-            if first:
-                first_geo = deepcopy(self.raster_geo)
-                empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
-                stack = empty
-                stack[i, :, :] = self.normalize_image_channel(arr)
-                first = False
-            else:
-                try:
-                    stack[i, :, :] = self.normalize_image_channel(arr)
-                except ValueError:
-                    print('Bad shape {}, need {}'.format(arr.shape, (stack.shape[1], stack.shape[2])))
-                    arr = warp_single_image(self.feature_ras, first_geo)
-                    print('Got {} after warp single image {}'.format(arr.shape, self.feature_ras))
-                    stack[i, :, :] = self.normalize_image_channel(arr)
-
-        return stack
-
 
 def get_classifier(obj, arr):
     return obj.classify(arr)
 
 
-def classify_multiproc(model, data, result, saved_array=None, array_outfile=None, mask=None):
+def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None):
     d = Classifier()
-    d.get_stack(data, outfile=array_outfile, saved=saved_array, mask_path=mask)
-    data = d.masked_data_stack
+    d.get_stack(stack_data, outfile=array_outfile, mask_path=mask)
+    stack_data = d.masked_data_stack
 
     cores = cpu_count()
-    a = ArrayDisAssembly(data)
+    a = ArrayDisAssembly(stack_data)
     arrays = a.disassemble(n_sections=cores)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)

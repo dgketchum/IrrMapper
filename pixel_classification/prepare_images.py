@@ -87,7 +87,6 @@ class ImageStack(object):
         self.get_terrain()
         self.get_cdl()
         self.model_map = self._order_images()
-        self.stack_features = self.model_map.keys()
 
     def get_cdl(self):
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
@@ -164,9 +163,9 @@ class ImageStack(object):
         self.landsat = self.landsat_mapping[self.sat_abv](master)
 
     def _make_fmask(self, image_dir):
-
-        self.dst_path_cloud = os.path.join(image_dir, '{}_cloud_fmask.tif'.format(image_dir))
-        self.dst_path_water = os.path.join(image_dir, '{}_water_fmask.tif'.format(image_dir))
+        s = os.path.basename(image_dir)
+        self.dst_path_cloud = os.path.join(image_dir, '{}_cloud_fmask.tif'.format(s))
+        self.dst_path_water = os.path.join(image_dir, '{}_water_fmask.tif'.format(s))
 
         if os.path.isfile(self.dst_path_cloud) and os.path.isfile(self.dst_path_water):
             print('{} and {} exist for {}'.format(os.path.basename(self.dst_path_cloud),
@@ -226,8 +225,7 @@ class ImageStack(object):
             for p in paths:
                 dct[os.path.basename(p).split('.')[0]] = p
 
-        self.model_map = dct
-
+        return dct
 
 if __name__ == '__main__':
     pass

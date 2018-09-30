@@ -81,7 +81,7 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-def run_training_scenes(model, project, training=None):
+def run_training_scenes(project, model=None, training=None):
 
     for key, val in OBJECT_MAP.items():
         print('Classify {}'.format(key))
@@ -93,22 +93,25 @@ def run_training_scenes(model, project, training=None):
 
         geography = os.path.join(training, key)
         geo = val(geography)
+        geo_folder = os.path.join(project, key)
+        geo_data_path = os.path.join(geo_folder, 'data.pkl')
 
         if training:
             i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
-                           n_landsat=3, year=geo.year, max_cloud_pct=70).build_all()
-            p = Pta(root=i.root, geography=geo, instances=100,
-                    overwrite_array=False, overwrite_points=False).extract_sample()
+                           n_landsat=1, year=geo.year, max_cloud_pct=70)
+            i.build_all()
+            p = Pta(root=i.root, geography=geo, paths_map=i.model_map, instances=100,
+                    overwrite_array=False, overwrite_points=False)
+            p.extract_sample()
             i.warp_vrt()
 
         if not model:
-            build_model(project, data_path, model)
+            model_name = os.path.join(project_dir, 'model.ckpt')
+            build_model(project, geo_data_path, model_name)
 
         tif_name = '{}_{}{}.tif'.format(key.lower(), datetime.now().month, datetime.now().day)
         classified_tif = os.path.join(classified_dir, tif_name)
-        geo_folder = os.path.join(project, key)
         save_array = os.path.join(geo_folder, 'array.npy')
-        geo_data_path = os.path.join(geo_folder, 'data.pkl')
         cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
 
         pta = Pta()
@@ -140,13 +143,8 @@ if __name__ == '__main__':
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
     model_data = os.path.join(abspath, 'model_data')
-
-    # stacks = os.path.join(model_data, 'stacks')
-
     project_dir = os.path.join(model_data, 'allstates_1')
-    data_path = os.path.join(project_dir, 'data.pkl')
-    model_name = os.path.join(project_dir, 'model.ckpt')
 
-    run_training_scenes(model_name, project_dir, training=training_dir)
+    run_training_scenes(project_dir, training=training_dir)
     # classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
 # ========================= EOF ====================================================================

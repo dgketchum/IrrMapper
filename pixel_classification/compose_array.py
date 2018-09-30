@@ -24,16 +24,13 @@ from copy import deepcopy
 from warnings import warn
 
 from fiona import open as fopen
-from numpy import linspace, max, nan, unique, cumsum
+from numpy import linspace, max, nan, unique
 from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
 from rasterio import open as rasopen
 from shapely.geometry import shape, Point, mapping
 from shapely.ops import unary_union
-from sklearn.decomposition import PCA
-
-from sat_image.image import LandsatImage, Landsat5, Landsat7, Landsat8
 
 loc = os.path.dirname(__file__)
 WRS_2 = loc.replace('pixel_classification',
@@ -41,7 +38,7 @@ WRS_2 = loc.replace('pixel_classification',
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.  
-The high-level method `extract_sample` will return a numpy.ndarray object ready for a 
+The high-level method `extract_sample` will return an object ready for a 
 learning algorithm.  
 '''
 
@@ -54,10 +51,6 @@ class UnexpectedCoordinateReferenceSystemError(Exception):
     pass
 
 
-class ExcessiveCloudsError(Exception):
-    pass
-
-
 class PixelTrainingArray(object):
     """
     Notes: The training shape must be un-projected, in the WGS84 EPSG 4326 coordinate reference system.
@@ -65,8 +58,9 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, root=None, geography=None, instances=None, from_dict=None, pkl_path=None,
-                 overwrite_array=False, overwrite_points=False):
+    def __init__(self, root=None, geography=None, paths_map=None,
+            instances=None, from_dict=None, pkl_path=None,
+            overwrite_array=False, overwrite_points=False):
 
         """
 
@@ -98,11 +92,12 @@ class PixelTrainingArray(object):
             self.array_exists = True
 
         else:
-            g = geography
+            self.geography = geography
+            self.paths_map = paths_map
+            self.crs = self._get_crs()
             self.root = root
-            self.path_row_dir = os.path.join(self.root, str(g.path), str(g.row))
-            self.year_dir = os.path.join(self.path_row_dir, str(g.year))
-            self.image_directory = root
+            self.path_row_dir = os.path.join(self.root, str(geography.path), str(geography.row))
+            self.year_dir = os.path.join(self.path_row_dir, str(geography.year))
             self.is_binary = None
 
             self.features = None
@@ -113,7 +108,7 @@ class PixelTrainingArray(object):
             self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
             self.object_id = 0
 
-    def extract_sample(self, save_points=False):
+    def extract_sample(self, save_points=True):
 
         if not os.path.isfile(self.shapefile_path):
             self.create_sample_points()
@@ -122,20 +117,12 @@ class PixelTrainingArray(object):
             self.create_sample_points()
 
         else:
-            self.populate_array_from_points()
+            self._populate_array_from_points()
 
         if save_points:
             self.save_sample_points()
 
         self.populate_data_array()
-
-    def populate_array_from_points(self):
-        # TODO: replace with geopandas.shp_to_dataframe
-        with fopen(self.shapefile_path, 'r') as src:
-            for feat in src:
-                coords = feat['geometry']['coordinates']
-                val = feat['properties']['POINT_TYPE']
-                self._add_entry(coords, val=val)
 
     def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.
@@ -175,7 +162,7 @@ class PixelTrainingArray(object):
                     break
                 fractional_area = poly.area / positive_area
                 required_points = max([1, fractional_area * self.m_instances])
-                x_range, y_range = self._random_points_array(poly.bounds)
+                x_range, y_range = self._random_points(poly.bounds)
                 poly_pt_ct = 0
 
                 for coord in zip(x_range, y_range):
@@ -194,11 +181,11 @@ class PixelTrainingArray(object):
 
     def populate_data_array(self):
 
-        for key, val in self.model_map.items():
+        for key, val in self.paths_map.items():
             try:
-                mask_series = self._point_raster_extract(val)
+                s = self._point_raster_extract(val, _name=key)
                 print('Extracting {}'.format(key))
-                self.extracted_points = self.extracted_points.join(mask_series, how='outer')
+                self.extracted_points = self.extracted_points.join(s, how='outer')
             except AttributeError as e:
                 print(e)
             pass
@@ -300,14 +287,14 @@ class PixelTrainingArray(object):
             warn('This dataset has {} target classes'.format(unique_targets))
             self.is_binary = False
 
-    def _point_raster_extract(self, raster):
+    def _point_raster_extract(self, raster, _name):
 
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
             affine = rsrc.transform
 
-        s = Series(index=range(0, self.extracted_points.shape[0]))
+        s = Series(index=range(0, self.extracted_points.shape[0]), name=_name)
         for ind, row in self.extracted_points.iterrows():
             x, y = self._geo_point_to_projected_coords(row['X'], row['Y'])
             c, r = ~affine * (x, y)
@@ -319,7 +306,7 @@ class PixelTrainingArray(object):
 
         return s
 
-    def _random_points_array(self, coords):
+    def _random_points(self, coords):
         min_x, max_x = coords[0], coords[2]
         min_y, max_y = coords[1], coords[3]
         x_range = linspace(min_x, max_x, num=2 * self.m_instances)
@@ -339,9 +326,16 @@ class PixelTrainingArray(object):
     def _geo_point_to_projected_coords(self, x, y):
 
         in_crs = Proj(init='epsg:4326')
-        out_crs = Proj(init=self.coord_system['init'])
+        out_crs = Proj(init=self.crs['init'])
         x, y = transform(in_crs, out_crs, x, y)
         return x, y
+
+    def _get_crs(self):
+        for key, val in self.paths_map.items():
+            with rasopen(val, 'r') as src:
+                crs = src.crs
+            break
+        return crs
 
     def _get_polygons(self, vector):
         with fopen(vector, 'r') as src:
@@ -366,40 +360,13 @@ class PixelTrainingArray(object):
 
         return polys
 
-    def _instantiate_images(self):
-        _dir = self.image_directory
-        landsat_map = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
-        dirs = [x[0] for x in os.walk(_dir) if
-                os.path.basename(x[0])[:3] in landsat_map.keys()]
-        objs = [LandsatImage(x).satellite for x in dirs]
-        image_objs = [landsat_map[x](y) for x, y in zip(objs, dirs)]
-        return image_objs
-
-    def _principal_components(self, return_percentile=None, n_components=None):
-        """ Extract eigenvectors and eigenvalue, return desired PCAs""
-        :return:
-        """
-
-        if not self.has_data:
-            warn('There is no data to perform PCA on.  Run make_data_array.')
-            return None
-
-        pca = None
-
-        if n_components:
-            pca = PCA(n_components=n_components, copy=True, whiten=False)
-            pca.fit(self.data)
-            self.data = pca.transform(self.data)
-        elif return_percentile:
-            pca = PCA(return_percentile, copy=True, whiten=False)
-            pca.fit(self.data)
-            self.data = pca.transform(self.data)
-            print('Cumulative sum principal components: {}\n '
-                  '{} features \n {}'"%"' explained variance'.format(
-                cumsum(pca.explained_variance_ratio_),
-                pca.n_components_,
-                pca.n_components * 100))
-        return pca
+    def _populate_array_from_points(self):
+        # TODO: replace with geopandas.shp_to_dataframe
+        with fopen(self.shapefile_path, 'r') as src:
+            for feat in src:
+                coords = feat['geometry']['coordinates']
+                val = feat['properties']['POINT_TYPE']
+                self._add_entry(coords, val=val)
 
     @property
     def data_path(self):
@@ -424,7 +391,7 @@ class PixelTrainingArray(object):
         with fopen(WRS_2, 'r') as wrs:
             for feature in wrs:
                 fp = feature['properties']
-                if fp['PATH'] == self.path and fp['ROW'] == self.row:
+                if fp['PATH'] == self.geography.path and fp['ROW'] == self.geography.row:
                     bbox = feature['geometry']
                     return bbox
 
