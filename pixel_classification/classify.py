@@ -133,6 +133,7 @@ class Classifier(object):
             stack = marray(stack, mask=msk)
 
         self.masked_data_stack = marray(stack, mask=np.isnan(stack))
+        print('masked shape: {}'.format(self.masked_data_stack.shape))
         self.n = self.masked_data_stack.shape[0]
         del stack
 

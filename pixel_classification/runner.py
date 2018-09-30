@@ -110,7 +110,7 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
 
     training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
-    classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
+    classified_dir = os.path.join(home, 'data', 'classified')
     model_data = os.path.join(abspath, 'model_data')
     project = os.path.join(model_data, 'allstates_3')
 
