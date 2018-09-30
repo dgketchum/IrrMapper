@@ -39,6 +39,7 @@ from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
+
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=DataConversionWarning)
 
@@ -101,9 +102,8 @@ class Classifier(object):
 
         if model:
             self.model = model
-            # self.load_model()
 
-    def get_stack(self, path, saved=None, outfile=None, mask_path=None):
+    def get_stack(self, feature_data, saved=None, outfile=None, mask_path=None):
 
         if mask_path:
             self.mask = self._get_mask_from_raster(mask_path)
@@ -112,10 +112,14 @@ class Classifier(object):
             print('load {}'.format(saved))
             self.saved_array = saved
             stack = load(saved)
-        else:
-            self.data = PixelTrainingArray()
-            self.data.from_pickle(path)
 
+        elif feature_data.endswith('.pkl'):
+            self.data = PixelTrainingArray()
+            self.data.from_pickle(feature_data)
+            stack = self._get_stack_channels()
+
+        elif isinstance(feature_data, dict):
+            self.data.features = feature_data
             stack = self._get_stack_channels()
 
         if outfile:

@@ -28,13 +28,11 @@ from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 
-OBJECT_MAP = {
-    'MT': Montana,
-    'NV': Nevada,
-    'OR': Oregon,
-    'UT': Utah,
-    'WA': Washington
-}
+OBJECT_MAP = {'MT': Montana,
+              'NV': Nevada,
+              'OR': Oregon,
+              'UT': Utah,
+              'WA': Washington}
 
 
 def build_training_feature_array(project_root, training_root, sat=8):
@@ -106,25 +104,16 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-if __name__ == '__main__':
-    home = os.path.expanduser('~')
-
-    training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
-    classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
-    model_data = os.path.join(abspath, 'model_data')
-    project = os.path.join(model_data, 'allstates_3')
-
-    # if not os.path.isdir(project):
-    #     os.mkdir(project)
-    #
-    # build_training_feature_array(project_root=project, training_root=training)
-
-    data_path = os.path.join(project, 'data.pkl')
-    model = os.path.join(project, 'model.ckpt')
-    build_model(project, data_path, model)
-
+def run_training_scenes(model, project, _build_training=False, _build_model=False):
     for key, val in OBJECT_MAP.items():
         print('Classify {}'.format(key))
+
+        if _build_training:
+            build_training_feature_array(project_root=project, training_root=training)
+
+        if _build_model:
+            build_model(project, data_path, model)
+
         dt = '{}_{}{}'.format(key, datetime.now().month, datetime.now().day)
         classified_tif = os.path.join(classified_dir, dt)
         geo_folder = os.path.join(project, key)
@@ -134,5 +123,26 @@ if __name__ == '__main__':
 
         classify_multiproc(model, geo_data, saved_array=save_array,
                            mask=cdl_path, result=classified_tif)
+    return None
+
+
+def evaluate_image(path, row, sat, year, eval_directory, model, result=None):
+
+    i = ImageStack(root=eval_directory, satellite=sat, path=path, row=row,
+                   n_landsat=3, year=year, max_cloud_pct=70)
+    i.build_all()
+    classify_multiproc(model, data=None, mask=i.cdl_mask, result=None)
+
+
+if __name__ == '__main__':
+    home = os.path.expanduser('~')
+
+    training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
+    classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
+    model_data = os.path.join(abspath, 'model_data')
+    project_dir = os.path.join(model_data, 'allstates_3')
+    data_path = os.path.join(project_dir, 'data.pkl')
+    model_name = os.path.join(project_dir, 'model.ckpt')
+    # run_training_scenes(model_name, project_dir,_build_training=False, _build_model=False)
 
 # ========================= EOF ====================================================================
