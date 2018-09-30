@@ -278,14 +278,14 @@ def classify_multiproc(model, data, result, saved_array=None, array_outfile=None
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
     time = datetime.now()
-    print('apply asynce: {}'.format(tiime))
+    print('apply asynce: {}'.format(time))
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
     td = (datetime.now() - time)
-    print('finished asynce: {}'.format(tiime))
+    print('finished asynce: {}'.format(time))
     print('time', td.days, td.seconds // 3600, (td.seconds // 60) % 60)
 
     d.write_raster(out_file=result, new_array=final)
