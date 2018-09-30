@@ -65,6 +65,7 @@ class ImageStack(object):
         self.image_dirs = None
         self.image_paths = None
         self.stack_features = None
+        self.model_map = None
 
         self.cdl_tif = None
         self.cdl_mask = None
@@ -83,22 +84,8 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-
-    def files_dict(self):
-
-        dct = {}
-
-        if not self.image_dirs:
-            raise NotImplementedError('must build stack with "build_all" before listing rasters')
-
-        for d, sub_d, file in os.walk(self.root):
-            if file == 'cdl_mask.tif':
-                pass
-            else:
-                dct[file] = os.path.join(self.root, d, sub_d, file)
-
-        self.stack_features = dct
-        return self.stack_features
+        self.model_map = self._images_dict()
+        self.stack_features = self.model_map.keys()
 
     def get_cdl(self):
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
@@ -205,6 +192,22 @@ class ImageStack(object):
                 pass
 
         return dst_dir
+
+    def _images_dict(self):
+
+        dct = {}
+
+        if not self.image_dirs:
+            raise NotImplementedError('must build stack with "build_all" before listing rasters')
+
+        for d, sub_d, file in os.walk(self.root):
+            if file == 'cdl_mask.tif':
+                pass
+            else:
+                dct[file] = os.path.join(self.root, d, sub_d, file)
+
+        self.stack_features = dct
+        return self.stack_features
 
 
 if __name__ == '__main__':
