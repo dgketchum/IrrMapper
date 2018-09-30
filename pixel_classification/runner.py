@@ -35,29 +35,6 @@ OBJECT_MAP = {'MT': Montana,
               'WA': Washington}
 
 
-def build_training_feature_array(project_root, training_root, sat=8):
-    for key, obj in OBJECT_MAP.items():
-
-        project_state_dir = os.path.join(project_root, key)
-
-        if not os.path.isdir(project_state_dir):
-            os.mkdir(project_state_dir)
-
-        geography = os.path.join(training_root, key)
-        geo = obj(geography)
-
-        i = None
-        if geo.sat == sat:
-            i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
-                           n_landsat=3, year=geo.year, max_cloud_pct=70)
-            i.build_all()
-            p = Pta(root=i.root, geography=geo, instances=5000, overwrite_array=False,
-                    overwrite_points=False, ancillary_rasters=i.ancillary_rasters)
-            p.extract_sample(save_points=True)
-
-        i.warp_vrt()
-
-
 def build_model(project_root, path, model_path):
     first = True
     for key, obj in OBJECT_MAP.items():
@@ -104,14 +81,27 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-def run_training_scenes(model, project, _build_training=False, _build_model=False):
+def run_training_scenes(model, project, training=None):
+
     for key, val in OBJECT_MAP.items():
         print('Classify {}'.format(key))
 
-        if _build_training:
-            build_training_feature_array(project_root=project, training_root=training)
+        project_state_dir = os.path.join(project, key)
 
-        if _build_model:
+        if not os.path.isdir(project_state_dir):
+            os.mkdir(project_state_dir)
+
+        geography = os.path.join(training, key)
+        geo = val(geography)
+
+        if training:
+            i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
+                           n_landsat=3, year=geo.year, max_cloud_pct=70).build_all()
+            p = Pta(root=i.root, geography=geo, instances=100,
+                    overwrite_array=False, overwrite_points=False).extract_sample()
+            i.warp_vrt()
+
+        if not model:
             build_model(project, data_path, model)
 
         tif_name = '{}_{}{}.tif'.format(key.lower(), datetime.now().month, datetime.now().day)
@@ -141,19 +131,22 @@ def classify_scene(path, row, sat, year, eval_directory, model, result=None):
     if not result:
         result = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
 
-    classify_multiproc(model, data=i, mask=i.cdl_mask, result=result)
+    classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-    training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
+    training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
     model_data = os.path.join(abspath, 'model_data')
-    stacks = os.path.join(model_data, 'stacks')
-    project_dir = os.path.join(model_data, 'allstates_3')
+
+    # stacks = os.path.join(model_data, 'stacks')
+
+    project_dir = os.path.join(model_data, 'allstates_1')
     data_path = os.path.join(project_dir, 'data.pkl')
     model_name = os.path.join(project_dir, 'model.ckpt')
-    # run_training_scenes(model_name, project_dir, _build_training=False, _build_model=False)
-    classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
+
+    run_training_scenes(model_name, project_dir, training=training_dir)
+    # classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
 # ========================= EOF ====================================================================
