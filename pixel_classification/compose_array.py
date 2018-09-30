@@ -291,11 +291,6 @@ class PixelTrainingArray(object):
                                                                    how='outer')
 
         data_array, targets = self._purge_array()
-
-        for key, val in self.extract_paths.items():
-            if key in data_array.columns.values:
-                self.model_map[key] = val
-
         data = {'df': data_array,
                 'features': data_array.columns.values,
                 'data': data_array.values,
@@ -425,8 +420,6 @@ class PixelTrainingArray(object):
             basename = os.path.basename(raster)
             band = basename.replace('.tif', '')
             column_name = os.path.basename(band)
-
-        self.extract_paths[column_name] = raster
 
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
