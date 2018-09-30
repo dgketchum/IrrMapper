@@ -114,24 +114,34 @@ def run_training_scenes(model, project, _build_training=False, _build_model=Fals
         if _build_model:
             build_model(project, data_path, model)
 
-        dt = '{}_{}{}'.format(key, datetime.now().month, datetime.now().day)
-        classified_tif = os.path.join(classified_dir, dt)
+        tif_name = '{}_{}{}.tif'.format(key.lower(), datetime.now().month, datetime.now().day)
+        classified_tif = os.path.join(classified_dir, tif_name)
         geo_folder = os.path.join(project, key)
         save_array = os.path.join(geo_folder, 'array.npy')
-        geo_data = os.path.join(geo_folder, 'data.pkl')
+        geo_data_path = os.path.join(geo_folder, 'data.pkl')
         cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
 
-        classify_multiproc(model, geo_data, saved_array=save_array,
+        pta = Pta()
+        pta.from_pickle(path=geo_data_path)
+        classify_multiproc(model, pta, array_outfile=save_array,
                            mask=cdl_path, result=classified_tif)
     return None
 
 
-def evaluate_image(path, row, sat, year, eval_directory, model, result=None):
+def classify_scene(path, row, sat, year, eval_directory, model, result=None):
 
-    i = ImageStack(root=eval_directory, satellite=sat, path=path, row=row,
+    sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
+    if not os.path.isdir(sub):
+        os.mkdir(sub)
+
+    i = ImageStack(root=sub, satellite=sat, path=path, row=row,
                    n_landsat=3, year=year, max_cloud_pct=70)
     i.build_all()
-    classify_multiproc(model, data=None, mask=i.cdl_mask, result=None)
+
+    if not result:
+        result = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
+
+    classify_multiproc(model, data=i, mask=i.cdl_mask, result=result)
 
 
 if __name__ == '__main__':
@@ -140,9 +150,10 @@ if __name__ == '__main__':
     training = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
     model_data = os.path.join(abspath, 'model_data')
+    stacks = os.path.join(model_data, 'stacks')
     project_dir = os.path.join(model_data, 'allstates_3')
     data_path = os.path.join(project_dir, 'data.pkl')
     model_name = os.path.join(project_dir, 'model.ckpt')
-    run_training_scenes(model_name, project_dir, _build_training=False, _build_model=False)
-
+    # run_training_scenes(model_name, project_dir, _build_training=False, _build_model=False)
+    classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
 # ========================= EOF ====================================================================

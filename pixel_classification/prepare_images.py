@@ -20,7 +20,8 @@ import sys
 
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
-from numpy import mean
+from numpy import mean, datetime64
+from collections import OrderedDict
 
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
@@ -73,6 +74,7 @@ class ImageStack(object):
         self.n = n_landsat
 
         self.ancillary_rasters = []
+        self.exclude_rasters = []
 
         if year and not start and not end:
             self.start = '{}-05-01'.format(self.year)
@@ -84,7 +86,7 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-        self.model_map = self._images_dict()
+        self.model_map = self._order_images()
         self.stack_features = self.model_map.keys()
 
     def get_cdl(self):
@@ -96,6 +98,7 @@ class ImageStack(object):
             cdl.get_mask(clip_geometry=polygon, out_file=self.cdl_mask)
         else:
             print('{} exists'.format(self.cdl_mask))
+            self.exclude_rasters.append(self.cdl_mask)
 
     def get_landsat(self):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
@@ -146,8 +149,11 @@ class ImageStack(object):
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
             products = ['lst', 'ssebop_etrf']
+            exclude = ['ssebop_et', 'tmin', 'tmax', 'fmask', 'ssebop_et_mskd', 'pet']
             for p in products:
                 self.ancillary_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, p)))
+            for e in exclude:
+                self.exclude_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, e)))
 
     def warp_vrt(self):
         warp_vrt(self.root, delete_extra=False, use_band_map=False, remove_bqa=True)
@@ -193,18 +199,32 @@ class ImageStack(object):
 
         return dst_dir
 
-    def _images_dict(self):
+    def _order_images(self):
 
-        dct = {}
+        dct = OrderedDict()
 
         if not self.image_dirs:
             raise NotImplementedError('must build stack with "build_all" before listing rasters')
 
-        for d, sub_d, file in os.walk(self.root):
-            if file == 'cdl_mask.tif':
-                pass
-            else:
-                dct[file] = os.path.join(self.root, d, sub_d, file)
+        dates = self.scenes['DATE_ACQUIRED'].values
+        scenes = self.scenes['SCENE_ID'].values
+        s = datetime64('{}-01-01'.format(self.year))
+        for d in dates:
+            try:
+                assert d > s
+            except AssertionError:
+                print('Scene dates appear to not increase monotonically')
+                raise NotImplementedError
+            s = d
+
+        for s in scenes:
+            l_all = os.listdir(os.path.join(self.root, s))
+            l_bqa = [os.path.join(self.root, s, x) for x in l_all if x.endswith(('.tif', '.TIF'))]
+            l_tif = [os.path.join(self.root, s, x) for x in l_bqa if not x.endswith('BQA.TIF')]
+            paths = [x for x in l_tif if x not in self.exclude_rasters]
+            paths.sort()
+            for p in paths:
+                dct[os.path.basename(p).split('.')[0]] = p
 
         self.stack_features = dct
         return self.stack_features
