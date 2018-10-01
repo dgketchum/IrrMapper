@@ -211,9 +211,9 @@ class Classifier(object):
         stack = None
         first = True
 
-        for i, feat in enumerate(self.data.model_map.keys()):
+        for i, feat in enumerate(self.data.paths_map.keys()):
 
-            self.feature_ras = self.data.model_map[feat]
+            self.feature_ras = self.data.paths_map[feat]
 
             with rasopen(self.feature_ras, mode='r') as src:
                 arr = src.read()
@@ -222,7 +222,7 @@ class Classifier(object):
                     break
             if first:
                 first_geo = deepcopy(self.raster_geo)
-                empty = zeros((len(self.data.model_map.keys()), arr.shape[1], arr.shape[2]), float16)
+                empty = zeros((len(self.data.paths_map.keys()), arr.shape[1], arr.shape[2]), float16)
                 stack = empty
                 stack[i, :, :] = self.normalize_image_channel(arr)
                 first = False

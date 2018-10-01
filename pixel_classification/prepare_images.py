@@ -66,7 +66,7 @@ class ImageStack(object):
         self.image_dirs = None
         self.image_paths = None
         self.stack_features = None
-        self.model_map = None
+        self.paths_map = None
 
         self.cdl_tif = None
         self.cdl_mask = None
@@ -86,7 +86,7 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-        self.model_map = self._order_images()
+        self.paths_map = self._order_images()
 
     def get_cdl(self):
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')

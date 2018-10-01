@@ -124,7 +124,8 @@ class PixelTrainingArray(object):
         if save_points:
             self.save_sample_points()
 
-        self.populate_data_array()
+        if not self.overwrite_array:
+            self.populate_data_array()
 
     def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.
@@ -193,7 +194,7 @@ class PixelTrainingArray(object):
                 'features': data_array.columns.values,
                 'data': data_array.values,
                 'target_values': targets,
-                'model_map': self.paths_map}
+                'paths_map': self.paths_map}
 
         print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():

@@ -59,9 +59,9 @@ def concatenate_training_data(existing, new_data):
 
 def model_training_scenes(project, n_images, training):
     training_data = {}
-    for key, val in OBJECT_MAP.items():
+    first = True
 
-        first = True
+    for key, val in OBJECT_MAP.items():
 
         print('Train on {}'.format(key))
 
@@ -78,22 +78,22 @@ def model_training_scenes(project, n_images, training):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_all()
-        p = Pta(root=i.root, geography=geo, paths_map=i.model_map, instances=100,
-                overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=100,
+                overwrite_array=False, overwrite_points=False)
         p.extract_sample()
 
         geo = val(project)
-        pkl_data = Pta(root=project, geography=geo, pkl_path=os.path.join(geo_folder, 'data.pkl'))
-        if first:
-            training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
-                             'features': pkl_data.features, 'model_map': pkl_data.paths_map}
-            first = False
-        else:
-            training_data = concatenate_training_data(training_data, pkl_data)
+        pkl_data = Pta(root=project, geography=geo, pkl_path=geo_data_path)
 
-        print('Shape {}: {}'.format(key, pkl_data.data.shape))
+    if first:
+        training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
+                         'features': pkl_data.features, 'paths_map': pkl_data.paths_map}
+        first = False
+    else:
+        training_data = concatenate_training_data(training_data, pkl_data)
 
-    p = Pta(from_dict=None)
+    print('Shape {}: {}'.format(key, pkl_data.data.shape))
+    p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
     model_name = os.path.join(project_dir, 'model.ckpt')
     mlp(p, model_name)
