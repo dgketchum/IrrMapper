@@ -273,8 +273,6 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     time = datetime.now()
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
-
-
         classified_arrays = [res.get() for res in pool_results]
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)

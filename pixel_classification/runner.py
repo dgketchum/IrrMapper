@@ -125,7 +125,7 @@ if __name__ == '__main__':
     project_dir = os.path.join(model_data, 'stacks')
     model_name = os.path.join(project_dir, 'model.ckpt')
 
-    # model_training_scenes(project_dir, 1, training_dir)
-    classify_scene(path=39, row=27, sat=8, year=2015,
-                   eval_directory=project_dir, n_images=3, model=model_name)
+    model_training_scenes(project_dir, 1, training_dir)
+    # classify_scene(path=39, row=27, sat=8, year=2015,
+    #                eval_directory=project_dir, n_images=3, model=model_name)
 # ========================= EOF ====================================================================
