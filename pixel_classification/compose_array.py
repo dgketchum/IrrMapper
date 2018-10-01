@@ -20,6 +20,7 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 import pickle
+from collections import OrderedDict
 from copy import deepcopy
 from warnings import warn
 
@@ -94,6 +95,7 @@ class PixelTrainingArray(object):
         else:
             self.geography = geography
             self.paths_map = paths_map
+            self.masks, self.bands = self._get_masks_bands()
             self.crs = self._get_crs()
             self.root = root
             self.path_row_dir = os.path.join(self.root, str(geography.path), str(geography.row))
@@ -182,21 +184,16 @@ class PixelTrainingArray(object):
     def populate_data_array(self):
 
         for key, val in self.paths_map.items():
-            try:
-                s = self._point_raster_extract(val, _name=key)
-                print('Extracting {}'.format(key))
-                self.extracted_points = self.extracted_points.join(s, how='outer')
-            except AttributeError as e:
-                print(e)
-            pass
+            s = self._point_raster_extract(val, _name=key)
+            print('Extracting {}'.format(key))
+            self.extracted_points = self.extracted_points.join(s, how='outer')
 
         data_array, targets = self._purge_array()
         data = {'df': data_array,
                 'features': data_array.columns.values,
                 'data': data_array.values,
                 'target_values': targets,
-                'model_map': self.model_map,
-                'water_mask': self.water_mask}
+                'model_map': self.paths_map}
 
         print('feature dimensions: {}'.format(data_array.shape))
         for key, val in data.items():
@@ -247,10 +244,10 @@ class PixelTrainingArray(object):
         target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
         data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
 
-        for msk in self.masks:
+        for msk in self.masks.keys():
             data_array[data_array[msk] == 1.] = nan
 
-        for bnd in self.bands:
+        for bnd in self.bands.keys():
             data_array[data_array[bnd] == 0.] = nan
 
         data_array = data_array.join(target_vals, how='outer')
@@ -367,6 +364,19 @@ class PixelTrainingArray(object):
                 coords = feat['geometry']['coordinates']
                 val = feat['properties']['POINT_TYPE']
                 self._add_entry(coords, val=val)
+
+    def _get_masks_bands(self):
+        msk_dct = OrderedDict()
+        bnd_dct = OrderedDict()
+        for key, val in self.paths_map.items():
+            if 'water_fmask' in val:
+                msk_dct[key] = val
+            elif 'cloud_fmask' in val:
+                msk_dct[key] = val
+            else:
+                bnd_dct[key] = val
+
+        return msk_dct, bnd_dct
 
     @property
     def data_path(self):

@@ -20,7 +20,6 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import vstack
-from datetime import datetime
 
 from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
 from pixel_classification.prepare_images import ImageStack
@@ -33,29 +32,6 @@ OBJECT_MAP = {'MT': Montana,
               'OR': Oregon,
               'UT': Utah,
               'WA': Washington}
-
-
-def build_model(project_root, path, model_path):
-    first = True
-    for key, obj in OBJECT_MAP.items():
-        root = os.path.join(project_root, key)
-        geo = obj(root)
-        pkl_data = Pta(root=root, geography=geo, pkl_path=os.path.join(root, 'data.pkl'))
-        if first:
-            training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
-                             'features': pkl_data.features, 'model_map': pkl_data.model_map,
-                             }
-            first = False
-        else:
-            training_data = concatenate_training_data(training_data, pkl_data)
-
-        print('Shape {}: {}'.format(key, pkl_data.data.shape))
-
-    p = Pta(from_dict=training_data)
-    p.to_pickle(training_data, path)
-    model_path = mlp(p, model_path)
-
-    return model_path
 
 
 def concatenate_training_data(existing, new_data):
@@ -73,18 +49,21 @@ def concatenate_training_data(existing, new_data):
     new_lables = vstack((existing_labels.reshape((existing_labels.shape[0], 1)),
                          add_labels.reshape((add_labels.shape[0], 1))))
 
-    existing['model_map'].update(new_data.model_map)
+    existing['paths_map'].update(new_data.paths_map)
 
     concatenated = {'data': new_array, 'target_values': new_lables, 'features': new_features,
-                    'model_map': existing['model_map']}
+                    'paths_map': existing['paths_map']}
 
     return concatenated
 
 
-def run_training_scenes(project, model=None, training=None):
-
+def model_training_scenes(project, n_images, training):
+    training_data = {}
     for key, val in OBJECT_MAP.items():
-        print('Classify {}'.format(key))
+
+        first = True
+
+        print('Train on {}'.format(key))
 
         project_state_dir = os.path.join(project, key)
 
@@ -96,33 +75,33 @@ def run_training_scenes(project, model=None, training=None):
         geo_folder = os.path.join(project, key)
         geo_data_path = os.path.join(geo_folder, 'data.pkl')
 
-        if training:
-            i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
-                           n_landsat=1, year=geo.year, max_cloud_pct=70)
-            i.build_all()
-            p = Pta(root=i.root, geography=geo, paths_map=i.model_map, instances=100,
-                    overwrite_array=False, overwrite_points=False)
-            p.extract_sample()
-            i.warp_vrt()
+        i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
+                       n_landsat=n_images, year=geo.year, max_cloud_pct=70)
+        i.build_all()
+        p = Pta(root=i.root, geography=geo, paths_map=i.model_map, instances=100,
+                overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
+        p.extract_sample()
 
-        if not model:
-            model_name = os.path.join(project_dir, 'model.ckpt')
-            build_model(project, geo_data_path, model_name)
+        geo = val(project)
+        pkl_data = Pta(root=project, geography=geo, pkl_path=os.path.join(root, 'data.pkl'))
+        if first:
+            training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
+                             'features': pkl_data.features, 'model_map': pkl_data.paths_map,
+                             }
+            first = False
+        else:
+            training_data = concatenate_training_data(training_data, pkl_data)
 
-        tif_name = '{}_{}{}.tif'.format(key.lower(), datetime.now().month, datetime.now().day)
-        classified_tif = os.path.join(classified_dir, tif_name)
-        save_array = os.path.join(geo_folder, 'array.npy')
-        cdl_path = os.path.join(geo_folder, 'cdl_mask.tif')
+        print('Shape {}: {}'.format(key, pkl_data.data.shape))
 
-        pta = Pta()
-        pta.from_pickle(path=geo_data_path)
-        classify_multiproc(model, pta, array_outfile=save_array,
-                           mask=cdl_path, result=classified_tif)
-    return None
+    p = Pta(from_dict=None)
+    p.to_pickle(training_data, path)
+    model_name = os.path.join(project_dir, 'model.ckpt')
+    mlp(p, model_name)
+    print('Model saved to {}'.format(model_name))
 
 
 def classify_scene(path, row, sat, year, eval_directory, model, result=None):
-
     sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
     if not os.path.isdir(sub):
         os.mkdir(sub)
@@ -145,6 +124,6 @@ if __name__ == '__main__':
     model_data = os.path.join(abspath, 'model_data')
     project_dir = os.path.join(model_data, 'allstates_1')
 
-    run_training_scenes(project_dir, training=training_dir)
+    model_training_scenes(project_dir, 1, training_dir)
     # classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
 # ========================= EOF ====================================================================
