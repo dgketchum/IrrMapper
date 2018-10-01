@@ -75,24 +75,24 @@ def model_training_scenes(project, n_images, training):
         geo_folder = os.path.join(project, key)
         geo_data_path = os.path.join(geo_folder, 'data.pkl')
 
+        if not os.path.isfile(geo_data_path):
+            geo_data_path = None
+
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_all()
         p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=100,
-                overwrite_array=False, overwrite_points=False)
+                overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
         p.extract_sample()
 
-        geo = val(project)
-        pkl_data = Pta(root=project, geography=geo, pkl_path=geo_data_path)
+        if first:
+            training_data = {'data': p.data, 'target_values': p.target_values,
+                             'features': p.features, 'paths_map': p.paths_map}
+            first = False
+        else:
+            training_data = concatenate_training_data(training_data, p)
 
-    if first:
-        training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
-                         'features': pkl_data.features, 'paths_map': pkl_data.paths_map}
-        first = False
-    else:
-        training_data = concatenate_training_data(training_data, pkl_data)
-
-    print('Shape {}: {}'.format(key, pkl_data.data.shape))
+    print('Shape {}: {}'.format(key, p.data.shape))
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
     model_name = os.path.join(project_dir, 'model.ckpt')
@@ -108,6 +108,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, result=None):
     i = ImageStack(root=sub, satellite=sat, path=path, row=row,
                    n_landsat=3, year=year, max_cloud_pct=70)
     i.build_all()
+    i.warp_vrt()
 
     if not result:
         result = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
@@ -121,8 +122,10 @@ if __name__ == '__main__':
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     classified_dir = os.path.join(home, 'IrrigationGIS', 'classified')
     model_data = os.path.join(abspath, 'model_data')
-    project_dir = os.path.join(model_data, 'allstates_1')
+    project_dir = os.path.join(model_data, 'stacks')
+    model_name = os.path.join(project_dir, 'model.ckpt')
 
-    model_training_scenes(project_dir, 1, training_dir)
-    # classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=stacks, model=model_name)
+    # model_training_scenes(project_dir, 1, training_dir)
+    classify_scene(path=39, row=27, sat=8, year=2015,
+                   eval_directory=project_dir, model=model_name)
 # ========================= EOF ====================================================================

@@ -108,7 +108,7 @@ class Classifier(object):
         if mask_path:
             self.mask = self._get_mask_from_raster(mask_path)
 
-        if os.path.isfile(image_data):
+        if isinstance(image_data, str):
             print('load {}'.format(image_data))
             self.saved_array = image_data
             stack = load(image_data)
@@ -273,6 +273,8 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     time = datetime.now()
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
+
+
         classified_arrays = [res.get() for res in pool_results]
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
