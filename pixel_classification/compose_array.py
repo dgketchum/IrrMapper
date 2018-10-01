@@ -93,6 +93,7 @@ class PixelTrainingArray(object):
             self.array_exists = True
 
         else:
+            self.array_exists = False
             self.geography = geography
             self.paths_map = paths_map
             self.masks, self.bands = self._get_masks_bands()
@@ -111,6 +112,9 @@ class PixelTrainingArray(object):
             self.object_id = 0
 
     def extract_sample(self, save_points=True):
+
+        if self.array_exists and not self.overwrite_array:
+            return None
 
         if not os.path.isfile(self.shapefile_path):
             self.create_sample_points()
