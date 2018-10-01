@@ -83,11 +83,10 @@ def model_training_scenes(project, n_images, training):
         p.extract_sample()
 
         geo = val(project)
-        pkl_data = Pta(root=project, geography=geo, pkl_path=os.path.join(root, 'data.pkl'))
+        pkl_data = Pta(root=project, geography=geo, pkl_path=os.path.join(geo_folder, 'data.pkl'))
         if first:
             training_data = {'data': pkl_data.data, 'target_values': pkl_data.target_values,
-                             'features': pkl_data.features, 'model_map': pkl_data.paths_map,
-                             }
+                             'features': pkl_data.features, 'model_map': pkl_data.paths_map}
             first = False
         else:
             training_data = concatenate_training_data(training_data, pkl_data)
@@ -95,7 +94,7 @@ def model_training_scenes(project, n_images, training):
         print('Shape {}: {}'.format(key, pkl_data.data.shape))
 
     p = Pta(from_dict=None)
-    p.to_pickle(training_data, path)
+    p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
     model_name = os.path.join(project_dir, 'model.ckpt')
     mlp(p, model_name)
     print('Model saved to {}'.format(model_name))
