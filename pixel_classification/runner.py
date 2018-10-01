@@ -100,13 +100,13 @@ def model_training_scenes(project, n_images, training):
     print('Model saved to {}'.format(model_name))
 
 
-def classify_scene(path, row, sat, year, eval_directory, model, result=None):
+def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
     sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
     if not os.path.isdir(sub):
         os.mkdir(sub)
 
     i = ImageStack(root=sub, satellite=sat, path=path, row=row,
-                   n_landsat=3, year=year, max_cloud_pct=70)
+                   n_landsat=n_images, year=year, max_cloud_pct=70)
     i.build_all()
     i.warp_vrt()
 
@@ -127,5 +127,5 @@ if __name__ == '__main__':
 
     # model_training_scenes(project_dir, 1, training_dir)
     classify_scene(path=39, row=27, sat=8, year=2015,
-                   eval_directory=project_dir, model=model_name)
+                   eval_directory=project_dir, n_images=3, model=model_name)
 # ========================= EOF ====================================================================
