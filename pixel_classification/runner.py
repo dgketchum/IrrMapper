@@ -112,7 +112,8 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
     i.warp_vrt()
 
     if not result:
-        result = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
+        tif = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
+        result = os.path.join(eval_directory, tif)
 
     classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
     print('Time: {}'.format(datetime.now()))
