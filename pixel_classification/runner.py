@@ -135,9 +135,10 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
 
     n_images = 3
+    classes = 2
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     model_data = os.path.join(abspath, 'model_data')
-    model_name = os.path.join(model_data, 'model-{}.ckpt'.format(n_images))
+    model_name = os.path.join(model_data, 'model-{}c-{}i.ckpt'.format(classes, n_images))
     t_project_dir = os.path.join(model_data, 'allstats_2c_3i')
     stack = os.path.join(home, 'data')
 
