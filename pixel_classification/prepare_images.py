@@ -234,6 +234,7 @@ class ImageStack(object):
         dir_list = os.listdir(self.root)
         files = [x for x in dir_list if os.path.isfile(os.path.join(self.root, x))]
         static_files = [x for x in files if x.endswith(static_rasters())]
+        static_files.sort()
         for st in static_files:
             band_dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
 

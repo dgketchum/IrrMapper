@@ -192,6 +192,11 @@ class PixelTrainingArray(object):
             print('Extracting {}'.format(key))
             self.extracted_points = self.extracted_points.join(s, how='outer')
 
+        for key, val in self.masks.items():
+            s = self._point_raster_extract(val, _name=key)
+            print('Extracting {}'.format(key))
+            self.extracted_points = self.extracted_points.join(s, how='outer')
+
         data_array, targets = self._purge_array()
         data = {'df': data_array,
                 'features': data_array.columns.values,
