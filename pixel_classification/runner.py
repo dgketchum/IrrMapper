@@ -139,7 +139,7 @@ if __name__ == '__main__':
     stack = os.path.join(home, 'data')
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model.ckpt')
-    project_dir = os.path.join(model_data, 'allstates_3')
+    project_dir = os.path.join(model_data, 'stacks')
 
     # model_training_scenes(project_dir, 3, training_dir)
     classify_scene(path=39, row=27, sat=8, year=2015,
