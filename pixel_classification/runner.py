@@ -142,7 +142,7 @@ if __name__ == '__main__':
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model-{}c-{}i.ckpt'.format(classes, n_images))
-    t_project_dir = os.path.join(model_data, 'allstats_2c_3i')
+    t_project_dir = os.path.join(model_data, 'allstates_2c_3i')
     stack = os.path.join(home, 'data')
 
     c_project_dir = os.path.join(stack, 'classified')
