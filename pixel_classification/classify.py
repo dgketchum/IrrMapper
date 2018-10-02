@@ -39,7 +39,6 @@ from pixel_classification.tf_multilayer_perceptron import multilayer_perceptron
 
 import warnings
 from sklearn.exceptions import DataConversionWarning
-
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=DataConversionWarning)
 
@@ -117,6 +116,7 @@ class Classifier(object):
             stack = self._get_stack_channels()
 
         if outfile:
+            print('saving image stack {}'.format(outfile))
             save(outfile, stack)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
@@ -189,7 +189,6 @@ class Classifier(object):
 
         self.raster_geo['dtype'] = str(self.new_array.dtype)
         self.raster_geo['count'] = 1
-
         with rasopen(out_file, 'w', **self.raster_geo) as dst:
             dst.write(self.new_array)
 
@@ -264,16 +263,13 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     a = ArrayDisAssembly(stack_data)
     arrays = a.disassemble(n_sections=cores)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
-    [print(a.shape) for a in arrays]
     time = datetime.now()
     pool = Pool(processes=cores)
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
-        pool.close()
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
-
     td = (datetime.now() - time)
 
     d.write_raster(out_file=result, new_array=final)
