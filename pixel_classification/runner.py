@@ -58,7 +58,7 @@ def concatenate_training_data(existing, new_data):
     return concatenated
 
 
-def model_training_scenes(project, n_images, training):
+def model_training_scenes(project, n_images, training, model):
     training_data = {}
     first = True
 
@@ -88,18 +88,17 @@ def model_training_scenes(project, n_images, training):
 
         if first:
             training_data = {'data': p.data, 'target_values': p.target_values,
-                             'features': p.features, 'paths_map': i.paths_map}
+                             'features': p.features, 'paths_map': p.paths_map}
             first = False
         else:
-            p.paths_map = i.paths_map
             training_data = concatenate_training_data(training_data, p)
 
         print('Shape {}: {}'.format(key, p.data.shape))
+
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
-    model_name = os.path.join(project_dir, 'model.ckpt')
-    mlp(p, model_name)
-    print('Model saved to {}'.format(model_name))
+    mlp(p, model)
+    print('Model saved to {}'.format(model))
 
 
 def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
@@ -139,10 +138,11 @@ if __name__ == '__main__':
     stack = os.path.join(home, 'data')
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model.ckpt')
-    project_dir = os.path.join(model_data, 'stacks')
+    c_project_dir = os.path.join(model_data, 'stacks')
+    t_project_dir = os.path.join(model_data, 'allstates_3')
 
-    # model_training_scenes(project_dir, 3, training_dir)
-    classify_scene(path=39, row=27, sat=8, year=2015,
-                   eval_directory=project_dir, n_images=3, model=model_name)
+    model_training_scenes(t_project_dir, 3, training_dir, model_name)
+    # classify_scene(path=39, row=27, sat=8, year=2015,
+    #                eval_directory=project_dir, n_images=3, model=model_name)
     # run_targets(stack, model_name)
 # ========================= EOF ====================================================================
