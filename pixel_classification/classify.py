@@ -109,7 +109,6 @@ class Classifier(object):
             self.mask = self._get_mask_from_raster(mask_path)
 
         if isinstance(image_data, str):
-            print('load {}'.format(image_data))
             self.saved_array = image_data
             stack = load(image_data)
 
@@ -117,11 +116,7 @@ class Classifier(object):
             self.data = image_data
             stack = self._get_stack_channels()
 
-        else:
-            raise NotImplementedError('Must pass ImageStack or path to saved array (.npy)')
-
         if outfile:
-            print('saving image stack {}'.format(outfile))
             save(outfile, stack)
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
@@ -271,15 +266,12 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
     time = datetime.now()
-    print('async')
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
     td = (datetime.now() - time)
-
-    print('time', td.days, td.seconds // 3600, (td.seconds // 60) % 60)
 
     d.write_raster(out_file=result, new_array=final)
 
