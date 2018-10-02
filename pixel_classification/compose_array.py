@@ -127,7 +127,7 @@ class PixelTrainingArray(object):
         if save_points:
             self.save_sample_points()
 
-        if not self.overwrite_array:
+        if self.overwrite_array and not self.array_exists:
             self.populate_data_array()
 
     def create_sample_points(self):
