@@ -80,7 +80,7 @@ def model_training_scenes(project, n_images, training, model):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_training()
-        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=5000, masks=i.masks,
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10000, masks=i.masks,
                 overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
         p.extract_sample()
 
