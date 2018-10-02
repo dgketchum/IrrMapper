@@ -104,6 +104,7 @@ class Classifier(object):
 
     def get_stack(self, image_data, outfile=None, mask_path=None):
 
+        stack = None
         if mask_path:
             self.mask = self._get_mask_from_raster(mask_path)
 
