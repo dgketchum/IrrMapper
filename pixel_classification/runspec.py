@@ -21,6 +21,31 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 
 
+def bands_key():
+    b = {1: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
+         2: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
+         3: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
+         4: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
+         5: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
+
+         7: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF',
+             'B6_VCID_1.TIF', 'B6_VCID_2.TIF', 'B7.TIF', 'B8.TIF'),
+
+         8: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF',
+             'B7.TIF', 'B8.TIF', 'B9.TIF', 'B10.TIF', 'B11.TIF')}
+    return b
+
+
+def ancillary_rasters():
+    a = ('lst.tif', 'ssebop_etrf.tif')
+    return a
+
+
+def static_rasters():
+    a = ('slope.tif', 'aspect.tif', 'elevation_diff.tif')
+    return a
+
+
 class TrainingAssignments(object):
     def __init__(self, root):
         self.attribute_list = ['forest', 'fallow', 'irrigated', 'other']

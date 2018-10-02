@@ -32,6 +32,7 @@ from dem import AwsDem
 from ssebop_app.image import get_image
 
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
+from pixel_classification.runspec import bands_key, static_rasters, ancillary_rasters
 
 
 class ImageStack(object):
@@ -128,10 +129,6 @@ class ImageStack(object):
         aspect_name = os.path.join(self.root, 'aspect.tif')
         dif_elev = os.path.join(self.root, 'elevation_diff.tif')
 
-        self.ancillary_rasters.append(slope_name)
-        self.ancillary_rasters.append(aspect_name)
-        self.ancillary_rasters.append(dif_elev)
-
         check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev]]
 
         if False in check:
@@ -156,12 +153,6 @@ class ImageStack(object):
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
-            products = ['lst', 'ssebop_etrf']
-            exclude = ['ssebop_et', 'tmin', 'tmax', 'fmask', 'ssebop_et_mskd', 'pet']
-            for p in products:
-                self.ancillary_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, p)))
-            for e in exclude:
-                self.exclude_rasters.append(os.path.join(d, '{}_{}.tif'.format(_id, e)))
 
     def warp_vrt(self):
         warp_vrt(self.root, delete_extra=False, use_band_map=False, remove_bqa=True)
@@ -225,14 +216,18 @@ class ImageStack(object):
                 raise NotImplementedError
             s = d
 
-        for s in scenes:
-            l_all = os.listdir(os.path.join(self.root, s))
-            l_bqa = [os.path.join(self.root, s, x) for x in l_all if x.endswith(('.tif', '.TIF'))]
-            l_tif = [os.path.join(self.root, s, x) for x in l_bqa if not x.endswith('BQA.TIF')]
-            paths = [x for x in l_tif if x not in self.exclude_rasters]
+        for sc in scenes:
+            paths = os.listdir(os.path.join(self.root, sc))
+            b = [os.path.join(self.root, sc, x) for x in paths if x.endswith(bands_key()[self.sat])]
+            a = [os.path.join(self.root, sc, x) for x in paths if x.endswith(ancillary_rasters())]
+            paths = a + b
             paths.sort()
             for p in paths:
                 dct[os.path.basename(p).split('.')[0]] = p
+
+        for st in os.listdir(self.root):
+            if st in static_rasters():
+                dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
 
         return dct
 
