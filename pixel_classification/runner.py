@@ -140,7 +140,7 @@ if __name__ == '__main__':
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model-{}.ckpt'.format(n_images))
     c_project_dir = os.path.join(model_data, 'stacks')
-    t_project_dir = os.path.join(model_data, 'allstates_3')
+    t_project_dir = os.path.join(model_data, 'binary')
 
     # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
     classify_scene(path=39, row=27, sat=8, year=2015,

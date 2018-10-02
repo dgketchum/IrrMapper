@@ -91,8 +91,8 @@ class Montana(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['MT_Huntley_Main_2013_3728.shp', 'MT_FLU_2017_Fallow_3728.shp',
-                       'MT_FLU_2017_Forrest_3728.shp', 'MT_other_3728.shp']
+        self.shapes = ['MT_Huntley_Main_2013_3728.shp', 'MT_FLU_2017_Fallow_3728.shp',]
+                       # 'MT_FLU_2017_Forrest_3728.shp', 'MT_other_3728.shp']
         self.add_paths()
 
         self.path = 37
@@ -106,8 +106,8 @@ class Nevada(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['2015_IRR_ACRE_WGS84.shp', 'NV_fallow.shp',
-                       'NV_forest.shp', 'NV_other.shp']
+        self.shapes = ['2015_IRR_ACRE_WGS84.shp', 'NV_fallow.shp',]
+                       # 'NV_forest.shp', 'NV_other.shp']
         self.add_paths()
 
         self.path = 41
@@ -121,8 +121,8 @@ class Oregon(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['harney_irrigated_2016.shp', 'harney_fallow_2016.shp',
-                       'OR_forest.shp', 'OR_other.shp']
+        self.shapes = ['harney_irrigated_2016.shp', 'harney_fallow_2016.shp',]
+                       # 'OR_forest.shp', 'OR_other.shp']
         self.add_paths()
 
         self.path = 43
@@ -136,8 +136,8 @@ class Utah(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['UT_Irrigated_3732_2014.shp', 'UT_UnirrigatedAg_3732.shp',
-                       'UT_forest.shp', 'UT_other.shp']
+        self.shapes = ['UT_Irrigated_3732_2014.shp', 'UT_UnirrigatedAg_3732.shp',]
+                       # 'UT_forest.shp', 'UT_other.shp']
         self.add_paths()
 
         self.path = 37
@@ -151,8 +151,8 @@ class Washington(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['WA_2017_irrigated_4427.shp', 'WA_2017_unirrigated_ag_4427.shp',
-                       'WA_Forest_Practices_Applications_4427.shp', 'WA_other_4427.shp']
+        self.shapes = ['WA_2017_irrigated_4427.shp', 'WA_2017_unirrigated_ag_4427.shp',]
+                       # 'WA_Forest_Practices_Applications_4427.shp', 'WA_other_4427.shp']
         self.add_paths()
 
         self.path = 44
