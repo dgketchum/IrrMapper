@@ -67,7 +67,10 @@ def model_training_scenes(project, n_images, training, model):
         project_state_dir = os.path.join(project, key)
 
         if not os.path.isdir(project_state_dir):
-            os.mkdir(project_state_dir)
+            try:
+                os.mkdir(project_state_dir)
+            except FileNotFoundError:
+                os.makedirs(project_state_dir)
 
         geography = os.path.join(training, key)
         geo = val(geography)
