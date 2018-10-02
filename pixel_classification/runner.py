@@ -136,7 +136,7 @@ if __name__ == '__main__':
     c_project_dir = os.path.join(model_data, 'stacks')
     t_project_dir = os.path.join(model_data, 'allstates_3')
 
-    model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+    # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
     classify_scene(path=39, row=27, sat=8, year=2015,
                    eval_directory=c_project_dir, n_images=3, model=model_name)
     # run_targets(stack, model_name)

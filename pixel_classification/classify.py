@@ -264,13 +264,16 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     a = ArrayDisAssembly(stack_data)
     arrays = a.disassemble(n_sections=cores)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
-    pool = Pool(processes=cores)
+    [print(a.shape) for a in arrays]
     time = datetime.now()
+    pool = Pool(processes=cores)
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
+        pool.close()
         a.assemble(classified_arrays)
         final = a.assembled.reshape(d.final_shape)
+
     td = (datetime.now() - time)
 
     d.write_raster(out_file=result, new_array=final)
