@@ -112,7 +112,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
     i.warp_vrt()
 
     if not result:
-        tif = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
+        tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, 2, n_images)
         path_row_year_dir = '{}_{}_{}'.format(path, row, year)
         result = os.path.join(eval_directory, path_row_year_dir, tif)
 
@@ -136,11 +136,12 @@ if __name__ == '__main__':
 
     n_images = 3
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
-    stack = os.path.join(home, 'data')
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model-{}.ckpt'.format(n_images))
-    c_project_dir = os.path.join(model_data, 'stacks')
-    t_project_dir = os.path.join(model_data, 'binary')
+    t_project_dir = os.path.join(model_data, 'allstats_2c_3i')
+    stack = os.path.join(home, 'data')
+
+    c_project_dir = os.path.join(stack, 'classified')
 
     model_training_scenes(t_project_dir, n_images, training_dir, model_name)
     classify_scene(path=39, row=27, sat=8, year=2015,
