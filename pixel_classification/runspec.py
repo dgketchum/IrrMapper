@@ -21,7 +21,7 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 
 
-def bands_key():
+def landsat_rasters():
     b = {1: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
          2: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
          3: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF', 'B7.TIF'),
@@ -44,6 +44,11 @@ def ancillary_rasters():
 def static_rasters():
     a = ('slope.tif', 'aspect.tif', 'elevation_diff.tif')
     return a
+
+
+def mask_rasters():
+    m = ('cloud_fmask.tif', 'water_fmask.tif')
+    return m
 
 
 class TrainingAssignments(object):

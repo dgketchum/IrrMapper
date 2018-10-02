@@ -32,7 +32,7 @@ from dem import AwsDem
 from ssebop_app.image import get_image
 
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
-from pixel_classification.runspec import bands_key, static_rasters, ancillary_rasters
+from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters
 
 
 class ImageStack(object):
@@ -68,6 +68,7 @@ class ImageStack(object):
         self.image_paths = None
         self.stack_features = None
         self.paths_map = None
+        self.masks = None
 
         self.cdl_tif = None
         self.cdl_mask = None
@@ -87,7 +88,7 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-        self.paths_map = self._order_images()
+        self.paths_map, self.masks = self._order_images()
 
     def build_evaluating(self):
         self.get_landsat(fmask=False)
@@ -95,7 +96,7 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-        self.paths_map = self._order_images()
+        self.paths_map, self.masks = self._order_images()
 
     def get_cdl(self):
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
@@ -200,7 +201,8 @@ class ImageStack(object):
 
     def _order_images(self):
 
-        dct = OrderedDict()
+        band_dct = OrderedDict()
+        mask_dct = OrderedDict()
 
         if not self.image_dirs:
             raise NotImplementedError('must build stack with "build_all" before listing rasters')
@@ -218,18 +220,24 @@ class ImageStack(object):
 
         for sc in scenes:
             paths = os.listdir(os.path.join(self.root, sc))
-            b = [os.path.join(self.root, sc, x) for x in paths if x.endswith(bands_key()[self.sat])]
+            b = [os.path.join(self.root, sc, x) for x in paths if x.endswith(landsat_rasters()[self.sat])]
             a = [os.path.join(self.root, sc, x) for x in paths if x.endswith(ancillary_rasters())]
-            paths = a + b
-            paths.sort()
-            for p in paths:
-                dct[os.path.basename(p).split('.')[0]] = p
+            bands = a + b
+            bands.sort()
+            for p in bands:
+                band_dct[os.path.basename(p).split('.')[0]] = p
 
-        for st in os.listdir(self.root):
-            if st in static_rasters():
-                dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
+            masks = [os.path.join(self.root, sc, x) for x in paths if x.endswith(mask_rasters())]
+            for m in masks:
+                mask_dct[os.path.basename(m).split('.')[0]] = m
 
-        return dct
+        dir_list = os.listdir(self.root)
+        files = [x for x in dir_list if os.path.isfile(os.path.join(self.root, x))]
+        static_files = [x for x in files if x.endswith(static_rasters())]
+        for st in static_files:
+            band_dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
+
+        return band_dct, mask_dct
 
 
 if __name__ == '__main__':

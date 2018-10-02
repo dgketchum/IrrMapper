@@ -20,7 +20,6 @@ import sys
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 import pickle
-from collections import OrderedDict
 from copy import deepcopy
 from warnings import warn
 
@@ -59,7 +58,7 @@ class PixelTrainingArray(object):
     one path,row Landsat tile.
     """
 
-    def __init__(self, root=None, geography=None, paths_map=None,
+    def __init__(self, root=None, geography=None, paths_map=None, masks=None,
             instances=None, from_dict=None, pkl_path=None,
             overwrite_array=False, overwrite_points=False):
 
@@ -96,7 +95,7 @@ class PixelTrainingArray(object):
             self.array_exists = False
             self.geography = geography
             self.paths_map = paths_map
-            self.masks, self.bands = self._get_masks_bands()
+            self.masks = masks
             self.crs = self._get_crs()
             self.root = root
             self.path_row_dir = os.path.join(self.root, str(geography.path), str(geography.row))
@@ -252,7 +251,7 @@ class PixelTrainingArray(object):
         for msk in self.masks.keys():
             data_array[data_array[msk] == 1.] = nan
 
-        for bnd in self.bands.keys():
+        for bnd in self.paths_map.keys():
             data_array[data_array[bnd] == 0.] = nan
 
         data_array = data_array.join(target_vals, how='outer')
@@ -369,19 +368,6 @@ class PixelTrainingArray(object):
                 coords = feat['geometry']['coordinates']
                 val = feat['properties']['POINT_TYPE']
                 self._add_entry(coords, val=val)
-
-    def _get_masks_bands(self):
-        msk_dct = OrderedDict()
-        bnd_dct = OrderedDict()
-        for key, val in self.paths_map.items():
-            if 'water_fmask' in val:
-                msk_dct[key] = val
-            elif 'cloud_fmask' in val:
-                msk_dct[key] = val
-            else:
-                bnd_dct[key] = val
-
-        return msk_dct, bnd_dct
 
     @property
     def data_path(self):
