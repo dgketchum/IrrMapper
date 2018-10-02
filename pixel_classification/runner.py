@@ -112,6 +112,9 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
     i.build_evaluating()
     i.warp_vrt()
 
+    for k, v in i.paths_map.items():
+        print(k)
+
     if not result:
         result = '{}{}{}_{}.tif'.format(i.sat_abv, path, row, year)
 
