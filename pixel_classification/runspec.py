@@ -60,11 +60,11 @@ class TrainingAssignments(object):
 
         self.attributes = {0: {'ltype': 'irrigated', 'path': None},
 
-                           1: {'ltype': 'dryland', 'path': None},
+                           1: {'ltype': 'dryland', 'path': None},}
 
-                           2: {'ltype': 'forrest', 'path': None},
-
-                           3: {'ltype': 'other', 'path': None}}
+                           # 2: {'ltype': 'forrest', 'path': None},
+                           #
+                           # 3: {'ltype': 'other', 'path': None}}
 
     def add_paths(self):
         for key, vector in enumerate(self.shapes):
