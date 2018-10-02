@@ -271,6 +271,7 @@ def classify_multiproc(model, stack_data, result, array_outfile=None, mask=None)
     classifiers = [Classifier(idx=i, arr=a, model=model) for i, a in enumerate(arrays)]
     pool = Pool(processes=cores)
     time = datetime.now()
+    print('async')
     with pool as p:
         pool_results = [p.apply_async(get_classifier, (c, a)) for a, c in zip(arrays, classifiers)]
         classified_arrays = [res.get() for res in pool_results]
