@@ -80,8 +80,16 @@ class ImageStack(object):
             self.start = '{}-05-01'.format(self.year)
             self.end = '{}-10-15'.format(self.year)
 
-    def build_all(self):
-        self.get_landsat()
+    def build_training(self):
+        self.get_landsat(fmask=True)
+        self.profile = self.landsat.rasterio_geometry
+        self.get_et()
+        self.get_terrain()
+        self.get_cdl()
+        self.paths_map = self._order_images()
+
+    def build_evaluating(self):
+        self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
         self.get_et()
         self.get_terrain()
@@ -99,7 +107,7 @@ class ImageStack(object):
             print('{} exists'.format(self.cdl_mask))
             self.exclude_rasters.append(self.cdl_mask)
 
-    def get_landsat(self):
+    def get_landsat(self, fmask=False):
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
                            output_path=self.root, max_cloud_percent=self.max_cloud)
 
@@ -111,7 +119,8 @@ class ImageStack(object):
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
 
         self._get_geography()
-        [self._make_fmask(d) for d in self.image_dirs]
+        if fmask:
+            [self._make_fmask(d) for d in self.image_dirs]
 
     def get_terrain(self):
 
@@ -226,6 +235,7 @@ class ImageStack(object):
                 dct[os.path.basename(p).split('.')[0]] = p
 
         return dct
+
 
 if __name__ == '__main__':
     pass
