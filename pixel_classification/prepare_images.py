@@ -26,7 +26,7 @@ from collections import OrderedDict
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
-from sat_image.warped_vrt import warp_vrt
+from sat_image.warped_vrt import warp_vrt, warp_single_image
 from bounds import RasterBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
@@ -156,7 +156,9 @@ class ImageStack(object):
                       landsat_object=self.landsat, overwrite=False)
 
     def warp_vrt(self):
-        warp_vrt(self.root, delete_extra=False, use_band_map=False, remove_bqa=True)
+        b = self.paths_map
+        for k, v in b.items():
+            warp_single_image(v, self.profile, resampling='cubic')
 
     def _get_geography(self):
 
