@@ -83,8 +83,8 @@ def model_training_scenes(project, n_images, training, model):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_training()
-        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10, masks=i.masks,
-                overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10000, masks=i.masks,
+                overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
         p.extract_sample()
 
         if first:
@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
     c_project_dir = os.path.join(stack, 'classified')
 
-    model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+    # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
     # classify_scene(path=39, row=27, sat=8, year=2015,
     #                eval_directory=c_project_dir, n_images=3, model=model_name)
     run_targets(stack, model_name)
