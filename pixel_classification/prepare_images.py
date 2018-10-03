@@ -151,6 +151,7 @@ class ImageStack(object):
         for i, d in enumerate(self.image_dirs):
             l = self.landsat_mapping[self.sat_abv](d)
             _id = l.landsat_scene_id
+            print('clip geo: {}'.format(l.get_tile_geometry()))
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
