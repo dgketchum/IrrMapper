@@ -110,24 +110,18 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
     if not os.path.isdir(sub):
         os.mkdir(sub)
 
-    try:
-        i = ImageStack(root=sub, satellite=sat, path=path, row=row,
-                       n_landsat=n_images, year=year, max_cloud_pct=70)
-        i.build_evaluating()
-        i.warp_vrt()
+    i = ImageStack(root=sub, satellite=sat, path=path, row=row,
+                   n_landsat=n_images, year=year, max_cloud_pct=70)
+    i.build_evaluating()
+    i.warp_vrt()
 
-        if not result:
-            tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, 2, n_images)
-            path_row_year_dir = '{}_{}_{}'.format(path, row, year)
-            result = os.path.join(eval_directory, path_row_year_dir, tif)
+    if not result:
+        tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, 2, n_images)
+        path_row_year_dir = '{}_{}_{}'.format(path, row, year)
+        result = os.path.join(eval_directory, path_row_year_dir, tif)
 
-        classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
-        print('Time: {}'.format(datetime.now()))
-
-    except Exception as e:
-        print('')
-        print(e)
-        print('')
+    classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
+    print('Time: {}'.format(datetime.now()))
 
 
 def run_targets(directory, model):
