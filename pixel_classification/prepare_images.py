@@ -26,7 +26,7 @@ from collections import OrderedDict
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
-from sat_image.warped_vrt import warp_vrt, warp_single_image
+from sat_image.warped_vrt import warp_single_image
 from bounds import RasterBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
