@@ -158,7 +158,7 @@ class ImageStack(object):
     def warp_vrt(self):
         b = self.paths_map
         for k, v in b.items():
-            warp_single_image(v, self.profile, resampling='cubic')
+            warp_vrt(v, self.profile, resample='cubic')
 
     def _get_geography(self):
 
