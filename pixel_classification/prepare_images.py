@@ -164,6 +164,7 @@ class ImageStack(object):
 
         master = self.image_dirs[0]
         self.landsat = self.landsat_mapping[self.sat_abv](master)
+        print('Image profile: {}'.format(self.landsat.profile))
 
     def _make_fmask(self, image_dir):
         s = os.path.basename(image_dir)
