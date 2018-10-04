@@ -93,8 +93,8 @@ class ImageStack(object):
     def build_evaluating(self):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
-        self.get_et()
         self.get_terrain()
+        self.get_et()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images()
 
@@ -129,6 +129,7 @@ class ImageStack(object):
         slope_name = os.path.join(self.root, 'slope.tif')
         aspect_name = os.path.join(self.root, 'aspect.tif')
         dif_elev = os.path.join(self.root, 'elevation_diff.tif')
+        dem_name = os.path.join(self.root, 'dem.tif')
 
         check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev]]
 
@@ -144,8 +145,9 @@ class ImageStack(object):
             dem.terrain(attribute='aspect',
                         out_file=aspect_name, save_and_return=True)
             elev = dem.terrain(attribute='elevation')
-            elev = elev - mean(elev)
-            dem.save(elev, geometry=dem.target_profile, output_filename=dif_elev)
+            elev_diff = elev - mean(elev)
+            dem.save(elev_diff, geometry=dem.target_profile, output_filename=dif_elev)
+            dem.save(elev, geometry=dem.target_profile, output_filename=dem_name)
 
     def get_et(self):
         for i, d in enumerate(self.image_dirs):
