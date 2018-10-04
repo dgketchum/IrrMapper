@@ -395,7 +395,7 @@ TARGET_LIST = [(31, 27),
 
 
 def get_selected_path_rows():
-    return TARGET_LIST
+    return SELECTED_LIST
 
 
 def get_path_rows():
