@@ -129,9 +129,8 @@ class ImageStack(object):
         slope_name = os.path.join(self.root, 'slope.tif')
         aspect_name = os.path.join(self.root, 'aspect.tif')
         dif_elev_name = os.path.join(self.root, 'elevation_diff.tif')
-        dem_name = os.path.join(self.root, 'dem.tif')
 
-        check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev_name, dem_name]]
+        check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev_name]]
 
         if False in check:
             polygon = self.landsat.get_tile_geometry()
@@ -147,15 +146,11 @@ class ImageStack(object):
             elev = dem.terrain(attribute='elevation')
             elev_diff = elev - mean(elev)
             dem.save(elev_diff, geometry=dem.target_profile, output_filename=dif_elev_name)
-            dem.save(elev, geometry=dem.target_profile, output_filename=dem_name)
 
     def get_et(self):
         for i, d in enumerate(self.image_dirs):
             l = self.landsat_mapping[self.sat_abv](d)
             _id = l.landsat_scene_id
-            print('dir: {}'.format(d))
-            [print(x) for x in os.listdir(d)]
-            print('clip geo: {}'.format(l.get_tile_geometry()))
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
