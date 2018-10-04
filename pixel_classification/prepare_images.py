@@ -156,7 +156,7 @@ class ImageStack(object):
             print('clip geo: {}'.format(l.get_tile_geometry()))
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
-                      landsat_object=self.landsat, overwrite=False, override_count=False)
+                      landsat_object=self.landsat, overwrite=False)
 
     def warp_vrt(self):
         b = self.paths_map
