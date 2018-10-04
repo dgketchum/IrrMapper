@@ -129,7 +129,7 @@ class ImageStack(object):
         slope_name = os.path.join(self.root, 'slope.tif')
         aspect_name = os.path.join(self.root, 'aspect.tif')
         dif_elev = os.path.join(self.root, 'elevation_diff.tif')
-        dem_name = os.path.join(self.root, 'dem.tif')
+        dem_name = os.path.join(self.root, '_dem.tif')
 
         check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev, dem_name]]
 
