@@ -145,10 +145,9 @@ class ImageStack(object):
                         out_file=slope_name, save_and_return=True)
             dem.terrain(attribute='aspect',
                         out_file=aspect_name, save_and_return=True)
-            elev = dem.terrain(attribute='elevation')
+            elev = dem.terrain(attribute='elevation', save_and_return=True, out_file=dem_name)
             elev_diff = elev - mean(elev)
             dem.save(elev_diff, geometry=dem.target_profile, output_filename=dif_elev)
-            dem.save(elev, geometry=dem.target_profile, output_filename=dem_name)
 
     def get_et(self):
         for i, d in enumerate(self.image_dirs):
