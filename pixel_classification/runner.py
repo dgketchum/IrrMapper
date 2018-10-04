@@ -120,7 +120,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, n_clas
         result = os.path.join(eval_directory, path_row_year_dir, tif)
 
     classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
-        print('Time: {}'.format(datetime.now()))
+    print('Time: {}'.format(datetime.now()))
     # except Exception as e:
     #     print(e)
     #     print('')
