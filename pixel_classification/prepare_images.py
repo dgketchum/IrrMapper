@@ -131,10 +131,10 @@ class ImageStack(object):
         dif_elev = os.path.join(self.root, 'elevation_diff.tif')
         dem_name = os.path.join(self.root, 'dem.tif')
 
-        check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev]]
+        check = [os.path.isfile(x) for x in [slope_name, aspect_name, dif_elev, dem_name]]
 
         if False in check:
-            [print('writing {}'.format(x)) for x in [slope_name, aspect_name, dif_elev]]
+            [print('writing {}'.format(x)) for x in [slope_name, aspect_name, dif_elev, dem_name]]
             polygon = self.landsat.get_tile_geometry()
             bb = RasterBounds(affine_transform=self.profile['transform'],
                               profile=self.profile, latlon=True)
