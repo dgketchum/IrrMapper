@@ -102,7 +102,7 @@ def model_training_scenes(project, n_images, training, model):
     print('Model saved to {}'.format(model))
 
 
-def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
+def classify_scene(path, row, sat, year, eval_directory, model, n_images, n_classes, result=None):
     print('Time: {}'.format(datetime.now()))
     print('Classfiy path {} row {} sat {} year {}'.format(path, row, sat, year))
     sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
@@ -115,7 +115,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
         i.warp_vrt()
 
         if not result:
-            tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, 2, n_images)
+            tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, n_classes, n_images)
             path_row_year_dir = '{}_{}_{}'.format(path, row, year)
             result = os.path.join(eval_directory, path_row_year_dir, tif)
 
@@ -126,7 +126,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
         print('')
 
 
-def run_targets(directory, model):
+def run_targets(directory, model, classes):
     prs = get_selected_path_rows()
     years = [2015]
     for (p, r) in prs:
@@ -134,7 +134,7 @@ def run_targets(directory, model):
             print('')
             print('Classify path {} row {} year {}'.format(p, r, yr))
             print('')
-            classify_scene(p, r, 8, yr, directory, model, 3)
+            classify_scene(p, r, 8, yr, directory, model, 3, n_classes=classes)
 
 
 if __name__ == '__main__':
@@ -145,13 +145,13 @@ if __name__ == '__main__':
     model_name_2 = os.path.join(model_data, 'model-2c-3i.ckpt')
     model_name_4 = os.path.join(model_data, 'model-3.ckpt')
     t_project_dir = os.path.join(model_data, 'allstates_2c_3i')
-    stack = os.path.join(home, 'data')
+    stack = os.path.join(home, 'data_mt')
 
     c_project_dir = os.path.join(stack, 'classified')
 
     # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
     # classify_scene(path=39, row=27, sat=8, year=2015,
     #                eval_directory=c_project_dir, n_images=3, model=model_name)
-    run_targets(stack, model_name_2)
-    run_targets(stack, model_name_4)
+    run_targets(stack, model_name_2, classes=2)
+    run_targets(stack, model_name_4, classes=4)
 # ========================= EOF ====================================================================
