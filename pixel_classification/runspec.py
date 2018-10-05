@@ -176,7 +176,7 @@ class MontanaTest(Montana):
         self.sample_negative = False
 
 
-SELECTED_LIST = [#(34, 34),
+SELECTED_LIST = [(34, 34),
                  (36, 30),
                  (41, 30)]
 
