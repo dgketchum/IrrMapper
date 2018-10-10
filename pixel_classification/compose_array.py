@@ -98,8 +98,9 @@ class PixelTrainingArray(object):
             self.masks = masks
             self.crs = self._get_crs()
             self.root = root
+            self.year = str(geography.year)
             self.path_row_dir = os.path.join(self.root, str(geography.path), str(geography.row))
-            self.year_dir = os.path.join(self.path_row_dir, str(geography.year))
+            self.year_dir = os.path.join(self.path_row_dir, self.year)
             self.is_binary = None
 
             self.features = None
@@ -225,7 +226,7 @@ class PixelTrainingArray(object):
 
                 props = dict([('FID', row['FID']),
                               ('POINT_TYPE', row['POINT_TYPE']),
-                              ('YEAR', row['YEAR'])])
+                              ('YEAR', self.year)])
 
                 pt = Point(row['X'], row['Y'])
                 output.write({'properties': props,
@@ -255,7 +256,7 @@ class PixelTrainingArray(object):
 
         data_array = deepcopy(self.extracted_points)
         target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
-        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
+        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE', 'YEAR'], axis=1, inplace=True)
 
         for msk in self.masks.keys():
             data_array[data_array[msk] == 1.] = nan

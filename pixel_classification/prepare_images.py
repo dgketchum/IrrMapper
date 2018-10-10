@@ -117,8 +117,10 @@ class ImageStack(object):
         self.scenes = g.selected_scenes
         g.download(list_type='selected')
 
-        self.image_dirs = [x[0] for x in os.walk(self.root) if
-                           os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
+        yr = [x[0] for x in os.walk(self.root) if
+              os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
+
+        self.image_dirs = [x for x in yr if int(os.path.basename(x)[9:13]) == self.year]
 
         self._get_geography()
         if fmask:
