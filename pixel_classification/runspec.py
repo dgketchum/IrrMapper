@@ -60,11 +60,11 @@ class TrainingAssignments(object):
 
         self.attributes = {0: {'ltype': 'irrigated', 'path': None},
 
-                           1: {'ltype': 'dryland', 'path': None}, }
+                           1: {'ltype': 'dryland', 'path': None},
 
-        # 2: {'ltype': 'forrest', 'path': None},
-        #
-        # 3: {'ltype': 'other', 'path': None}}
+                           2: {'ltype': 'forrest', 'path': None},
+
+                           3: {'ltype': 'other', 'path': None}}
 
     def add_paths(self):
         for key, vector in enumerate(self.shapes):
@@ -86,18 +86,33 @@ class Idaho(TrainingAssignments):
         self.sat = 5
 
 
-class Montana(TrainingAssignments):
+class MontanaHuntley(TrainingAssignments):
 
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['MT_Huntley_Main_2013_3728.shp', 'MT_FLU_2017_Fallow_3728.shp', ]
-        # 'MT_FLU_2017_Forrest_3728.shp', 'MT_other_3728.shp']
+        self.shapes = ['MT_Huntley_Main_2013_3728.shp', 'MT_FLU_2017_Fallow_3728.shp',
+                       'MT_FLU_2017_Forrest_3728.shp', 'MT_other_3728.shp']
         self.add_paths()
 
         self.path = 37
         self.row = 28
-        self.year = 2013
+        self.year = [2008, 2009, 2010, 2011, 2012, 2013]
+        self.sat = 8
+
+
+class MontanaSun(TrainingAssignments):
+
+    def __init__(self, root):
+        TrainingAssignments.__init__(self, root)
+
+        self.shapes = ['MT_Sun_River_2013_3927.shp', 'MT_FLU_2017_Fallow_3927.shp',
+                       'MT_FLU_2017_Forrest_3927.shp', 'MT_other_3927.shp']
+        self.add_paths()
+
+        self.path = 39
+        self.row = 27
+        self.year = [2008, 2009, 2010, 2011, 2012, 2013]
         self.sat = 8
 
 
@@ -106,13 +121,13 @@ class Nevada(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['2015_IRR_ACRE_WGS84.shp', 'NV_fallow.shp', ]
-        # 'NV_forest.shp', 'NV_other.shp']
+        self.shapes = ['2015_IRR_ACRE_WGS84.shp', 'NV_fallow.shp',
+                       'NV_forest.shp', 'NV_other.shp']
         self.add_paths()
 
         self.path = 41
         self.row = 32
-        self.year = 2015
+        self.year = [2015]
         self.sat = 8
 
 
@@ -121,13 +136,13 @@ class Oregon(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['harney_irrigated_2016.shp', 'harney_fallow_2016.shp', ]
-        # 'OR_forest.shp', 'OR_other.shp']
+        self.shapes = ['harney_irrigated_2016.shp', 'harney_fallow_2016.shp',
+                       'OR_forest.shp', 'OR_other.shp']
         self.add_paths()
 
         self.path = 43
         self.row = 30
-        self.year = 2016
+        self.year = [2016]
         self.sat = 8
 
 
@@ -136,13 +151,13 @@ class Utah(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['UT_Irrigated_3732_2014.shp', 'UT_UnirrigatedAg_3732.shp', ]
-        # 'UT_forest.shp', 'UT_other.shp']
+        self.shapes = ['UT_Irrigated_3732_2014.shp', 'UT_UnirrigatedAg_3732.shp',
+                       'UT_forest.shp', 'UT_other.shp']
         self.add_paths()
 
         self.path = 37
         self.row = 32
-        self.year = 2014
+        self.year = [2014]
         self.sat = 8
 
 
@@ -151,29 +166,29 @@ class Washington(TrainingAssignments):
     def __init__(self, root):
         TrainingAssignments.__init__(self, root)
 
-        self.shapes = ['WA_2017_irrigated_4427.shp', 'WA_2017_unirrigated_ag_4427.shp', ]
-        # 'WA_Forest_Practices_Applications_4427.shp', 'WA_other_4427.shp']
+        self.shapes = ['WA_2017_irrigated_4427.shp', 'WA_2017_unirrigated_ag_4427.shp',
+                       'WA_Forest_Practices_Applications_4427.shp', 'WA_other_4427.shp']
         self.add_paths()
 
         self.path = 44
         self.row = 27
-        self.year = 2017
+        self.year = [2017]
         self.sat = 8
 
 
-class MontanaTest(Montana):
-    def __init__(self):
-        Montana.__init__(self)
-
-        for code, _dict in self.attributes.items():
-            _dict['path'] = _dict['path'].replace(os.path.join('spatial_data', 'MT'),
-                                                  os.path.join('tests', 'data', 'pixel_extract_test',
-                                                               ))
-            _dict['path'] = _dict['path'].replace('.shp', '_clip.shp')
-
-        self.unique_classes = len(self.attributes.keys())
-
-        self.sample_negative = False
+# class MontanaTest(MontanaSun):
+#     def __init__(self):
+#         MontanaHuntley.__init__(self)
+#
+#         for code, _dict in self.attributes.items():
+#             _dict['path'] = _dict['path'].replace(os.path.join('spatial_data', 'MTH'),
+#                                                   os.path.join('tests', 'data', 'pixel_extract_test',
+#                                                                ))
+#             _dict['path'] = _dict['path'].replace('.shp', '_clip.shp')
+#
+#         self.unique_classes = len(self.attributes.keys())
+#
+#         self.sample_negative = False
 
 
 SELECTED_LIST = [(34, 34),

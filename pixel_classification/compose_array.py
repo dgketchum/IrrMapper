@@ -107,7 +107,7 @@ class PixelTrainingArray(object):
             self.target_values = None
 
             self.m_instances = instances
-            self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
+            self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE', 'YEAR'])
             self.object_id = 0
 
     def extract_sample(self, save_points=True):
@@ -215,14 +215,18 @@ class PixelTrainingArray(object):
     def save_sample_points(self):
 
         points_schema = {
-            'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+            'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10'), ('YEAR', 'int:10')]),
             'geometry': 'Point'}
         meta = self.tile_geometry.copy()
         meta['schema'] = points_schema
 
         with fopen(self.shapefile_path, 'w', **meta) as output:
             for index, row in self.extracted_points.iterrows():
-                props = dict([('FID', row['FID']), ('POINT_TYPE', row['POINT_TYPE'])])
+
+                props = dict([('FID', row['FID']),
+                              ('POINT_TYPE', row['POINT_TYPE']),
+                              ('YEAR', row['YEAR'])])
+
                 pt = Point(row['X'], row['Y'])
                 output.write({'properties': props,
                               'geometry': mapping(pt)})
@@ -325,7 +329,8 @@ class PixelTrainingArray(object):
         self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
                                                               'X': coord[0],
                                                               'Y': coord[1],
-                                                              'POINT_TYPE': val},
+                                                              'POINT_TYPE': val,
+                                                              'YEAR': self.geography.year},
                                                              ignore_index=True)
         self.object_id += 1
 

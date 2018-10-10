@@ -22,14 +22,15 @@ sys.path.append(abspath)
 from numpy import vstack
 from datetime import datetime
 
-from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
+from pixel_classification.runspec import MontanaHuntley, MontanaSun, Nevada, Oregon, Utah, Washington
 from pixel_classification.runspec import get_path_rows, get_selected_path_rows
 from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 
-OBJECT_MAP = {'MT': Montana,
+OBJECT_MAP = {'MTH': MontanaHuntley,
+              'MTS': MontanaSun,
               'NV': Nevada,
               'OR': Oregon,
               'UT': Utah,
@@ -74,27 +75,39 @@ def model_training_scenes(project, n_images, training, model):
 
         geography = os.path.join(training, key)
         geo = val(geography)
-        geo_folder = os.path.join(project, key)
-        geo_data_path = os.path.join(geo_folder, 'data.pkl')
+        for i, yr in enumerate(geo.year):
 
-        if not os.path.isfile(geo_data_path):
-            geo_data_path = None
+            if i > 0:
+                pt_write = False
+            else:
+                pt_write = True
 
-        i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
-                       n_landsat=n_images, year=geo.year, max_cloud_pct=70)
-        i.build_training()
-        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10000, masks=i.masks,
-                overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
-        p.extract_sample()
+            if yr < 2013:
+                sat = 5
+            else:
+                sat = 8
 
-        if first:
-            training_data = {'data': p.data, 'target_values': p.target_values,
-                             'features': p.features}
-            first = False
-        else:
-            training_data = concatenate_training_data(training_data, p)
+            geo_folder = os.path.join(project, key)
+            geo_data_path = os.path.join(geo_folder, 'data.pkl')
 
-        print('Shape {}: {}'.format(key, p.data.shape))
+            if not os.path.isfile(geo_data_path):
+                geo_data_path = None
+
+            i = ImageStack(root=project_state_dir, satellite=sat, path=geo.path, row=geo.row,
+                           n_landsat=n_images, year=yr, max_cloud_pct=70)
+            i.build_training()
+            p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=5000, masks=i.masks,
+                    overwrite_array=True, overwrite_points=pt_write, pkl_path=geo_data_path)
+            p.extract_sample()
+
+            if first:
+                training_data = {'data': p.data, 'target_values': p.target_values,
+                                 'features': p.features}
+                first = False
+            else:
+                training_data = concatenate_training_data(training_data, p)
+
+            print('Shape {}: {}'.format(key, p.data.shape))
 
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
@@ -102,7 +115,7 @@ def model_training_scenes(project, n_images, training, model):
     print('Model saved to {}'.format(model))
 
 
-def classify_scene(path, row, sat, year, eval_directory, model, n_images, n_classes, result=None):
+def classify_scene(path, row, sat, year, eval_directory, model, image_ct, n_classes, result=None):
     print('Time: {}'.format(datetime.now()))
     print('Classfiy path {} row {} sat {} year {}'.format(path, row, sat, year))
     sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
@@ -110,12 +123,12 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, n_clas
         os.mkdir(sub)
     # try:
     i = ImageStack(root=sub, satellite=sat, path=path, row=row,
-                   n_landsat=n_images, year=year, max_cloud_pct=70)
+                   n_landsat=image_ct, year=year, max_cloud_pct=70)
     i.build_evaluating()
     i.warp_vrt()
 
     if not result:
-        tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, n_classes, n_images)
+        tif = '{}{}{}_{}_{}c_{}i.tif'.format(i.sat_abv, path, row, year, n_classes, image_ct)
         path_row_year_dir = '{}_{}_{}'.format(path, row, year)
         result = os.path.join(eval_directory, path_row_year_dir, tif)
 
@@ -140,18 +153,19 @@ def run_targets(directory, model, classes):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
 
-    training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
+    n_images = 3
+    training_dir = os.path.join(home, 'IrrigationGIS', 'training_vector')
     model_data = os.path.join(abspath, 'model_data')
-    model_name_2 = os.path.join(model_data, 'model-2c-3i.ckpt')
-    model_name_4 = os.path.join(model_data, 'model-3.ckpt')
-    t_project_dir = os.path.join(model_data, 'allstates_2c_3i')
-    stack = os.path.join(home, 'data_mt')
+    # model_name_2 = os.path.join(model_data, 'model-2c-3i.ckpt')
+    model_name_my = os.path.join(model_data, 'model-4c-3i-my.ckpt')
+    t_project_dir = os.path.join(model_data, 'allstates_3')
+    # stack = os.path.join(home, 'data_mt')
 
-    c_project_dir = os.path.join(stack, 'classified')
+    # c_project_dir = os.path.join(stack, 'classified')
 
-    # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+    model_training_scenes(t_project_dir, n_images, training_dir, model_name_my)
     # classify_scene(path=39, row=27, sat=8, year=2015,
     #                eval_directory=c_project_dir, n_images=3, model=model_name)
-    run_targets(stack, model_name_2, classes=2)
-    run_targets(stack, model_name_4, classes=4)
+    # run_targets(stack, model_name_2, classes=2)
+    # run_targets(stack, model_name_4, classes=4)
 # ========================= EOF ====================================================================

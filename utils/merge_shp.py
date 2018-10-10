@@ -16,7 +16,7 @@
 import os
 import fiona
 
-OBJECT_MAP = {'MT': 'Montana',
+OBJECT_MAP = {'MTH': 'Montana',
               'NV': 'Nevada',
               'OR': 'Oregon',
               'UT': 'Utah',
