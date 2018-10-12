@@ -223,7 +223,6 @@ class PixelTrainingArray(object):
 
         with fopen(self.shapefile_path, 'w', **meta) as output:
             for index, row in self.extracted_points.iterrows():
-
                 props = dict([('FID', row['FID']),
                               ('POINT_TYPE', row['POINT_TYPE']),
                               ('YEAR', self.year)])
@@ -343,11 +342,14 @@ class PixelTrainingArray(object):
         return x, y
 
     def _get_crs(self):
-        for key, val in self.paths_map.items():
-            with rasopen(val, 'r') as src:
-                crs = src.crs
-            break
-        return crs
+        try:
+            for key, val in self.paths_map.items():
+                with rasopen(val, 'r') as src:
+                    crs = src.crs
+                break
+            return crs
+        except AttributeError:
+            return None
 
     def _get_polygons(self, vector):
         with fopen(vector, 'r') as src:
@@ -386,7 +388,7 @@ class PixelTrainingArray(object):
 
     @property
     def shapefile_path(self):
-        return os.path.join(self.root, 'sample_points.shp')
+        return os.path.join(self.root, 'sample_points_{}.shp'.format(self.year))
 
     @property
     def model_path(self):

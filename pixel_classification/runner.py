@@ -19,15 +19,16 @@ import sys
 
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
+from copy import deepcopy
 from numpy import vstack
 from datetime import datetime
 
 from pixel_classification.runspec import MontanaHuntley, MontanaSun, Nevada, Oregon, Utah, Washington
-from pixel_classification.runspec import get_path_rows, get_selected_path_rows
+from pixel_classification.runspec import get_selected_path_rows
 from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
-from pixel_classification.classify import classify_multiproc
+from utils.merge_shp import fiona_merge
 
 OBJECT_MAP = {'MTH': MontanaHuntley,
               'MTS': MontanaSun,
@@ -57,12 +58,9 @@ def concatenate_training_data(existing, training_array):
     return concatenated
 
 
-def model_training_scenes(project, n_images, training, model):
-    training_data = {}
-    first = True
-
+def sample_points(project, training, out_points, n_points):
+    shp_paths = []
     for key, val in OBJECT_MAP.items():
-
         print('Train on {}'.format(key))
 
         project_state_dir = os.path.join(project, key)
@@ -75,8 +73,46 @@ def model_training_scenes(project, n_images, training, model):
 
         geography = os.path.join(training, key)
         geo = val(geography)
-        for i, yr in enumerate(geo.year):
+        years = deepcopy(geo.year)
+        for i, yr in enumerate(years):
+            geo.year = yr
 
+            geo_folder = os.path.join(project, key)
+            geo_data_path = os.path.join(geo_folder, 'data.pkl')
+
+            if not os.path.isfile(geo_data_path):
+                geo_data_path = None
+
+            p = Pta(root=geo_folder, geography=geo, instances=n_points,
+                    overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
+
+            p.create_sample_points()
+            p.save_sample_points()
+            shp_paths.append(p.shapefile_path)
+
+    fiona_merge(out_points, shp_paths)
+
+
+def model_training_scenes(project, n_images, training, model):
+    training_data = {}
+    first = True
+
+    for key, val in OBJECT_MAP.items():
+        print('Train on {}'.format(key))
+
+        project_state_dir = os.path.join(project, key)
+
+        if not os.path.isdir(project_state_dir):
+            try:
+                os.mkdir(project_state_dir)
+            except FileNotFoundError:
+                os.makedirs(project_state_dir)
+
+        geography = os.path.join(training, key)
+        geo = val(geography)
+        years = deepcopy(geo.year)
+        for i, yr in enumerate(years):
+            geo.year = yr
             if i > 0:
                 pt_write = False
             else:
@@ -154,16 +190,20 @@ if __name__ == '__main__':
     home = os.path.expanduser('~')
 
     n_images = 3
+    points = 5000
     training_dir = os.path.join(home, 'IrrigationGIS', 'training_vector')
     model_data = os.path.join(abspath, 'model_data')
     # model_name_2 = os.path.join(model_data, 'model-2c-3i.ckpt')
     model_name_my = os.path.join(model_data, 'model-4c-3i-my.ckpt')
     t_project_dir = os.path.join(model_data, 'allstates_3')
+    t_project_points = os.path.join(model_data, 'allstates_3', 'points_join_{}.shp'.format(points))
     # stack = os.path.join(home, 'data_mt')
 
     # c_project_dir = os.path.join(stack, 'classified')
 
-    model_training_scenes(t_project_dir, n_images, training_dir, model_name_my)
+    sample_points(t_project_dir, training_dir, out_points=t_project_points, n_points=points)
+
+    # model_training_scenes(t_project_dir, n_images, training_dir, model_name_my)
     # classify_scene(path=39, row=27, sat=8, year=2015,
     #                eval_directory=c_project_dir, n_images=3, model=model_name)
     # run_targets(stack, model_name_2, classes=2)
