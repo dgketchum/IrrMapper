@@ -25,6 +25,17 @@ class PointsRunspec(object):
     def surface_water(self):
         pass
 
+    def wetlands(self):
+        pass
+
+    def unirrigated(self):
+        pass
+
+    def irrigated(self):
+        pass
+
+    def forest(self):
+        pass
 
 
 def sample_points(project, training, out_points, n_points):

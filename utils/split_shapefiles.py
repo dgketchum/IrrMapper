@@ -20,9 +20,8 @@ import fiona
 WETLAND_SHAPEFILES = [
     # 'MT_shapefile_wetlands/MT_Wetlands_West.shp',
     # 'MT_shapefile_wetlands/MT_Wetlands_East.shp',
-    'AZ_shapefile_wetlands/AZ_Wetlands.shp',
-    'CA_shapefile_wetlands/CA_Wetlands_North.shp',
-    'CA_shapefile_wetlands/CA_Wetlands_Central.shp',
+    # 'AZ_shapefile_wetlands/AZ_Wetlands.shp',
+    # 'CA_shapefile_wetlands/CA_Wetlands_North.shp',
     'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
     'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
     'CA_shapefile_wetlands/CA_Wetlands_East.shp',
