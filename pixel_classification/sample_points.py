@@ -16,6 +16,26 @@
 
 import os
 
+MT_SHP = ['West_Bench_Canal.shp',
+          'East_Fork_Main_Canal_ab_Trout_Creek.shp',
+          'Broadwater_Missouri_West_Side_Canal.shp',
+          'Paradise_Valley_ID.shp',
+          'Broadwater_Missouri_Canal.shp',
+          'Huntley_Main_Diversion.shp',
+          'Vigilante_Canal.shp',
+          'LYIP_North_Dakota.shp',
+          'Yellowstone_Main_Diversion.shp',
+          'Ruby_River.shp',
+          'Eldorado.shp',
+          'Glasgow_ID.shp',
+          'Fort_Belknap_Main_Diversion.shp',
+          'Dodson_North_Canal_Diversion.shp',
+          'Sun_River_project_Below_Pishkun.shp',
+          'Fort_Shaw_Canal.shp',
+          'Dodson_South_Div_To_Bowdoin.shp',
+          'Floweree_and_Floweree_Hamilton.shp',
+          'Marshall_Canal.shp']
+
 
 class PointsRunspec(object):
 
@@ -32,7 +52,11 @@ class PointsRunspec(object):
         pass
 
     def irrigated(self):
-        pass
+        key = {'MT': Montana,
+               'NV': Nevada,
+               'OR': Oregon,
+               'UT': Utah,
+               'WA': Washington}
 
     def forest(self):
         pass
@@ -71,6 +95,7 @@ def sample_points(project, training, out_points, n_points):
             shp_paths.append(p.shapefile_path)
 
     fiona_merge(out_points, shp_paths)
+
 
 if __name__ == '__main__':
     pass

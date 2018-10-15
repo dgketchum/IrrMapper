@@ -24,19 +24,19 @@ WETLAND_SHAPEFILES = [
     # 'CA_shapefile_wetlands/CA_Wetlands_North.shp',
     # 'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
     # 'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
-    'CO_shapefile_wetlands/CO_Wetlands_West.shp',
-    'CO_shapefile_wetlands/CO_Wetlands_East.shp',
-    'ID_shapefile_wetlands/ID_Wetlands.shp',
-    'NM_shapefile_wetlands/NM_Wetlands.shp',
-    'NV_shapefile_wetlands/NV_Wetlands_North.shp',
-    'NV_shapefile_wetlands/NV_Wetlands_South.shp',
-    'OR_shapefile_wetlands/OR_Wetlands_East.shp',
-    'OR_shapefile_wetlands/OR_Wetlands_West.shp',
-    'UT_shapefile_wetlands/UT_Wetlands.shp',
-    'WA_shapefile_wetlands/WA_Wetlands_West.shp',
-    'WA_shapefile_wetlands/WA_Wetlands_East.shp'
-    'WY_shapefile_wetlands/WY_Wetlands_West.shp'
-    'WY_shapefile_wetlands/WY_Wetlands_East.shp'
+    # 'CO_shapefile_wetlands/CO_Wetlands_West.shp',
+    # 'CO_shapefile_wetlands/CO_Wetlands_East.shp',
+    # 'ID_shapefile_wetlands/ID_Wetlands.shp',
+    # 'NM_shapefile_wetlands/NM_Wetlands.shp',
+    # 'NV_shapefile_wetlands/NV_Wetlands_North.shp',
+    # 'NV_shapefile_wetlands/NV_Wetlands_South.shp',
+    # 'OR_shapefile_wetlands/OR_Wetlands_East.shp',
+    # 'OR_shapefile_wetlands/OR_Wetlands_West.shp',
+    # 'UT_shapefile_wetlands/UT_Wetlands.shp',
+    # 'WA_shapefile_wetlands/WA_Wetlands_West.shp',
+    'WA_shapefile_wetlands/WA_Wetlands_East.shp',
+    'WY_shapefile_wetlands/WY_Wetlands_West.shp',
+    'WY_shapefile_wetlands/WY_Wetlands_East.shp',
 ]
 
 
