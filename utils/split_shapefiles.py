@@ -34,18 +34,36 @@ WETLAND_SHAPEFILES = ['MT_shapefile_wetlands/MT_Wetlands_West.shp',
                       'WA_shapefile_wetlands/WA_Wetlands_East.shp']
 
 
-def split_wetlands(out_shp, file_list):
-    meta = fiona.open(file_list[0]).meta
-    with fiona.open(out_shp, 'w', **meta) as output:
-        for s in file_list:
-            for features in fiona.open(s):
-                output.write(features)
+def split_wetlands(in_shp):
+
+    surface = []
+    surface_parameters = ['Riverine', 'Lake', 'Freshwater Pond']
+    wetland = []
+    wetland_parameters = ['Freshwater Emergent Wetland', 'Freshwater Forested/Shrub Wetland']
+
+    with fiona.open(in_shp, 'r') as src:
+        meta = src.meta
+        for feat in src:
+            if feat['properties']['WETLAND_TY'] in wetland_parameters:
+                wetland.append(feat)
+            if feat['properties']['WETLAND_TY'] in surface_parameters:
+                surface.append(feat)
+
+    for _type in [('open_water', surface), ('wetlands', wetland)]:
+        name = in_shp.replace('.shp', '{}.shp'.format(_type[0]))
+        l = _type[1]
+        with fiona.open(name, 'w', **meta) as output:
+            for feat in l:
+                output.write(feat)
 
     return None
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    samples = 'sample_points.shp'
-    s_dir = os.path.join(home, 'PycharmProjects', 'IrrigationGIS', 'wetlands')
+    s_dir = os.path.join(home, 'IrrigationGIS', 'wetlands')
+    o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
+    for s in WETLAND_SHAPEFILES:
+        split_wetlands(os.path.join(s_dir, s))
+
 # ========================= EOF ====================================================================

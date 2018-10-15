@@ -58,41 +58,6 @@ def concatenate_training_data(existing, training_array):
     return concatenated
 
 
-def sample_points(project, training, out_points, n_points):
-    shp_paths = []
-    for key, val in OBJECT_MAP.items():
-        print('Train on {}'.format(key))
-
-        project_state_dir = os.path.join(project, key)
-
-        if not os.path.isdir(project_state_dir):
-            try:
-                os.mkdir(project_state_dir)
-            except FileNotFoundError:
-                os.makedirs(project_state_dir)
-
-        geography = os.path.join(training, key)
-        geo = val(geography)
-        years = deepcopy(geo.year)
-        for i, yr in enumerate(years):
-            geo.year = yr
-
-            geo_folder = os.path.join(project, key)
-            geo_data_path = os.path.join(geo_folder, 'data.pkl')
-
-            if not os.path.isfile(geo_data_path):
-                geo_data_path = None
-
-            p = Pta(root=geo_folder, geography=geo, instances=n_points,
-                    overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
-
-            p.create_sample_points()
-            p.save_sample_points()
-            shp_paths.append(p.shapefile_path)
-
-    fiona_merge(out_points, shp_paths)
-
-
 def model_training_scenes(project, n_images, training, model):
     training_data = {}
     first = True
