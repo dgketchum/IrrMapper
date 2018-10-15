@@ -50,6 +50,7 @@ def split_wetlands(in_shp):
                 surface.append(feat)
 
     for _type in [('open_water', surface), ('wetlands', wetland)]:
+        print(_type[0])
         name = in_shp.replace('.shp', '{}.shp'.format(_type[0]))
         l = _type[1]
         with fiona.open(name, 'w', **meta) as output:
@@ -64,6 +65,7 @@ if __name__ == '__main__':
     s_dir = os.path.join(home, 'IrrigationGIS', 'wetlands')
     o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
     for s in WETLAND_SHAPEFILES:
+        print(s)
         split_wetlands(os.path.join(s_dir, s))
 
 # ========================= EOF ====================================================================
