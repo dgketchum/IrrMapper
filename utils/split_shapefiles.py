@@ -39,6 +39,15 @@ WETLAND_SHAPEFILES = [
     'WY_shapefile_wetlands/WY_Wetlands_East.shp',
 ]
 
+ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
+           ('ID_1996_ESPA_WGS84.shp', 'STATUS_199'),
+           ('ID_2002_ESPA_WGS84.shp', 'STATUS_200'),
+           ('ID_2006_ESPA_WGS84.shp', 'STATUS_200'),
+           ('ID_2008_ESPA_WGS84.shp', 'STATUS_200'),
+           ('ID_2009_ESPA_WGS84.shp', 'STATUS_200'),
+           ('ID_2010_ESPA_WGS84.shp', 'STATUS_201'),
+           ('ID_2011_ESPA_WGS84.shp', 'STATUS_201')]
+
 
 def split_wetlands(in_shp):
     surface = []
@@ -65,12 +74,35 @@ def split_wetlands(in_shp):
     return None
 
 
+def split_idaho(in_shp, prop='STATUS_201'):
+    irr = []
+    non_irr = []
+
+    with fiona.open(in_shp, 'r') as src:
+        meta = src.meta
+        for feat in src:
+            if feat['properties'][prop] == 'irrigated':
+                irr.append(feat)
+            if feat['properties'][prop] == 'non-irrigated':
+                non_irr.append(feat)
+
+    for _type in [('irr', irr), ('non-irrigated', non_irr)]:
+        print(_type[0])
+        name = in_shp.replace('.shp', '_{}.shp'.format(_type[0]))
+        l = _type[1]
+        with fiona.open(name, 'w', **meta) as output:
+            for feat in l:
+                output.write(feat)
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    s_dir = os.path.join(home, 'IrrigationGIS', 'wetlands')
-    o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
-    for s in WETLAND_SHAPEFILES:
-        print(s)
-        split_wetlands(os.path.join(s_dir, s))
+    s_dir = os.path.join(home, 'IrrigationGIS', 'training_raw', 'ID')
+    o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample')
+    for s in ID_ESPA:
+        shp = s[0]
+        p = s[1]
+        file_name = os.path.join(s_dir, shp)
+        split_idaho(file_name, p)
 
 # ========================= EOF ====================================================================

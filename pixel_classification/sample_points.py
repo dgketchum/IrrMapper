@@ -16,6 +16,26 @@
 
 import os
 
+OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
+              'WA_Wetlands_Westopen_water.shp',
+              'CA_Wetlands_NorthCentralopen_water.shp',
+              'CA_Wetlands_SouthCentralopen_water.shp',
+              'WY_Wetlands_Eastopen_water.shp',
+              'OR_Wetlands_Eastopen_water.shp',
+              'NM_Wetlandsopen_water.shp',
+              'CO_Wetlands_Westopen_water.shp',
+              'ID_Wetlandsopen_water.shp',
+              'AZ_Wetlandsopen_water.shp',
+              'CO_Wetlands_Eastopen_water.shp',
+              'MT_Wetlands_Westopen_water.shp',
+              'WA_Wetlands_Eastopen_water.shp',
+              'NV_Wetlands_Southopen_water.shp',
+              'OR_Wetlands_Westopen_water.shp',
+              'CA_Wetlands_Northopen_water.shp',
+              'WY_Wetlands_Westopen_water.shp',
+              'UT_Wetlandsopen_water.shp',
+              'NV_Wetlands_Northopen_water.shp']
+
 MT_SHP = ['West_Bench_Canal.shp',
           'East_Fork_Main_Canal_ab_Trout_Creek.shp',
           'Broadwater_Missouri_West_Side_Canal.shp',
@@ -52,11 +72,11 @@ class PointsRunspec(object):
         pass
 
     def irrigated(self):
-        key = {'MT': Montana,
-               'NV': Nevada,
-               'OR': Oregon,
-               'UT': Utah,
-               'WA': Washington}
+        key = {'MT': 'Montana',
+               'NV': 'Nevada',
+               'OR': 'Oregon',
+               'UT': 'Utah',
+               'WA': 'Washington'}
 
     def forest(self):
         pass
