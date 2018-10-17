@@ -16,14 +16,17 @@
 import os
 
 import fiona
+from numpy import arange
+from numpy.random import shuffle
 
 WETLAND_SHAPEFILES = [
     # 'MT_shapefile_wetlands/MT_Wetlands_West.shp',
     # 'MT_shapefile_wetlands/MT_Wetlands_East.shp',
     # 'AZ_shapefile_wetlands/AZ_Wetlands.shp',
     # 'CA_shapefile_wetlands/CA_Wetlands_North.shp',
-    # 'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
-    # 'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
+    'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
+    'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
+    'CA_shapefile_wetlands/CA_Wetlands_South.shp',
     # 'CO_shapefile_wetlands/CO_Wetlands_West.shp',
     # 'CO_shapefile_wetlands/CO_Wetlands_East.shp',
     # 'ID_shapefile_wetlands/ID_Wetlands.shp',
@@ -33,10 +36,10 @@ WETLAND_SHAPEFILES = [
     # 'OR_shapefile_wetlands/OR_Wetlands_East.shp',
     # 'OR_shapefile_wetlands/OR_Wetlands_West.shp',
     # 'UT_shapefile_wetlands/UT_Wetlands.shp',
-    # 'WA_shapefile_wetlands/WA_Wetlands_West.shp',
-    'WA_shapefile_wetlands/WA_Wetlands_East.shp',
+    'WA_shapefile_wetlands/WA_Wetlands_West.shp',
+    # 'WA_shapefile_wetlands/WA_Wetlands_East.shp',
     'WY_shapefile_wetlands/WY_Wetlands_West.shp',
-    'WY_shapefile_wetlands/WY_Wetlands_East.shp',
+    # 'WY_shapefile_wetlands/WY_Wetlands_East.shp',
 ]
 
 ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
@@ -48,8 +51,48 @@ ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
            ('ID_2010_ESPA_WGS84.shp', 'STATUS_201'),
            ('ID_2011_ESPA_WGS84.shp', 'STATUS_201')]
 
+OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
+              'WA_Wetlands_Westopen_water.shp',
+              'CA_Wetlands_NorthCentralopen_water.shp',
+              'CA_Wetlands_SouthCentralopen_water.shp',
+              'WY_Wetlands_Eastopen_water.shp',
+              'OR_Wetlands_Eastopen_water.shp',
+              'NM_Wetlandsopen_water.shp',
+              'CO_Wetlands_Westopen_water.shp',
+              'ID_Wetlandsopen_water.shp',
+              'AZ_Wetlandsopen_water.shp',
+              'CO_Wetlands_Eastopen_water.shp',
+              'MT_Wetlands_Westopen_water.shp',
+              'WA_Wetlands_Eastopen_water.shp',
+              'NV_Wetlands_Southopen_water.shp',
+              'OR_Wetlands_Westopen_water.shp',
+              'CA_Wetlands_Northopen_water.shp',
+              'WY_Wetlands_Westopen_water.shp',
+              'UT_Wetlandsopen_water.shp',
+              'NV_Wetlands_Northopen_water.shp']
 
-def split_wetlands(in_shp):
+WETLAND = ['MT_Wetlands_Eastwetlands.shp',
+           'WA_Wetlands_Westwetlands.shp',
+           'CA_Wetlands_NorthCentralwetlands.shp',
+           'CA_Wetlands_SouthCentralwetlands.shp',
+           'WY_Wetlands_Eastwetlands.shp',
+           'OR_Wetlands_Eastwetlands.shp',
+           'NM_Wetlandswetlands.shp',
+           'CO_Wetlands_Westwetlands.shp',
+           'ID_Wetlandswetlands.shp',
+           'AZ_Wetlandswetlands.shp',
+           'CO_Wetlands_Eastwetlands.shp',
+           'MT_Wetlands_Westwetlands.shp',
+           'WA_Wetlands_Eastwetlands.shp',
+           'NV_Wetlands_Southwetlands.shp',
+           'OR_Wetlands_Westwetlands.shp',
+           'CA_Wetlands_Northwetlands.shp',
+           'WY_Wetlands_Westwetlands.shp',
+           'UT_Wetlandswetlands.shp',
+           'NV_Wetlands_Northwetlands.shp']
+
+
+def split_wetlands(in_shp, out):
     surface = []
     surface_parameters = ['Riverine', 'Lake', 'Freshwater Pond']
     wetland = []
@@ -64,10 +107,12 @@ def split_wetlands(in_shp):
                 surface.append(feat)
 
     for _type in [('open_water', surface), ('wetlands', wetland)]:
-        print(_type[0])
-        name = in_shp.replace('.shp', '{}.shp'.format(_type[0]))
+        s = os.path.basename(in_shp)
+        name = s.replace('.shp', '{}.shp'.format(_type[0]))
+        out_file = os.path.join(out, name)
         l = _type[1]
-        with fiona.open(name, 'w', **meta) as output:
+        print(out_file)
+        with fiona.open(out_file, 'w', **meta) as output:
             for feat in l:
                 output.write(feat)
 
@@ -95,14 +140,47 @@ def split_idaho(in_shp, prop='STATUS_201'):
                 output.write(feat)
 
 
+def reduce_shapefiles(root, outdir, n, shapefiles):
+    for s in shapefiles:
+        shp = os.path.join(root, s)
+        dst_file = os.path.join(outdir, s.replace('wetlands', '_wl_{}'.format(n)))
+        if os.path.isfile(dst_file):
+            print(dst_file, 'exists')
+        else:
+            with fiona.open(shp, 'r') as src:
+                count = len([x for x in src])
+                meta = src.meta
+            idx = arange(0, count)
+            shuffle(idx)
+            out_features = []
+            with fiona.open(shp, 'r') as src:
+                i = 0
+                for feat in src:
+                    if i in idx[:n]:
+                        out_features.append(feat)
+                    i += 1
+            print(dst_file)
+            with fiona.open(dst_file, 'w', **meta) as dst:
+                for feat in out_features:
+                    dst.write(feat)
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    s_dir = os.path.join(home, 'IrrigationGIS', 'training_raw', 'ID')
-    o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample')
-    for s in ID_ESPA:
-        shp = s[0]
-        p = s[1]
-        file_name = os.path.join(s_dir, shp)
-        split_idaho(file_name, p)
+    # s_dir = os.path.join(home, 'IrrigationGIS', 'training_raw', 'ID')
+    # o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample')
+    # for s in ID_ESPA:
+    #     shp = s[0]
+    #     p = s[1]
+    #     file_name = os.path.join(s_dir, shp)
+    #     split_idaho(file_name, p)
 
+    s_dir = os.path.join(home, 'data_mt', 'wetlands_raw')
+    for s in WETLAND_SHAPEFILES:
+        split_idaho(s)
+
+    # home = os.path.expanduser('~')
+    # root = os.path.join(home, 'IrrigationGIS', 'wetlands')
+    # out_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
+    # reduce_shapefiles(root, out_dir, 5000, WETLAND)
 # ========================= EOF ====================================================================

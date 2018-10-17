@@ -16,33 +16,34 @@
 
 import os
 
-from numpy import linspace, max
+import fiona
+from numpy import linspace, max, arange
 from numpy.random import shuffle
 from pandas import DataFrame
-import fiona
 from pyproj import Proj
-from shapely.geometry import shape, Point
-from shapely.ops import unary_union
+from shapely.geometry import shape, Point, mapping
 
-OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
-              'WA_Wetlands_Westopen_water.shp',
-              'CA_Wetlands_NorthCentralopen_water.shp',
-              'CA_Wetlands_SouthCentralopen_water.shp',
-              'WY_Wetlands_Eastopen_water.shp',
-              'OR_Wetlands_Eastopen_water.shp',
-              'NM_Wetlandsopen_water.shp',
-              'CO_Wetlands_Westopen_water.shp',
-              'ID_Wetlandsopen_water.shp',
-              'AZ_Wetlandsopen_water.shp',
-              'CO_Wetlands_Eastopen_water.shp',
-              'MT_Wetlands_Westopen_water.shp',
-              'WA_Wetlands_Eastopen_water.shp',
-              'NV_Wetlands_Southopen_water.shp',
-              'OR_Wetlands_Westopen_water.shp',
-              'CA_Wetlands_Northopen_water.shp',
-              'WY_Wetlands_Westopen_water.shp',
-              'UT_Wetlandsopen_water.shp',
-              'NV_Wetlands_Northopen_water.shp']
+OPEN_WATER = [
+    'MT_Wetlands_East_ow_1000.shp',
+              'WA_Wetlands_West_ow_1000.shp',
+              'CA_Wetlands_NorthCentral_ow_1000.shp',
+              'CA_Wetlands_SouthCentral_ow_1000.shp',
+              'WY_Wetlands_East_ow_1000.shp',
+              'OR_Wetlands_East_ow_1000.shp',
+              'NM_Wetlands_ow_1000.shp',
+              'CO_Wetlands_West_ow_1000.shp',
+              'ID_Wetlands_ow_1000.shp',
+              'AZ_Wetlands_ow_1000.shp',
+              'CO_Wetlands_East_ow_1000.shp',
+              'MT_Wetlands_West_ow_1000.shp',
+              'WA_Wetlands_East_ow_1000.shp',
+              'NV_Wetlands_South_ow_1000.shp',
+              'OR_Wetlands_West_ow_1000.shp',
+              'CA_Wetlands_North_ow_1000.shp',
+              'WY_Wetlands_West_ow_1000.shp',
+              'UT_Wetlands_ow_1000.shp',
+              'NV_Wetlands_North_ow_1000.shp'
+]
 
 WETLAND = ['MT_Wetlands_Eastwetlands.shp',
            'WA_Wetlands_Westwetlands.shp',
@@ -94,6 +95,7 @@ class PointsRunspec(object):
         self.year = None
         self.aea = Proj(
             '+proj=aea +lat_1=20 +lat_2=60 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs')
+        self.meta = None
         self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE', 'YEAR'])
 
         if 'surface_water' in kwargs.keys():
@@ -105,14 +107,15 @@ class PointsRunspec(object):
         if 'forest' in kwargs.keys():
             self.surface_water(kwargs['forest'])
 
-        self.irrigated(n)
+        # self.irrigated(kwargs['irrigated'])
 
     def surface_water(self, n):
-        _files = [os.path.join(self.root, 'wetlands', x) for x in OPEN_WATER]
-        areas = self.areas(_files)
+        _files = [os.path.join(self.root, 'open_water', x) for x in OPEN_WATER]
+        areas = self.shapefile_area_count(_files)
         total_area = sum([x[1] for x in areas])
-        samples = [(s, (a * n / total_area)) for s, a in areas]
-        for s, n in samples:
+        samples = [(s, (a * n / total_area), ct) for s, a, ct in areas]
+        for s, n, ct in samples:
+            print(ct, ':', s)
             self.create_sample_points(n, s, code=1)
 
     def wetlands(self, n):
@@ -125,52 +128,44 @@ class PointsRunspec(object):
         pass
 
     def irrigated(self, n):
-        key = {'MT': 'Montana',
-               'NV': 'Nevada',
-               'OR': 'Oregon',
-               'UT': 'Utah',
-               'WA': 'Washington'}
+        pass
 
-    def areas(self, *shapes):
+    def shapefile_area_count(self, shapes):
+        a = 0
         totals = []
         for shp in shapes:
-            area = self._shapefile_area(shp)
-            totals.append((shp, area))
-        return totals
+            ct = 0
+            with fiona.open(shp, 'r') as src:
+                if not self.meta:
+                    self.meta = src.meta
+                print(shp)
+                for feat in src:
+                    if src.crs['units'] == 'm':
+                        cop = {"type": "Polygon", "coordinates": [feat['geometry']['coordinates'][0]]}
+                    else:
+                        lon, lat = zip(*feat['geometry']['coordinates'][0])
+                        x, y = self.aea(lon, lat)
+                        cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+                    try:
+                        a += shape(cop).area
+                        ct += 1
+                    except Exception:
+                        pass
+            totals.append((shp, a, ct))
 
-    def _shapefile_area(self, shp):
-        a = 0
-        with fiona.open(shp, 'r') as src:
-            print(shp)
-            for feat in src:
-                lon, lat = zip(*feat['coordinates'][0])
-                x, y = self.aea(lon, lat)
-                cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-                a += shape(cop).area
-        return a
+        return totals
 
     def create_sample_points(self, n, shp, code):
 
-        polygons = self._get_polygons(shp)
         instance_ct = 0
 
-        if len(polygons) > n:
-            areas = zip(polygons, [x.area for x in polygons])
-            srt = sorted(areas, key=lambda x: x[1], reverse=True)
-            polygons = [x for x, y in srt[:n]]
-
-        polygons = unary_union(polygons)
+        polygons = self._get_polygons(shp)
         positive_area = sum([x.area for x in polygons])
-        class_count = 0
-
         for i, poly in enumerate(polygons):
-            if class_count >= n:
-                break
             fractional_area = poly.area / positive_area
             required_points = max([1, fractional_area * n])
             x_range, y_range = self._random_points(poly.bounds, n)
             poly_pt_ct = 0
-
             for coord in zip(x_range, y_range):
                 if Point(coord[0], coord[1]).within(poly):
                     self._add_entry(coord, val=code)
@@ -182,21 +177,6 @@ class PointsRunspec(object):
 
                 if poly_pt_ct >= required_points:
                     break
-
-            class_count += poly_pt_ct
-
-    def _get_polygons(self, vector):
-        with fiona.open(vector, 'r') as src:
-            polys = []
-            bad_geo_count = 0
-            for feat in src:
-                try:
-                    geo = shape(feat['geometry'])
-                    polys.append(geo)
-                except AttributeError:
-                    bad_geo_count += 1
-
-        return polys
 
     def _random_points(self, coords, n):
         min_x, max_x = coords[0], coords[2]
@@ -216,15 +196,14 @@ class PointsRunspec(object):
                                                              ignore_index=True)
         self.object_id += 1
 
-    def save_sample_points(self):
+    def save_sample_points(self, path):
 
         points_schema = {
             'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10'), ('YEAR', 'int:10')]),
             'geometry': 'Point'}
-        meta = self.tile_geometry.copy()
-        meta['schema'] = points_schema
+        self.meta['schema'] = points_schema
 
-        with fopen(self.shapefile_path, 'w', **meta) as output:
+        with fiona.open(path, 'w', **self.meta) as output:
             for index, row in self.extracted_points.iterrows():
                 props = dict([('FID', row['FID']),
                               ('POINT_TYPE', row['POINT_TYPE']),
@@ -235,8 +214,24 @@ class PointsRunspec(object):
                               'geometry': mapping(pt)})
         return None
 
+    def _get_polygons(self, vector):
+        with fiona.open(vector, 'r') as src:
+            polys = []
+            bad_geo_count = 0
+            for feat in src:
+                try:
+                    geo = shape(feat['geometry'])
+                    polys.append(geo)
+                except AttributeError:
+                    bad_geo_count += 1
+
+        return polys
+
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     gis = os.path.join(home, 'IrrigationGIS', 'EE_sample')
-    prs = PointsRunspec(gis)
+    prs = PointsRunspec(gis, **{'surface_water': 100})
+    prs.save_sample_points(os.path.join(gis, 'sample_100.shp'))
+
 # ========================= EOF ====================================================================
