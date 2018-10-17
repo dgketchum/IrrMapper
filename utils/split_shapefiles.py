@@ -14,7 +14,7 @@
 # limitations under the License.
 # ===============================================================================
 import os
-
+from subprocess import call, check_call
 import fiona
 from numpy import arange
 from numpy.random import shuffle
@@ -51,45 +51,51 @@ ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
            ('ID_2010_ESPA_WGS84.shp', 'STATUS_201'),
            ('ID_2011_ESPA_WGS84.shp', 'STATUS_201')]
 
-OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
-              'WA_Wetlands_Westopen_water.shp',
-              'CA_Wetlands_NorthCentralopen_water.shp',
-              'CA_Wetlands_SouthCentralopen_water.shp',
-              'WY_Wetlands_Eastopen_water.shp',
-              'OR_Wetlands_Eastopen_water.shp',
-              'NM_Wetlandsopen_water.shp',
-              'CO_Wetlands_Westopen_water.shp',
-              'ID_Wetlandsopen_water.shp',
-              'AZ_Wetlandsopen_water.shp',
-              'CO_Wetlands_Eastopen_water.shp',
-              'MT_Wetlands_Westopen_water.shp',
-              'WA_Wetlands_Eastopen_water.shp',
-              'NV_Wetlands_Southopen_water.shp',
-              'OR_Wetlands_Westopen_water.shp',
-              'CA_Wetlands_Northopen_water.shp',
-              'WY_Wetlands_Westopen_water.shp',
-              'UT_Wetlandsopen_water.shp',
-              'NV_Wetlands_Northopen_water.shp']
+OPEN_WATER = [
+    #     'MT_Wetlands_Eastopen_water.shp',
+    #               'WA_Wetlands_Westopen_water.shp',
+    #               'CA_Wetlands_NorthCentralopen_water.shp',
+    #               'CA_Wetlands_SouthCentralopen_water.shp',
+    'CA_Wetlands_Southopen_water.shp',
+    #               'WY_Wetlands_Eastopen_water.shp',
+    #               'OR_Wetlands_Eastopen_water.shp',
+    #               'NM_Wetlandsopen_water.shp',
+    #               'CO_Wetlands_Westopen_water.shp',
+    #               'ID_Wetlandsopen_water.shp',
+    #               'AZ_Wetlandsopen_water.shp',
+    #               'CO_Wetlands_Eastopen_water.shp',
+    #               'MT_Wetlands_Westopen_water.shp',
+    #               'WA_Wetlands_Eastopen_water.shp',
+    #               'NV_Wetlands_Southopen_water.shp',
+    #               'OR_Wetlands_Westopen_water.shp',
+    #               'CA_Wetlands_Northopen_water.shp',
+    #               'WY_Wetlands_Westopen_water.shp',
+    #               'UT_Wetlandsopen_water.shp',
+    #               'NV_Wetlands_Northopen_water.shp'
+]
 
-WETLAND = ['MT_Wetlands_Eastwetlands.shp',
-           'WA_Wetlands_Westwetlands.shp',
-           'CA_Wetlands_NorthCentralwetlands.shp',
-           'CA_Wetlands_SouthCentralwetlands.shp',
-           'WY_Wetlands_Eastwetlands.shp',
-           'OR_Wetlands_Eastwetlands.shp',
-           'NM_Wetlandswetlands.shp',
-           'CO_Wetlands_Westwetlands.shp',
-           'ID_Wetlandswetlands.shp',
-           'AZ_Wetlandswetlands.shp',
-           'CO_Wetlands_Eastwetlands.shp',
-           'MT_Wetlands_Westwetlands.shp',
-           'WA_Wetlands_Eastwetlands.shp',
-           'NV_Wetlands_Southwetlands.shp',
-           'OR_Wetlands_Westwetlands.shp',
-           'CA_Wetlands_Northwetlands.shp',
-           'WY_Wetlands_Westwetlands.shp',
-           'UT_Wetlandswetlands.shp',
-           'NV_Wetlands_Northwetlands.shp']
+WETLAND = [
+    # 'MT_Wetlands_Eastwetlands.shp',
+    #        'WA_Wetlands_Westwetlands.shp',
+    #        'CA_Wetlands_NorthCentralwetlands.shp',
+    #        'CA_Wetlands_SouthCentralwetlands.shp',
+    'CA_Wetlands_Southwetlands.shp',
+    #        'WY_Wetlands_Eastwetlands.shp',
+    #        'OR_Wetlands_Eastwetlands.shp',
+    #        'NM_Wetlandswetlands.shp',
+    #        'CO_Wetlands_Westwetlands.shp',
+    #        'ID_Wetlandswetlands.shp',
+    #        'AZ_Wetlandswetlands.shp',
+    #        'CO_Wetlands_Eastwetlands.shp',
+    #        'MT_Wetlands_Westwetlands.shp',
+    #        'WA_Wetlands_Eastwetlands.shp',
+    #        'NV_Wetlands_Southwetlands.shp',
+    #        'OR_Wetlands_Westwetlands.shp',
+    #        'CA_Wetlands_Northwetlands.shp',
+    #        'WY_Wetlands_Westwetlands.shp',
+    #        'UT_Wetlandswetlands.shp',
+    #        'NV_Wetlands_Northwetlands.shp'
+]
 
 
 def split_wetlands(in_shp, out):
@@ -143,7 +149,7 @@ def split_idaho(in_shp, prop='STATUS_201'):
 def reduce_shapefiles(root, outdir, n, shapefiles):
     for s in shapefiles:
         shp = os.path.join(root, s)
-        dst_file = os.path.join(outdir, s.replace('wetlands', '_wl_{}'.format(n)))
+        dst_file = os.path.join(outdir, s.replace('open_water', '_ow_{}'.format(n)))
         if os.path.isfile(dst_file):
             print(dst_file, 'exists')
         else:
@@ -165,23 +171,24 @@ def reduce_shapefiles(root, outdir, n, shapefiles):
                     dst.write(feat)
 
 
+def batch_reproject_vector(ogr_path, in_dir, out_dir, name_append, t_srs, s_srs):
+
+    l = [os.path.join(in_dir, x) for x in os.listdir(in_dir) if x.endswith('.shp')]
+    for s in l:
+        name_in = os.path.basename(s)
+        name_out = name_in.replace('.shp', '_{}.shp'.format(name_append))
+        out_shp = os.path.join(out_dir, name_out)
+        cmd = ['{}'.format(ogr_path), '{}'.format(out_shp), '{}'.format(s),
+               '-t_srs', 'EPSG:{}'.format(t_srs), '-s_srs', 'EPSG:{}'.format(s_srs)]
+        check_call(cmd)
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    # s_dir = os.path.join(home, 'IrrigationGIS', 'training_raw', 'ID')
-    # o_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample')
-    # for s in ID_ESPA:
-    #     shp = s[0]
-    #     p = s[1]
-    #     file_name = os.path.join(s_dir, shp)
-    #     split_idaho(file_name, p)
-
-    s_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'wetlands_raw')
-    o_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'EE_sample')
-    for s in WETLAND_SHAPEFILES:
-        split_wetlands(os.path.join(s_dir, s), o_dir)
-
-    # home = os.path.expanduser('~')
-    # root = os.path.join(home, 'IrrigationGIS', 'wetlands')
-    # out_dir = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
-    # reduce_shapefiles(root, out_dir, 5000, WETLAND)
+    ogr = os.path.join(home, 'miniconda2', 'envs', 'irri', 'bin', 'ogr2ogr')
+    path = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
+    outdir = os.path.join(path, 'tmp')
+    append = 'wgs84'
+    target = 4326
+    source = 5070
+    batch_reproject_vector(ogr, path, outdir, append, target, source)
 # ========================= EOF ====================================================================

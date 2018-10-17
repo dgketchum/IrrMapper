@@ -17,73 +17,76 @@
 import os
 
 import fiona
-from numpy import linspace, max, arange
+from numpy import linspace, max, ceil
 from numpy.random import shuffle
 from pandas import DataFrame
 from pyproj import Proj
 from shapely.geometry import shape, Point, mapping
 
 OPEN_WATER = [
-    'MT_Wetlands_East_ow_1000.shp',
-              'WA_Wetlands_West_ow_1000.shp',
-              'CA_Wetlands_NorthCentral_ow_1000.shp',
-              'CA_Wetlands_SouthCentral_ow_1000.shp',
-              'WY_Wetlands_East_ow_1000.shp',
-              'OR_Wetlands_East_ow_1000.shp',
-              'NM_Wetlands_ow_1000.shp',
-              'CO_Wetlands_West_ow_1000.shp',
-              'ID_Wetlands_ow_1000.shp',
-              'AZ_Wetlands_ow_1000.shp',
-              'CO_Wetlands_East_ow_1000.shp',
-              'MT_Wetlands_West_ow_1000.shp',
-              'WA_Wetlands_East_ow_1000.shp',
-              'NV_Wetlands_South_ow_1000.shp',
-              'OR_Wetlands_West_ow_1000.shp',
-              'CA_Wetlands_North_ow_1000.shp',
-              'WY_Wetlands_West_ow_1000.shp',
-              'UT_Wetlands_ow_1000.shp',
-              'NV_Wetlands_North_ow_1000.shp'
+    'MT_Wetlands_East_ow_1000_wgs84.shp',
+    'WA_Wetlands_West_ow_1000_wgs84.shp',
+    'CA_Wetlands_NorthCentral_ow_1000_wgs84.shp',
+    'CA_Wetlands_SouthCentral_ow_1000_wgs84.shp',
+    'CA_Wetlands_South_ow_1000_wgs84.shp',
+    'WY_Wetlands_East_ow_1000_wgs84.shp',
+    'OR_Wetlands_East_ow_1000_wgs84.shp',
+    'NM_Wetlands_ow_1000_wgs84.shp',
+    'CO_Wetlands_West_ow_1000_wgs84.shp',
+    'ID_Wetlands_ow_1000_wgs84.shp',
+    'AZ_Wetlands_ow_1000_wgs84.shp',
+    'CO_Wetlands_East_ow_1000_wgs84.shp',
+    'MT_Wetlands_West_ow_1000_wgs84.shp',
+    'WA_Wetlands_East_ow_1000_wgs84.shp',
+    'NV_Wetlands_South_ow_1000_wgs84.shp',
+    'OR_Wetlands_West_ow_1000_wgs84.shp',
+    'CA_Wetlands_North_ow_1000_wgs84.shp',
+    'WY_Wetlands_West_ow_1000_wgs84.shp',
+    'UT_Wetlands_ow_1000_wgs84.shp',
+    'NV_Wetlands_North_ow_1000_wgs84.shp'
 ]
 
-WETLAND = ['MT_Wetlands_Eastwetlands.shp',
-           'WA_Wetlands_Westwetlands.shp',
-           'CA_Wetlands_NorthCentralwetlands.shp',
-           'CA_Wetlands_SouthCentralwetlands.shp',
-           'WY_Wetlands_Eastwetlands.shp',
-           'OR_Wetlands_Eastwetlands.shp',
-           'NM_Wetlandswetlands.shp',
-           'CO_Wetlands_Westwetlands.shp',
-           'ID_Wetlandswetlands.shp',
-           'AZ_Wetlandswetlands.shp',
-           'CO_Wetlands_Eastwetlands.shp',
-           'MT_Wetlands_Westwetlands.shp',
-           'WA_Wetlands_Eastwetlands.shp',
-           'NV_Wetlands_Southwetlands.shp',
-           'OR_Wetlands_Westwetlands.shp',
-           'CA_Wetlands_Northwetlands.shp',
-           'WY_Wetlands_Westwetlands.shp',
-           'UT_Wetlandswetlands.shp',
-           'NV_Wetlands_Northwetlands.shp']
+WETLAND = ['MT_Wetlands_East_wl_5000_wgs84.shp',
+           'WA_Wetlands_West_wl_5000_wgs84.shp',
+           'CA_Wetlands_NorthCentral_wl_5000_wgs84.shp',
+           'CA_Wetlands_SouthCentral_wl_5000_wgs84.shp',
+           'CA_Wetlands_South_wl_5000_wgs84.shp',
+           'WY_Wetlands_East_wl_5000_wgs84.shp',
+           'OR_Wetlands_East_wl_5000_wgs84.shp',
+           'NM_Wetlands_wl_5000_wgs84.shp',
+           'CO_Wetlands_West_wl_5000_wgs84.shp',
+           'ID_Wetlands_wl_5000_wgs84.shp',
+           'AZ_Wetlands_wl_5000_wgs84.shp',
+           'CO_Wetlands_East_wl_5000_wgs84.shp',
+           'MT_Wetlands_West_wl_5000_wgs84.shp',
+           'WA_Wetlands_East_wl_5000_wgs84.shp',
+           'NV_Wetlands_South_wl_5000_wgs84.shp',
+           'OR_Wetlands_West_wl_5000_wgs84.shp',
+           'CA_Wetlands_North_wl_5000_wgs84.shp',
+           'WY_Wetlands_West_wl_5000_wgs84.shp',
+           'UT_Wetlands_wl_5000_wgs84.shp',
+           'NV_Wetlands_North_wl_5000_wgs84.shp']
 
-MT_SHP = ['West_Bench_Canal.shp',
-          'East_Fork_Main_Canal_ab_Trout_Creek.shp',
-          'Broadwater_Missouri_West_Side_Canal.shp',
-          'Paradise_Valley_ID.shp',
-          'Broadwater_Missouri_Canal.shp',
-          'Huntley_Main_Diversion.shp',
-          'Vigilante_Canal.shp',
-          'LYIP_North_Dakota.shp',
-          'Yellowstone_Main_Diversion.shp',
-          'Ruby_River.shp',
-          'Eldorado.shp',
-          'Glasgow_ID.shp',
-          'Fort_Belknap_Main_Diversion.shp',
-          'Dodson_North_Canal_Diversion.shp',
-          'Sun_River_project_Below_Pishkun.shp',
-          'Fort_Shaw_Canal.shp',
-          'Dodson_South_Div_To_Bowdoin.shp',
-          'Floweree_and_Floweree_Hamilton.shp',
-          'Marshall_Canal.shp']
+IRR = {'ID': [('ID_2008_ESPA_WGS84_irr.shp', 2008),
+              ('ID_1996_ESPA_WGS84_irr.shp', 1996),
+              ('ID_2010_ESPA_WGS84_irr.shp', 2010),
+              ('ID_2011_ESPA_WGS84_irr.shp', 2011),
+              ('ID_1986_ESPA_WGS84_irr.shp', 1986),
+              ('ID_2009_ESPA_WGS84_irr.shp', 2009),
+              ('ID_2002_ESPA_WGS84_irr.shp', 2002),
+              ('ID_2006_ESPA_WGS84_irr.shp', 2006)],
+
+       'MT': [('MT_Irr_2018-2013_WGS84.shp', 2008),
+              ('MT_Irr_2018-2013_WGS84.shp', 2009),
+              ('MT_Irr_2018-2013_WGS84.shp', 2010),
+              ('MT_Irr_2018-2013_WGS84.shp', 2011),
+              ('MT_Irr_2018-2013_WGS84.shp', 2012),
+              ('MT_Irr_2018-2013_WGS84.shp', 2013)]}
+
+IRR_RELATIVE_AREA = {'ID': 0.4721,
+                     'MT': 0.5278}
+
+YEARS = [1986, 1996, 2002, 2006, 2008, 2009, 2010, 2011, 2013]
 
 
 class PointsRunspec(object):
@@ -101,25 +104,37 @@ class PointsRunspec(object):
         if 'surface_water' in kwargs.keys():
             self.surface_water(kwargs['surface_water'])
         if 'wetlands' in kwargs.keys():
-            self.surface_water(kwargs['wetlands'])
+            self.wetlands(kwargs['wetlands'])
         if 'unirrigated' in kwargs.keys():
-            self.surface_water(kwargs['unirrigated'])
+            self.unirrigated(kwargs['unirrigated'])
         if 'forest' in kwargs.keys():
-            self.surface_water(kwargs['forest'])
-
-        # self.irrigated(kwargs['irrigated'])
+            self.forest(kwargs['forest'])
+        if 'irrigated' in kwargs.keys():
+            self.irrigated(kwargs['irrigated'])
 
     def surface_water(self, n):
-        _files = [os.path.join(self.root, 'open_water', x) for x in OPEN_WATER]
-        areas = self.shapefile_area_count(_files)
-        total_area = sum([x[1] for x in areas])
-        samples = [(s, (a * n / total_area), ct) for s, a, ct in areas]
-        for s, n, ct in samples:
-            print(ct, ':', s)
-            self.create_sample_points(n, s, code=1)
+        print('surface water: {}'.format(n))
+        n /= len(YEARS)
+        for yr in YEARS:
+            self.year = yr
+            _files = [os.path.join(self.root, 'open_water', x) for x in OPEN_WATER]
+            counts = [(f, int(float(n) / len(_files))) for f in _files]
+            self.shapefile_area_count(_files)
+            for s, c in counts:
+                print(self.extracted_points.shape)
+                self.create_sample_points(c, s, code=1)
 
     def wetlands(self, n):
-        pass
+        print('wetlands: {}'.format(n))
+        for yr in YEARS:
+            n /= len(YEARS)
+            self.year = yr
+            _files = [os.path.join(self.root, 'wetlands', x) for x in OPEN_WATER]
+            areas = self.shapefile_area_count(_files)
+            total_area = sum([x[1] for x in areas])
+            samples = [(s, (a * n / total_area), ct) for s, a, ct in areas]
+            for s, n, ct in samples:
+                self.create_sample_points(n, s, code=1)
 
     def unirrigated(self, n):
         pass
@@ -128,7 +143,17 @@ class PointsRunspec(object):
         pass
 
     def irrigated(self, n):
-        pass
+        l = []
+        irr_path = os.path.join(self.root, 'irrigated')
+        for k, v in IRR.items():
+            l.append((irr_path, k, v[0][0]))
+        for k, v in IRR.items():
+            years = len(v)
+            for shp, yr in v:
+                self.year = yr
+                required_points = int(ceil(n * IRR_RELATIVE_AREA[k] / years))
+                shp_path = os.path.join(irr_path, k, shp)
+                self.create_sample_points(required_points, shp_path, code=0)
 
     def shapefile_area_count(self, shapes):
         a = 0
@@ -138,19 +163,15 @@ class PointsRunspec(object):
             with fiona.open(shp, 'r') as src:
                 if not self.meta:
                     self.meta = src.meta
-                print(shp)
                 for feat in src:
-                    if src.crs['units'] == 'm':
-                        cop = {"type": "Polygon", "coordinates": [feat['geometry']['coordinates'][0]]}
-                    else:
-                        lon, lat = zip(*feat['geometry']['coordinates'][0])
-                        x, y = self.aea(lon, lat)
-                        cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
-                    try:
-                        a += shape(cop).area
-                        ct += 1
-                    except Exception:
-                        pass
+                    l = feat['geometry']['coordinates'][0]
+                    if any(isinstance(i, list) for i in l):
+                        l = l[0]
+                    lon, lat = zip(*l)
+                    x, y = self.aea(lon, lat)
+                    cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+                    a += shape(cop).area
+                    ct += 1
             totals.append((shp, a, ct))
 
         return totals
@@ -160,6 +181,7 @@ class PointsRunspec(object):
         instance_ct = 0
 
         polygons = self._get_polygons(shp)
+        shuffle(polygons)
         positive_area = sum([x.area for x in polygons])
         for i, poly in enumerate(polygons):
             fractional_area = poly.area / positive_area
@@ -172,11 +194,11 @@ class PointsRunspec(object):
                     poly_pt_ct += 1
                     instance_ct += 1
 
-                if instance_ct > n:
-                    break
-
                 if poly_pt_ct >= required_points:
                     break
+
+            if instance_ct > n:
+                break
 
     def _random_points(self, coords, n):
         min_x, max_x = coords[0], coords[2]
@@ -192,7 +214,7 @@ class PointsRunspec(object):
                                                               'X': coord[0],
                                                               'Y': coord[1],
                                                               'POINT_TYPE': val,
-                                                              'YEAR': self.year},
+                                                              'YEAR': int(self.year)},
                                                              ignore_index=True)
         self.object_id += 1
 
@@ -201,13 +223,14 @@ class PointsRunspec(object):
         points_schema = {
             'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10'), ('YEAR', 'int:10')]),
             'geometry': 'Point'}
-        self.meta['schema'] = points_schema
+        crs = {'proj': 'longlat', 'ellps': 'WGS84', 'datum': 'WGS84'}
+        meta = {'driver': 'ESRI Shapefile', 'schema': points_schema, 'crs': crs}
 
-        with fiona.open(path, 'w', **self.meta) as output:
+        with fiona.open(path, 'w', **meta) as output:
             for index, row in self.extracted_points.iterrows():
                 props = dict([('FID', row['FID']),
                               ('POINT_TYPE', row['POINT_TYPE']),
-                              ('YEAR', self.year)])
+                              ('YEAR', row['YEAR'])])
 
                 pt = Point(row['X'], row['Y'])
                 output.write({'properties': props,
@@ -231,7 +254,12 @@ class PointsRunspec(object):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     gis = os.path.join(home, 'IrrigationGIS', 'EE_sample')
-    prs = PointsRunspec(gis, **{'surface_water': 100})
-    prs.save_sample_points(os.path.join(gis, 'sample_100.shp'))
+    extract = os.path.join(home, 'IrrigationGIS', 'EE_extracts')
+    kwargs = {'irrigated': 1000,
+              'surface_water': 500,
+              'wetlands': 1000
+              }
+    prs = PointsRunspec(gis, **kwargs)
+    prs.save_sample_points(os.path.join(extract, 'sample_100.shp'))
 
 # ========================= EOF ====================================================================
