@@ -16,6 +16,14 @@
 
 import os
 
+from numpy import linspace, max
+from numpy.random import shuffle
+from pandas import DataFrame
+import fiona
+from pyproj import Proj
+from shapely.geometry import shape, Point
+from shapely.ops import unary_union
+
 OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
               'WA_Wetlands_Westopen_water.shp',
               'CA_Wetlands_NorthCentralopen_water.shp',
@@ -35,6 +43,26 @@ OPEN_WATER = ['MT_Wetlands_Eastopen_water.shp',
               'WY_Wetlands_Westopen_water.shp',
               'UT_Wetlandsopen_water.shp',
               'NV_Wetlands_Northopen_water.shp']
+
+WETLAND = ['MT_Wetlands_Eastwetlands.shp',
+           'WA_Wetlands_Westwetlands.shp',
+           'CA_Wetlands_NorthCentralwetlands.shp',
+           'CA_Wetlands_SouthCentralwetlands.shp',
+           'WY_Wetlands_Eastwetlands.shp',
+           'OR_Wetlands_Eastwetlands.shp',
+           'NM_Wetlandswetlands.shp',
+           'CO_Wetlands_Westwetlands.shp',
+           'ID_Wetlandswetlands.shp',
+           'AZ_Wetlandswetlands.shp',
+           'CO_Wetlands_Eastwetlands.shp',
+           'MT_Wetlands_Westwetlands.shp',
+           'WA_Wetlands_Eastwetlands.shp',
+           'NV_Wetlands_Southwetlands.shp',
+           'OR_Wetlands_Westwetlands.shp',
+           'CA_Wetlands_Northwetlands.shp',
+           'WY_Wetlands_Westwetlands.shp',
+           'UT_Wetlandswetlands.shp',
+           'NV_Wetlands_Northwetlands.shp']
 
 MT_SHP = ['West_Bench_Canal.shp',
           'East_Fork_Main_Canal_ab_Trout_Creek.shp',
@@ -59,64 +87,156 @@ MT_SHP = ['West_Bench_Canal.shp',
 
 class PointsRunspec(object):
 
-    def __init__(self):
+    def __init__(self, root, **kwargs):
+        self.root = root
+        self.features = []
+        self.object_id = 0
+        self.year = None
+        self.aea = Proj(
+            '+proj=aea +lat_1=20 +lat_2=60 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs')
+        self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE', 'YEAR'])
+
+        if 'surface_water' in kwargs.keys():
+            self.surface_water(kwargs['surface_water'])
+        if 'wetlands' in kwargs.keys():
+            self.surface_water(kwargs['wetlands'])
+        if 'unirrigated' in kwargs.keys():
+            self.surface_water(kwargs['unirrigated'])
+        if 'forest' in kwargs.keys():
+            self.surface_water(kwargs['forest'])
+
+        self.irrigated(n)
+
+    def surface_water(self, n):
+        _files = [os.path.join(self.root, 'wetlands', x) for x in OPEN_WATER]
+        areas = self.areas(_files)
+        total_area = sum([x[1] for x in areas])
+        samples = [(s, (a * n / total_area)) for s, a in areas]
+        for s, n in samples:
+            self.create_sample_points(n, s, code=1)
+
+    def wetlands(self, n):
         pass
 
-    def surface_water(self):
+    def unirrigated(self, n):
         pass
 
-    def wetlands(self):
+    def forest(self, n):
         pass
 
-    def unirrigated(self):
-        pass
-
-    def irrigated(self):
+    def irrigated(self, n):
         key = {'MT': 'Montana',
                'NV': 'Nevada',
                'OR': 'Oregon',
                'UT': 'Utah',
                'WA': 'Washington'}
 
-    def forest(self):
-        pass
+    def areas(self, *shapes):
+        totals = []
+        for shp in shapes:
+            area = self._shapefile_area(shp)
+            totals.append((shp, area))
+        return totals
 
+    def _shapefile_area(self, shp):
+        a = 0
+        with fiona.open(shp, 'r') as src:
+            print(shp)
+            for feat in src:
+                lon, lat = zip(*feat['coordinates'][0])
+                x, y = self.aea(lon, lat)
+                cop = {"type": "Polygon", "coordinates": [zip(x, y)]}
+                a += shape(cop).area
+        return a
 
-def sample_points(project, training, out_points, n_points):
-    shp_paths = []
-    for key, val in OBJECT_MAP.items():
-        print('Points for {}'.format(key))
+    def create_sample_points(self, n, shp, code):
 
-        project_state_dir = os.path.join(project, key)
+        polygons = self._get_polygons(shp)
+        instance_ct = 0
 
-        if not os.path.isdir(project_state_dir):
-            try:
-                os.mkdir(project_state_dir)
-            except FileNotFoundError:
-                os.makedirs(project_state_dir)
+        if len(polygons) > n:
+            areas = zip(polygons, [x.area for x in polygons])
+            srt = sorted(areas, key=lambda x: x[1], reverse=True)
+            polygons = [x for x, y in srt[:n]]
 
-        geography = os.path.join(training, key)
-        geo = val(geography)
-        years = deepcopy(geo.year)
-        for i, yr in enumerate(years):
-            geo.year = yr
+        polygons = unary_union(polygons)
+        positive_area = sum([x.area for x in polygons])
+        class_count = 0
 
-            geo_folder = os.path.join(project, key)
-            geo_data_path = os.path.join(geo_folder, 'data.pkl')
+        for i, poly in enumerate(polygons):
+            if class_count >= n:
+                break
+            fractional_area = poly.area / positive_area
+            required_points = max([1, fractional_area * n])
+            x_range, y_range = self._random_points(poly.bounds, n)
+            poly_pt_ct = 0
 
-            if not os.path.isfile(geo_data_path):
-                geo_data_path = None
+            for coord in zip(x_range, y_range):
+                if Point(coord[0], coord[1]).within(poly):
+                    self._add_entry(coord, val=code)
+                    poly_pt_ct += 1
+                    instance_ct += 1
 
-            p = Pta(root=geo_folder, geography=geo, instances=n_points,
-                    overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
+                if instance_ct > n:
+                    break
 
-            p.create_sample_points()
-            p.save_sample_points()
-            shp_paths.append(p.shapefile_path)
+                if poly_pt_ct >= required_points:
+                    break
 
-    fiona_merge(out_points, shp_paths)
+            class_count += poly_pt_ct
 
+    def _get_polygons(self, vector):
+        with fiona.open(vector, 'r') as src:
+            polys = []
+            bad_geo_count = 0
+            for feat in src:
+                try:
+                    geo = shape(feat['geometry'])
+                    polys.append(geo)
+                except AttributeError:
+                    bad_geo_count += 1
+
+        return polys
+
+    def _random_points(self, coords, n):
+        min_x, max_x = coords[0], coords[2]
+        min_y, max_y = coords[1], coords[3]
+        x_range = linspace(min_x, max_x, num=2 * n)
+        y_range = linspace(min_y, max_y, num=2 * n)
+        shuffle(x_range), shuffle(y_range)
+        return x_range, y_range
+
+    def _add_entry(self, coord, val=0):
+
+        self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
+                                                              'X': coord[0],
+                                                              'Y': coord[1],
+                                                              'POINT_TYPE': val,
+                                                              'YEAR': self.year},
+                                                             ignore_index=True)
+        self.object_id += 1
+
+    def save_sample_points(self):
+
+        points_schema = {
+            'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10'), ('YEAR', 'int:10')]),
+            'geometry': 'Point'}
+        meta = self.tile_geometry.copy()
+        meta['schema'] = points_schema
+
+        with fopen(self.shapefile_path, 'w', **meta) as output:
+            for index, row in self.extracted_points.iterrows():
+                props = dict([('FID', row['FID']),
+                              ('POINT_TYPE', row['POINT_TYPE']),
+                              ('YEAR', self.year)])
+
+                pt = Point(row['X'], row['Y'])
+                output.write({'properties': props,
+                              'geometry': mapping(pt)})
+        return None
 
 if __name__ == '__main__':
-    pass
+    home = os.path.expanduser('~')
+    gis = os.path.join(home, 'IrrigationGIS', 'EE_sample')
+    prs = PointsRunspec(gis)
 # ========================= EOF ====================================================================
