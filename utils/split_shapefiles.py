@@ -178,7 +178,7 @@ if __name__ == '__main__':
     s_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'wetlands_raw')
     o_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'EE_sample')
     for s in WETLAND_SHAPEFILES:
-        split_idaho(os.path.join(s_dir, s), o_dir)
+        split_wetlands(os.path.join(s_dir, s), o_dir)
 
     # home = os.path.expanduser('~')
     # root = os.path.join(home, 'IrrigationGIS', 'wetlands')
