@@ -175,8 +175,8 @@ if __name__ == '__main__':
     #     file_name = os.path.join(s_dir, shp)
     #     split_idaho(file_name, p)
 
-    s_dir = os.path.join(home, 'data_mt', 'wetlands_raw')
-    o_dir = os.path.join(home, 'data_mt', 'EE_sample')
+    s_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'wetlands_raw')
+    o_dir = os.path.join(home, 'data_mt', 'IrrigationGIS', 'EE_sample')
     for s in WETLAND_SHAPEFILES:
         split_idaho(os.path.join(s_dir, s), o_dir)
 
