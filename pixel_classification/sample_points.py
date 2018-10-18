@@ -81,10 +81,71 @@ IRR = {'ID': [('ID_2008_ESPA_WGS84_irr.shp', 2008),
               ('MT_Irr_2018-2013_WGS84.shp', 2010),
               ('MT_Irr_2018-2013_WGS84.shp', 2011),
               ('MT_Irr_2018-2013_WGS84.shp', 2012),
-              ('MT_Irr_2018-2013_WGS84.shp', 2013)]}
+              ('MT_Irr_2018-2013_WGS84.shp', 2013)],
 
-IRR_RELATIVE_AREA = {'ID': 0.4721,
-                     'MT': 0.5278}
+       'WA': [('WA_Irr_WGS84_2009.shp', 2009),
+              ('WA_Irr_WGS84_2010.shp', 2010),
+              ('WA_Irr_WGS84_2012.shp', 2012),
+              ('WA_Irr_WGS84_2000.shp', 2000),
+              ('WA_Irr_WGS84_2004.shp', 2004),
+              ('WA_Irr_WGS84_2011.shp', 2011),
+              ('WA_Irr_WGS84_2007.shp', 2007),
+              ('WA_Irr_WGS84_2006.shp', 2006),
+              ('WA_Irr_WGS84_2017.shp', 2017),
+              ('WA_Irr_WGS84_2015.shp', 2015),
+              ('WA_Irr_WGS84_2002.shp', 2002),
+              ('WA_Irr_WGS84_2008.shp', 2008),
+              ('WA_Irr_WGS84_2001.shp', 2001),
+              ('WA_Irr_WGS84_1999.shp', 1999),
+              ('WA_Irr_WGS84_1998.shp', 1998),
+              ('WA_Irr_WGS84_2003.shp', 2003),
+              ('WA_Irr_WGS84_2005.shp', 2005),
+              ('WA_Irr_WGS84_2014.shp', 2014),
+              ('WA_Irr_WGS84_1996.shp', 1996),
+              ('WA_Irr_WGS84_2016.shp', 2016),
+              ('WA_Irr_WGS84_2013.shp', 2013)]}
+
+IRR = {'ID': [('ID_2008_ESPA_WGS84_irr.shp', 2008),
+              ('ID_1996_ESPA_WGS84_irr.shp', 1996),
+              ('ID_2010_ESPA_WGS84_irr.shp', 2010),
+              ('ID_2011_ESPA_WGS84_irr.shp', 2011),
+              ('ID_1986_ESPA_WGS84_irr.shp', 1986),
+              ('ID_2009_ESPA_WGS84_irr.shp', 2009),
+              ('ID_2002_ESPA_WGS84_irr.shp', 2002),
+              ('ID_2006_ESPA_WGS84_irr.shp', 2006)],
+
+       'MT': [('MT_Irr_2018-2013_WGS84.shp', 2008),
+              ('MT_Irr_2018-2013_WGS84.shp', 2009),
+              ('MT_Irr_2018-2013_WGS84.shp', 2010),
+              ('MT_Irr_2018-2013_WGS84.shp', 2011),
+              ('MT_Irr_2018-2013_WGS84.shp', 2012),
+              ('MT_Irr_2018-2013_WGS84.shp', 2013)],
+
+       'WA': [('WA_Irr_WGS84_2009.shp', 2009),
+              ('WA_Irr_WGS84_2010.shp', 2010),
+              ('WA_Irr_WGS84_2012.shp', 2012),
+              ('WA_Irr_WGS84_2000.shp', 2000),
+              ('WA_Irr_WGS84_2004.shp', 2004),
+              ('WA_Irr_WGS84_2011.shp', 2011),
+              ('WA_Irr_WGS84_2007.shp', 2007),
+              ('WA_Irr_WGS84_2006.shp', 2006),
+              ('WA_Irr_WGS84_2017.shp', 2017),
+              ('WA_Irr_WGS84_2015.shp', 2015),
+              ('WA_Irr_WGS84_2002.shp', 2002),
+              ('WA_Irr_WGS84_2008.shp', 2008),
+              ('WA_Irr_WGS84_2001.shp', 2001),
+              ('WA_Irr_WGS84_1999.shp', 1999),
+              ('WA_Irr_WGS84_1998.shp', 1998),
+              ('WA_Irr_WGS84_2003.shp', 2003),
+              ('WA_Irr_WGS84_2005.shp', 2005),
+              ('WA_Irr_WGS84_2014.shp', 2014),
+              ('WA_Irr_WGS84_1996.shp', 1996),
+              ('WA_Irr_WGS84_2016.shp', 2016),
+              ('WA_Irr_WGS84_2013.shp', 2013)]}
+
+IRR_RELATIVE_AREA = {'ID': 0.33,
+                     'MT': 0.33,
+                     'WA': 0.33}
 
 YEARS = [1986, 1996, 2002, 2006, 2008, 2009, 2010, 2011, 2013]
 
@@ -143,10 +204,7 @@ class PointsRunspec(object):
         pass
 
     def irrigated(self, n):
-        l = []
         irr_path = os.path.join(self.root, 'irrigated')
-        for k, v in IRR.items():
-            l.append((irr_path, k, v[0][0]))
         for k, v in IRR.items():
             years = len(v)
             for shp, yr in v:
@@ -154,6 +212,14 @@ class PointsRunspec(object):
                 required_points = int(ceil(n * IRR_RELATIVE_AREA[k] / years))
                 shp_path = os.path.join(irr_path, k, shp)
                 self.create_sample_points(required_points, shp_path, code=0)
+
+    def relative_irrigated_area(self):
+        irr_path = os.path.join(self.root, 'irrigated')
+        for k, v in IRR.items():
+            shapes = [os.path.join(irr_path, k, x[0]) for x in v]
+            areas = self.shapefile_area_count(shapes)
+            total = sum([x[1] for x in areas])
+            print('{} is {}'.format(k, total / 1e6))
 
     def shapefile_area_count(self, shapes):
         a = 0

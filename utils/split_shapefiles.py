@@ -14,7 +14,8 @@
 # limitations under the License.
 # ===============================================================================
 import os
-from subprocess import call, check_call
+from subprocess import check_call
+from datetime import datetime
 import fiona
 from numpy import arange
 from numpy.random import shuffle
@@ -146,10 +147,35 @@ def split_idaho(in_shp, prop='STATUS_201'):
                 output.write(feat)
 
 
+def split_washington_irrigated(master):
+    years = {}
+    with fiona.open(master, 'r') as src:
+        meta = src.meta
+        for feat in src:
+            s = datetime.strptime(feat['properties']['InitialSur'], '%Y/%m/%d %H:%M:%S.%f').year
+            e = datetime.strptime(feat['properties']['LastSurvey'], '%Y/%m/%d %H:%M:%S.%f').year
+
+            if s not in years.keys():
+                years[s] = [feat]
+            else:
+                years[s].append(feat)
+            if e not in years.keys():
+                years[e] = [feat]
+            else:
+                years[e].append(feat)
+    dirname = os.path.dirname(master)
+    for k, v in years.items():
+        shp = os.path.join(dirname, 'WA_NonIrr_WGS84_{}.shp'.format(k))
+        with fiona.open(shp, 'w', **meta) as dst:
+            for feat in v:
+                dst.write(feat)
+
+
 def reduce_shapefiles(root, outdir, n, shapefiles):
     for s in shapefiles:
         shp = os.path.join(root, s)
-        dst_file = os.path.join(outdir, s.replace('open_water', '_ow_{}'.format(n)))
+        dst_file = os.path.join(outdir, s.replace('Forest_Practices_Applications',
+                                                  'WA_Forest_WGS84'.format(n)))
         if os.path.isfile(dst_file):
             print(dst_file, 'exists')
         else:
@@ -172,7 +198,6 @@ def reduce_shapefiles(root, outdir, n, shapefiles):
 
 
 def batch_reproject_vector(ogr_path, in_dir, out_dir, name_append, t_srs, s_srs):
-
     l = [os.path.join(in_dir, x) for x in os.listdir(in_dir) if x.endswith('.shp')]
     for s in l:
         name_in = os.path.basename(s)
@@ -182,13 +207,11 @@ def batch_reproject_vector(ogr_path, in_dir, out_dir, name_append, t_srs, s_srs)
                '-t_srs', 'EPSG:{}'.format(t_srs), '-s_srs', 'EPSG:{}'.format(s_srs)]
         check_call(cmd)
 
+
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    ogr = os.path.join(home, 'miniconda2', 'envs', 'irri', 'bin', 'ogr2ogr')
-    path = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'wetlands')
-    outdir = os.path.join(path, 'tmp')
-    append = 'wgs84'
-    target = 4326
-    source = 5070
-    batch_reproject_vector(ogr, path, outdir, append, target, source)
+    wa_irr = os.path.join(home, 'IrrigationGIS', 'training_raw', 'WA')
+    out_for = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'forest', 'WA')
+    shp = os.path.join(wa_irr, 'Forest_Practices_Applications.shp')
+    reduce_shapefiles(wa_irr, out_for, 20000, [shp])
 # ========================= EOF ====================================================================
