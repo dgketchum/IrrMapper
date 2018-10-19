@@ -14,89 +14,91 @@
 # limitations under the License.
 # ===============================================================================
 import os
-from subprocess import check_call
 from datetime import datetime
+from subprocess import check_call
+
 import fiona
 from numpy import arange
 from numpy.random import shuffle
 
-WETLAND_SHAPEFILES = [
-    # 'MT_shapefile_wetlands/MT_Wetlands_West.shp',
-    # 'MT_shapefile_wetlands/MT_Wetlands_East.shp',
-    # 'AZ_shapefile_wetlands/AZ_Wetlands.shp',
-    # 'CA_shapefile_wetlands/CA_Wetlands_North.shp',
-    # 'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
-    # 'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
-    'CA_shapefile_wetlands/CA_Wetlands_South.shp',
-    # 'CO_shapefile_wetlands/CO_Wetlands_West.shp',
-    # 'CO_shapefile_wetlands/CO_Wetlands_East.shp',
-    # 'ID_shapefile_wetlands/ID_Wetlands.shp',
-    # 'NM_shapefile_wetlands/NM_Wetlands.shp',
-    # 'NV_shapefile_wetlands/NV_Wetlands_North.shp',
-    # 'NV_shapefile_wetlands/NV_Wetlands_South.shp',
-    # 'OR_shapefile_wetlands/OR_Wetlands_East.shp',
-    # 'OR_shapefile_wetlands/OR_Wetlands_West.shp',
-    # 'UT_shapefile_wetlands/UT_Wetlands.shp',
-    # 'WA_shapefile_wetlands/WA_Wetlands_West.shp',
-    # 'WA_shapefile_wetlands/WA_Wetlands_East.shp',
-    # 'WY_shapefile_wetlands/WY_Wetlands_West.shp',
-    # 'WY_shapefile_wetlands/WY_Wetlands_East.shp',
-]
 
-ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
-           ('ID_1996_ESPA_WGS84.shp', 'STATUS_199'),
-           ('ID_2002_ESPA_WGS84.shp', 'STATUS_200'),
-           ('ID_2006_ESPA_WGS84.shp', 'STATUS_200'),
-           ('ID_2008_ESPA_WGS84.shp', 'STATUS_200'),
-           ('ID_2009_ESPA_WGS84.shp', 'STATUS_200'),
-           ('ID_2010_ESPA_WGS84.shp', 'STATUS_201'),
-           ('ID_2011_ESPA_WGS84.shp', 'STATUS_201')]
-
-OPEN_WATER = [
-    #     'MT_Wetlands_Eastopen_water.shp',
-    #               'WA_Wetlands_Westopen_water.shp',
-    #               'CA_Wetlands_NorthCentralopen_water.shp',
-    #               'CA_Wetlands_SouthCentralopen_water.shp',
-    'CA_Wetlands_Southopen_water.shp',
-    #               'WY_Wetlands_Eastopen_water.shp',
-    #               'OR_Wetlands_Eastopen_water.shp',
-    #               'NM_Wetlandsopen_water.shp',
-    #               'CO_Wetlands_Westopen_water.shp',
-    #               'ID_Wetlandsopen_water.shp',
-    #               'AZ_Wetlandsopen_water.shp',
-    #               'CO_Wetlands_Eastopen_water.shp',
-    #               'MT_Wetlands_Westopen_water.shp',
-    #               'WA_Wetlands_Eastopen_water.shp',
-    #               'NV_Wetlands_Southopen_water.shp',
-    #               'OR_Wetlands_Westopen_water.shp',
-    #               'CA_Wetlands_Northopen_water.shp',
-    #               'WY_Wetlands_Westopen_water.shp',
-    #               'UT_Wetlandsopen_water.shp',
-    #               'NV_Wetlands_Northopen_water.shp'
-]
-
-WETLAND = [
-    # 'MT_Wetlands_Eastwetlands.shp',
-    #        'WA_Wetlands_Westwetlands.shp',
-    #        'CA_Wetlands_NorthCentralwetlands.shp',
-    #        'CA_Wetlands_SouthCentralwetlands.shp',
-    'CA_Wetlands_Southwetlands.shp',
-    #        'WY_Wetlands_Eastwetlands.shp',
-    #        'OR_Wetlands_Eastwetlands.shp',
-    #        'NM_Wetlandswetlands.shp',
-    #        'CO_Wetlands_Westwetlands.shp',
-    #        'ID_Wetlandswetlands.shp',
-    #        'AZ_Wetlandswetlands.shp',
-    #        'CO_Wetlands_Eastwetlands.shp',
-    #        'MT_Wetlands_Westwetlands.shp',
-    #        'WA_Wetlands_Eastwetlands.shp',
-    #        'NV_Wetlands_Southwetlands.shp',
-    #        'OR_Wetlands_Westwetlands.shp',
-    #        'CA_Wetlands_Northwetlands.shp',
-    #        'WY_Wetlands_Westwetlands.shp',
-    #        'UT_Wetlandswetlands.shp',
-    #        'NV_Wetlands_Northwetlands.shp'
-]
+# WETLAND_SHAPEFILES = [
+#     # 'MT_shapefile_wetlands/MT_Wetlands_West.shp',
+#     # 'MT_shapefile_wetlands/MT_Wetlands_East.shp',
+#     # 'AZ_shapefile_wetlands/AZ_Wetlands.shp',
+#     # 'CA_shapefile_wetlands/CA_Wetlands_North.shp',
+#     # 'CA_shapefile_wetlands/CA_Wetlands_NorthCentral.shp',
+#     # 'CA_shapefile_wetlands/CA_Wetlands_SouthCentral.shp',
+#     'CA_shapefile_wetlands/CA_Wetlands_South.shp',
+#     # 'CO_shapefile_wetlands/CO_Wetlands_West.shp',
+#     # 'CO_shapefile_wetlands/CO_Wetlands_East.shp',
+#     # 'ID_shapefile_wetlands/ID_Wetlands.shp',
+#     # 'NM_shapefile_wetlands/NM_Wetlands.shp',
+#     # 'NV_shapefile_wetlands/NV_Wetlands_North.shp',
+#     # 'NV_shapefile_wetlands/NV_Wetlands_South.shp',
+#     # 'OR_shapefile_wetlands/OR_Wetlands_East.shp',
+#     # 'OR_shapefile_wetlands/OR_Wetlands_West.shp',
+#     # 'UT_shapefile_wetlands/UT_Wetlands.shp',
+#     # 'WA_shapefile_wetlands/WA_Wetlands_West.shp',
+#     # 'WA_shapefile_wetlands/WA_Wetlands_East.shp',
+#     # 'WY_shapefile_wetlands/WY_Wetlands_West.shp',
+#     # 'WY_shapefile_wetlands/WY_Wetlands_East.shp',
+# ]
+#
+# ID_ESPA = [('ID_1986_ESPA_WGS84.shp', 'STATUS_198'),
+#            ('ID_1996_ESPA_WGS84.shp', 'STATUS_199'),
+#            ('ID_2002_ESPA_WGS84.shp', 'STATUS_200'),
+#            ('ID_2006_ESPA_WGS84.shp', 'STATUS_200'),
+#            ('ID_2008_ESPA_WGS84.shp', 'STATUS_200'),
+#            ('ID_2009_ESPA_WGS84.shp', 'STATUS_200'),
+#            ('ID_2010_ESPA_WGS84.shp', 'STATUS_201'),
+#            ('ID_2011_ESPA_WGS84.shp', 'STATUS_201')]
+#
+# OPEN_WATER = [
+#     #     'MT_Wetlands_Eastopen_water.shp',
+#     #               'WA_Wetlands_Westopen_water.shp',
+#     #               'CA_Wetlands_NorthCentralopen_water.shp',
+#     #               'CA_Wetlands_SouthCentralopen_water.shp',
+#     'CA_Wetlands_Southopen_water.shp',
+#     #               'WY_Wetlands_Eastopen_water.shp',
+#     #               'OR_Wetlands_Eastopen_water.shp',
+#     #               'NM_Wetlandsopen_water.shp',
+#     #               'CO_Wetlands_Westopen_water.shp',
+#     #               'ID_Wetlandsopen_water.shp',
+#     #               'AZ_Wetlandsopen_water.shp',
+#     #               'CO_Wetlands_Eastopen_water.shp',
+#     #               'MT_Wetlands_Westopen_water.shp',
+#     #               'WA_Wetlands_Eastopen_water.shp',
+#     #               'NV_Wetlands_Southopen_water.shp',
+#     #               'OR_Wetlands_Westopen_water.shp',
+#     #               'CA_Wetlands_Northopen_water.shp',
+#     #               'WY_Wetlands_Westopen_water.shp',
+#     #               'UT_Wetlandsopen_water.shp',
+#     #               'NV_Wetlands_Northopen_water.shp'
+# ]
+#
+# WETLAND = [
+#     # 'MT_Wetlands_Eastwetlands.shp',
+#     #        'WA_Wetlands_Westwetlands.shp',
+#     #        'CA_Wetlands_NorthCentralwetlands.shp',
+#     #        'CA_Wetlands_SouthCentralwetlands.shp',
+#     'CA_Wetlands_Southwetlands.shp',
+#     #        'WY_Wetlands_Eastwetlands.shp',
+#     #        'OR_Wetlands_Eastwetlands.shp',
+#     #        'NM_Wetlandswetlands.shp',
+#     #        'CO_Wetlands_Westwetlands.shp',
+#     #        'ID_Wetlandswetlands.shp',
+#     #        'AZ_Wetlandswetlands.shp',
+#     #        'CO_Wetlands_Eastwetlands.shp',
+#     #        'MT_Wetlands_Westwetlands.shp',
+#     #        'WA_Wetlands_Eastwetlands.shp',
+#     #        'NV_Wetlands_Southwetlands.shp',
+#     #        'OR_Wetlands_Westwetlands.shp',
+#     #        'CA_Wetlands_Northwetlands.shp',
+#     #        'WY_Wetlands_Westwetlands.shp',
+#     #        'UT_Wetlandswetlands.shp',
+#     #        'NV_Wetlands_Northwetlands.shp'
+# ]
 
 
 def split_wetlands(in_shp, out):
@@ -145,6 +147,42 @@ def split_idaho(in_shp, prop='STATUS_201'):
         with fiona.open(name, 'w', **meta) as output:
             for feat in l:
                 output.write(feat)
+
+
+def split_utah(in_shp, out_dir):
+    years = {}
+    with fiona.open(in_shp, 'r') as src:
+        meta = src.meta
+        for feat in src:
+            s = feat['properties']['SURV_YEAR']
+            if s not in years.keys():
+                years[s] = [feat]
+            else:
+                years[s].append(feat)
+
+    for k, v in years.items():
+        shp = os.path.join(out_dir, 'UT_UnIrr_WGS84_{}.shp'.format(k))
+        with fiona.open(shp, 'w', **meta) as dst:
+            for feat in v:
+                dst.write(feat)
+
+
+def split_ucrb(in_shp, out_dir):
+    years = {}
+    with fiona.open(in_shp, 'r') as src:
+        meta = src.meta
+        for feat in src:
+            s = feat['properties']['Source_yea']
+            if s not in years.keys():
+                years[s] = [feat]
+            else:
+                years[s].append(feat)
+
+    for k, v in years.items():
+        shp = os.path.join(out_dir, 'UCRB_UnIrr_WGS84_{}.shp'.format(k))
+        with fiona.open(shp, 'w', **meta) as dst:
+            for feat in v:
+                dst.write(feat)
 
 
 def split_washington_irrigated(master):
@@ -210,8 +248,8 @@ def batch_reproject_vector(ogr_path, in_dir, out_dir, name_append, t_srs, s_srs)
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    wa_irr = os.path.join(home, 'IrrigationGIS', 'training_raw', 'WA')
-    out_for = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'forest', 'WA')
-    shp = os.path.join(wa_irr, 'Forest_Practices_Applications.shp')
-    reduce_shapefiles(wa_irr, out_for, 20000, [shp])
+    irr = os.path.join(home, 'IrrigationGIS', 'training_raw', 'UCRB')
+    out = os.path.join(home, 'IrrigationGIS', 'EE_sample', 'unirrigated_ag', 'UCRB')
+    shp = os.path.join(irr, 'UCRB_UnIrrigated_WGS84.shp')
+    split_ucrb(shp, out)
 # ========================= EOF ====================================================================

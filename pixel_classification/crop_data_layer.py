@@ -403,5 +403,8 @@ class CropDataLayer(object):
 
 
 if __name__ == '__main__':
-    pass
+    cdl = CropDataLayer()
+    print(cdl.crop.keys())
+    print(cdl.non_crop.keys())
+
 # ========================= EOF ====================================================================
