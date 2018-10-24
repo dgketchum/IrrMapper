@@ -55,7 +55,7 @@ class PixelTrainingArray(object):
     """
     Notes: The training shape must be un-projected, in the WGS84 EPSG 4326 coordinate reference system.
     For now, images are Landsat images. The 'images' parameter is for a directory of images from
-    one path,row Landsat tile.
+    one path,row Landsat tile. Be to pass masks.
     """
 
     def __init__(self, root=None, geography=None, paths_map=None, masks=None,

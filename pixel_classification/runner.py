@@ -29,7 +29,7 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.target_path_rows import get_path_rows
 
-OBJECT_MAP = {'MT': Montana,
+OBJECT_MAP = { # 'MT': Montana,
               'NV': Nevada,
               'OR': Oregon,
               'UT': Utah,
@@ -138,12 +138,9 @@ if __name__ == '__main__':
     training_dir = os.path.join(home, 'IrrigationGIS', 'western_states_irrgis')
     stack = os.path.join(home, 'data')
     model_data = os.path.join(abspath, 'model_data')
-    model_name = os.path.join(model_data, 'model-{}.ckpt'.format(n_images))
-    c_project_dir = os.path.join(model_data, 'stacks')
+    model_name = os.path.join(model_data, 'model-mt.ckpt'.format(n_images))
     t_project_dir = os.path.join(model_data, 'allstates_3')
 
-    # model_training_scenes(t_project_dir, n_images, training_dir, model_name)
-    classify_scene(path=39, row=27, sat=8, year=2015,
-                   eval_directory=c_project_dir, n_images=3, model=model_name)
-    # run_targets(stack, model_name)
+    model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+
 # ========================= EOF ====================================================================
