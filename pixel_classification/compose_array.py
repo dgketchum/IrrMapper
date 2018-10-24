@@ -127,7 +127,7 @@ class PixelTrainingArray(object):
         if save_points:
             self.save_sample_points()
 
-        if not self.overwrite_array:
+        if self.overwrite_array:
             self.populate_data_array()
 
     def create_sample_points(self):
@@ -188,6 +188,11 @@ class PixelTrainingArray(object):
     def populate_data_array(self):
 
         for key, val in self.paths_map.items():
+            s = self._point_raster_extract(val, _name=key)
+            print('Extracting {}'.format(key))
+            self.extracted_points = self.extracted_points.join(s, how='outer')
+
+        for key, val in self.masks.items():
             s = self._point_raster_extract(val, _name=key)
             print('Extracting {}'.format(key))
             self.extracted_points = self.extracted_points.join(s, how='outer')
