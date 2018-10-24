@@ -8,7 +8,7 @@ This package is a little difficult to create a working python interpreter for.
 First, get [Anaconda](anaconda.org) and [git](https://git-scm.com/), these tools
 are important here.
 
-Next, create your environment
+Next, create your environment.
 
 ``` conda create -n irri python=3.6```
 
