@@ -29,7 +29,7 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.target_path_rows import get_path_rows
 
-OBJECT_MAP = { # 'MT': Montana,
+OBJECT_MAP = {'MT': Montana,
               'NV': Nevada,
               'OR': Oregon,
               'UT': Utah,
@@ -40,7 +40,6 @@ def concatenate_training_data(existing, training_array):
     existing_array = existing['data']
     add_array = training_array.data
     new_array = vstack((existing_array, add_array))
-
     existing_features = existing['features']
     add_features = training_array.features
     new_features = vstack((existing_features.reshape((existing_features.shape[0], 1)),
