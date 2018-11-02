@@ -95,7 +95,7 @@ def model_training_scenes(project, n_images, training, model):
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
     mlp(p, model)
-    print('Model saved to {}'.format(model))
+    print('Model saved to {} '.format(model))
 
 
 def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
