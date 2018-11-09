@@ -62,7 +62,7 @@ class TrainingAssignments(object):
 
                            1: {'ltype': 'dryland', 'path': None},
 
-                           2: {'ltype': 'forrest', 'path': None},
+                           2: {'ltype': 'forest', 'path': None},
 
                            3: {'ltype': 'other', 'path': None}}
 

@@ -29,14 +29,10 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.target_path_rows import get_path_rows
 
-OBJECT_MAP = { # 'MT': Montana,
-              'NV': Nevada,
-              'OR': Oregon,
-              'UT': Utah,
-              'WA': Washington}
-
+OBJECT_MAP = { 'MT': Montana}
 
 def concatenate_training_data(existing, training_array):
+
     existing_array = existing['data']
     add_array = training_array.data
     new_array = vstack((existing_array, add_array))
@@ -80,8 +76,8 @@ def model_training_scenes(project, n_images, training, model):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_training()
-        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10, masks=i.masks,
-                overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10000, masks=i.masks,
+                overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path, kernel_size=5)
         p.extract_sample()
 
         if first:
@@ -142,5 +138,8 @@ if __name__ == '__main__':
     t_project_dir = os.path.join(model_data, 'allstates_3')
 
     model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+
+
+
 
 # ========================= EOF ====================================================================

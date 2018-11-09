@@ -99,6 +99,10 @@ class ImageStack(object):
         self.paths_map, self.masks = self._order_images()
 
     def get_cdl(self):
+        """download cdl and make a mask, save to the
+        root directory with filename cdl_mask.tif.
+        The cdl is reprojected here.
+        """
         self.cdl_mask = os.path.join(self.root, 'cdl_mask.tif')
         if not os.path.isfile(self.cdl_mask):
             print('get {}'.format(self.cdl_mask))
@@ -110,6 +114,10 @@ class ImageStack(object):
             self.exclude_rasters.append(self.cdl_mask)
 
     def get_landsat(self, fmask=False):
+        """Download from internet and select scenes from n_landsat
+        g.download() then saves the selected scenes into
+        the root directory.
+        """
         g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
                            output_path=self.root, max_cloud_percent=self.max_cloud)
 
@@ -125,6 +133,11 @@ class ImageStack(object):
             [self._make_fmask(d) for d in self.image_dirs]
 
     def get_terrain(self):
+        """Get digital elevation maps from amazon web services
+        save in the project root directory with filenames enumerated
+        in the next three lines.
+
+        """
 
         slope_name = os.path.join(self.root, 'slope.tif')
         aspect_name = os.path.join(self.root, 'aspect.tif')
@@ -185,7 +198,7 @@ class ImageStack(object):
             f.save_array(cloud, self.dst_path_cloud)
             f.save_array(water, self.dst_path_water)
 
-    def _orgainize_directory(self):
+    def _organize_directory(self):
         dst_dir = os.path.join(self.root, str(self.path), str(self.row),
                                str(self.year))
         if not os.path.isdir(dst_dir):
