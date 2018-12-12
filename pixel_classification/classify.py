@@ -223,10 +223,10 @@ class Classifier(object):
                 first = False
             else:
                 try:
-                    stack[i, :, :] = self.normalize_image_channel(arr)
+                    stack[i, :, :] = arr
                 except ValueError:
                     arr = warp_single_image(self.feature_ras, first_geo)
-                    stack[i, :, :] = self.normalize_image_channel(arr)
+                    stack[i, :, :] = arr
 
         return stack
 

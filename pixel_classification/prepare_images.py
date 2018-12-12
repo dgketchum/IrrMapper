@@ -30,17 +30,17 @@ from sat_image.warped_vrt import warp_vrt
 from bounds import RasterBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
-
+from rasterio import open as rasopen, float32
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
 from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters
-
+from sklearn.preprocessing import StandardScaler
 
 class ImageStack(object):
     """
     Prepare a stack of images from Landsat, terrain, etc. Save stack in identical geometry.
     """
 
-    def __init__(self, satellite, path, row, root=None, max_cloud_pct=None, start=None, end=None,
+    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None, max_cloud_pct=None, start=None, end=None,
             year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
@@ -52,6 +52,8 @@ class ImageStack(object):
 
         self.path = path
         self.row = row
+        self.lat = lat
+        self.lon = lon
         self.year = year
 
         self.max_cloud = max_cloud_pct
@@ -96,7 +98,8 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.get_cdl()
-        self.paths_map, self.masks = self._order_images()
+        self.paths_map, self.masks = self._order_images() # paths map is just path-> location
+        # in filesystem.
 
     def get_cdl(self):
         """download cdl and make a mask, save to the
@@ -118,8 +121,14 @@ class ImageStack(object):
         g.download() then saves the selected scenes into
         the root directory.
         """
-        g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
-                           output_path=self.root, max_cloud_percent=self.max_cloud)
+        if self.lat is None:
+            g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
+                               output_path=self.root, max_cloud_percent=self.max_cloud)
+        else:
+            g = GoogleDownload(self.start, self.end, self.sat, latitude=self.lat, longitude=self.lon,
+                               output_path=self.root, max_cloud_percent=self.max_cloud)
+            self.path = g.p
+            self.row = g.r
 
         g.select_scenes(self.n)
         self.scenes = g.selected_scenes
@@ -164,6 +173,7 @@ class ImageStack(object):
         for i, d in enumerate(self.image_dirs):
             l = self.landsat_mapping[self.sat_abv](d)
             _id = l.landsat_scene_id
+            print(self.path, self.row)
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
@@ -213,7 +223,6 @@ class ImageStack(object):
         return dst_dir
 
     def _order_images(self):
-
         band_dct = OrderedDict()
         mask_dct = OrderedDict()
 
@@ -239,6 +248,7 @@ class ImageStack(object):
             bands.sort()
             for p in bands:
                 band_dct[os.path.basename(p).split('.')[0]] = p
+                self._normalize_and_save_image(p)
 
             masks = [os.path.join(self.root, sc, x) for x in paths if x.endswith(mask_rasters())]
             for m in masks:
@@ -249,8 +259,29 @@ class ImageStack(object):
         static_files = [x for x in files if x.endswith(static_rasters())]
         for st in static_files:
             band_dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
+            self._normalize_and_save_image(os.path.join(self.root, st))
 
         return band_dct, mask_dct
+
+    @staticmethod
+    def _normalize_and_save_image(fname):
+        norm = True
+        with rasopen(fname, 'r') as rsrc:
+            if "normalized" not in rsrc.tags():
+                norm = False
+                rass_arr = rsrc.read()
+                rass_arr = rass_arr.astype(float32)
+                profile = rsrc.profile
+                profile.update(dtype=float32)
+                rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+                scaler = StandardScaler() # z-normalization
+                scaler.fit(rass_arr)
+                rass_arr = scaler.transform(rass_arr)
+        if not norm:
+            with rasopen(fname, 'w', **profile) as dst:
+                dst.write(rass_arr, 1)
+                print("Normalizing", fname)
+                dst.update_tags(normalized=True)
 
 
 if __name__ == '__main__':

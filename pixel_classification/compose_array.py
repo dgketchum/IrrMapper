@@ -108,8 +108,6 @@ class PixelTrainingArray(object):
             self.target_values = None
 
             self.m_instances = instances
-            if self.kernel_size is not None:
-                self.extracted_points = DataFrame(columns = ['FID', 'X', 'Y', 'POINT_TYPE'])
             self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
             self.object_id = 0
 
@@ -291,7 +289,7 @@ class PixelTrainingArray(object):
                 for idx, sub_raster in enumerate(data_array[msk]):
                     if sub_raster[self.kernel_size // 2][self.kernel_size // 2] == 1.:
                         data_array.loc[idx, :] = nan # make whole row NaN
-        except TypeError as e: # sub_raster is nan. Am I accidentally making it NaN?
+        except TypeError as e:
             print(sub_raster, msk, idx)
             data_array.loc[idx, :] = nan
 
@@ -377,7 +375,8 @@ class PixelTrainingArray(object):
         return s
 
     def _grid_raster_extract(self, raster, _name):
-        """Open the raster. Store the points in a Series - a labeled
+        """
+        Open the raster. Store the points in a Series - a labeled
         numpy array. Then in _purge array, we iterate over the masks
         and the paths_map and drop pixels where masks = 1 and pixels where bound = 0.
         The
