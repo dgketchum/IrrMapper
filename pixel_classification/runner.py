@@ -29,18 +29,17 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.target_path_rows import get_path_rows
 
-OBJECT_MAP = { # 'MT': Montana,
+OBJECT_MAP = {'MT': Montana,
               'NV': Nevada,
               'OR': Oregon,
-              'UT': Utah,
-              'WA': Washington}
+              'UT': Utah,}
+              # 'WA': Washington}
 
 
 def concatenate_training_data(existing, training_array):
     existing_array = existing['data']
     add_array = training_array.data
     new_array = vstack((existing_array, add_array))
-
     existing_features = existing['features']
     add_features = training_array.features
     new_features = vstack((existing_features.reshape((existing_features.shape[0], 1)),
@@ -80,7 +79,7 @@ def model_training_scenes(project, n_images, training, model):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_training()
-        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10, masks=i.masks,
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=5000, masks=i.masks,
                 overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
         p.extract_sample()
 
@@ -96,7 +95,7 @@ def model_training_scenes(project, n_images, training, model):
     p = Pta(from_dict=training_data)
     p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
     mlp(p, model)
-    print('Model saved to {}'.format(model))
+    print('Model saved to {} '.format(model))
 
 
 def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
