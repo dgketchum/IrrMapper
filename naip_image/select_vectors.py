@@ -16,27 +16,40 @@
 
 import os
 
-from pandas import DataFrame
 from geopandas import read_file
+from pandas import DataFrame
+
+from naip_image. naip import ApfoNaip
 
 
-def get_shapefile(shp, **filter_attrs):
+def get_geometries(shp, **filter_attrs):
     gdf = read_file(shp)
     df = DataFrame(gdf)
-    _drop = [x for x in df.columns if x not in filter_attrs['select']]
-    df.drop(columns=_drop, inplace=True)
+    if filter_attrs['select']:
+        _drop = [x for x in df.columns if x not in filter_attrs['select']]
+        df.drop(columns=_drop, inplace=True)
     df.sample(frac=1.)
     return df['geometry']
 
 
-def visualize_geometries(geometries):
-    pass
+def visualize_geometries(geometries, state='montana'):
+    for g in geometries:
+        center = g.centroid
+        box = g.bounds
+        naip = ApfoNaip(box).get_image(state)
+        # TODO: bad NAIP url!!!
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    tables = os.path.join(home, 'Field_Extract', 'training_tables')
-    o = os.path.join(tables, 'MT_test_table.csv')
-    s = os.path.join(home, 'IrrigationGIS', 'irr_gis', 'FLUS_All.shp')
-    get_shapefile(s, **{'field': 'LType', 'select': ['F', 'I']})
+    extraction = os.path.join(home, 'field_extraction')
+
+    tables = os.path.join(home, 'field_extraction', 'training_tables')
+    o = os.path.join(tables, 'WA_test_table.csv')
+
+    shapes = os.path.join(home, 'field_extraction', 'raw_shapefiles')
+    s = os.path.join(shapes, 'central_WA.shp')
+
+    geos = get_geometries(s, **{'field': 'Irrigation', 'select': []})
+    visualize_geometries(geos, state='washington')
 # ========================= EOF ====================================================================

@@ -24,7 +24,7 @@ from rasterio.warp import reproject, Resampling, calculate_default_transform
 from requests import get
 
 from naip_image.naip_services import get_naip_key
-from sat_image.bounds import GeoBounds
+from bounds import GeoBounds
 
 
 class BadCoordinatesError(ValueError):
