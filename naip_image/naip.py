@@ -16,15 +16,13 @@
 
 import os
 
+from bounds import GeoBounds
 from numpy import empty, uint8, float32
 from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
 from requests import get
-
-from naip_image.naip_services import get_naip_key
-from bounds import GeoBounds
 
 
 class BadCoordinatesError(ValueError):
@@ -118,7 +116,7 @@ class ApfoNaip(NaipImage):
 
     """
 
-    def __init__(self, bbox, **kwargs):
+    def __init__(self, bbox=None, **kwargs):
         """
             :param bbox: (west, south, east, north) tuple in geographic coordinates
         """
@@ -130,6 +128,11 @@ class ApfoNaip(NaipImage):
         self.bbox = bbox
         self.dst_crs = None
 
+        if not bbox and not kwargs['centroid']:
+            raise NotImplementedError('Must provide either a bounding box (w, s, e, n) or centroid in EPSG 102100')
+        if kwargs['centroid']:
+            # TODO: add default 1000 m image size, check for negative/positive coordinates
+            pass
         if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
             raise BadCoordinatesError
 

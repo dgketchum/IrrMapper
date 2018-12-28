@@ -36,20 +36,20 @@ def visualize_geometries(geometries, state='montana'):
     for g in geometries:
         center = g.centroid
         box = g.bounds
-        naip = ApfoNaip(box).get_image(state)
-        # TODO: bad NAIP url!!!
+        array, profile = ApfoNaip(box).get_image(state)
+        pass
 
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     extraction = os.path.join(home, 'field_extraction')
 
-    tables = os.path.join(home, 'field_extraction', 'training_tables')
+    tables = os.path.join(extraction, 'training_tables')
     o = os.path.join(tables, 'WA_test_table.csv')
 
-    shapes = os.path.join(home, 'field_extraction', 'raw_shapefiles')
+    shapes = os.path.join(extraction, 'raw_shapefiles')
     s = os.path.join(shapes, 'central_WA.shp')
 
     geos = get_geometries(s, **{'field': 'Irrigation', 'select': []})
-    visualize_geometries(geos, state='washington')
+    visualize_geometries(geos, state='WA')
 # ========================= EOF ====================================================================
