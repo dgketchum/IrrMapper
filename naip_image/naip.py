@@ -133,7 +133,7 @@ class ApfoNaip(NaipImage):
         if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
             raise BadCoordinatesError
 
-        self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
+        self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP_Historical/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
                               '&imageSR=102100&bboxSR=102100&size=1000,1000' \
                               '&format=tiff&pixelType=U8' \
@@ -150,7 +150,7 @@ class ApfoNaip(NaipImage):
         Current hack in this method and in GeoBounds is hard-coded epsg: 3857 'web mercator',
         though the NAIP service provides epsg: 102100 a deprecated ESRI SRS'
 
-        :param state: lower case state str, e.g. 'south_dakota'
+        :param state: e.g. 'ND'
         :param size: tuple of horizontal by vertical size in pixels, e.g., (512, 512)
         :return:
         """
@@ -162,7 +162,7 @@ class ApfoNaip(NaipImage):
 
         bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
 
-        naip_str = get_naip_key(state)
+        naip_str = '{}_NAIP'.format(state)
         query = self.usda_query_str.format(naip_str, bbox_str)
         url = '{}{}'.format(self.naip_base_url, query)
 
@@ -193,8 +193,9 @@ class ApfoNaip(NaipImage):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    box = (-109.9849, 46.46738, -109.93647, 46.498625)
-    naip = ApfoNaip(box)
-    naip.get_image('montana')
+    # box = (-109.9849, 46.46738, -109.93647, 46.498625)
+    # naip = ApfoNaip(box)
+    # naip.get_image('MT')
+    pass
 
 # ========================= EOF ================================================================
