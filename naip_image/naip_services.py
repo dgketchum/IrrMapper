@@ -85,6 +85,8 @@ NAIP_JSON = {"currentVersion": 10.2, "folders": [], "services": [{"name": "NAIP/
                                                                  {"name": "NAIP/Wisconsin", "type": "ImageServer"},
                                                                  {"name": "NAIP/Wyoming", "type": "ImageServer"}]}
 
+# NAIP_KEY dict is deprecated in ApfoNaip class, it has since been switched to a
+# more straightforward histical query, e.g. .../services/NAIP_Historical/WA_NAIP/ImageServer/...
 NAIP_KEY = {'alabama': 'NAIP/Alabama', 'arizona': 'NAIP/Arizona', 'arkansas': 'NAIP/Arkansas',
             'california': 'NAIP/California_2016_60cm', 'colorado': 'NAIP/Colorado',
             'connecticut': 'NAIP/Connecticut_2016_60cm', 'delaware': 'NAIP/Delaware', 'florida': 'NAIP/Florida',
