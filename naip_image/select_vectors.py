@@ -15,6 +15,9 @@
 # ===============================================================================
 
 import os
+import sys
+abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(abspath)
 import random
 import string
 
@@ -56,13 +59,13 @@ def visualize_geometries(geometries, state='montana', out_dir=None):
         naip_geometry = get_naip_polygon(naip.bbox)
         naip.save(array, profile, TEMP_TIF, crs=naip_args['dst_crs'])
         naip.close()
-        
+
         src = rasterio.open(TEMP_TIF)
         rasterio.plot.show((src, 1))
         ax = mpl.pyplot.gca()
-        clip_geometries = [geo for geo in geometries if geo.intersects(naip_geometry)]
-        patches = [PolygonPatch(feature, edgecolor="red", facecolor="none", linewidth=2) for feature in clip_geometries]
-        ax.add_collection(mpl.collections.PatchCollection(patches, match_original=True))
+        clips = [geo for geo in geometries if geo.intersects(naip_geometry)]
+        patches = [PolygonPatch(f) for f in clips]
+        ax.add_collection(mpl.collections.PatchCollection(patches))
 
         opt = input('Keep this training data?')
         if opt in ['Yes', 'YES', 'yes', 'y']:
