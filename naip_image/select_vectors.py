@@ -15,11 +15,20 @@
 # ===============================================================================
 
 import os
+import random
+import string
 
+import matplotlib as mpl
+import rasterio
+import rasterio.plot
+from descartes import PolygonPatch
 from geopandas import read_file
 from pandas import DataFrame
+from shapely.geometry import Polygon
 
-from naip_image. naip import ApfoNaip
+from naip_image.naip import ApfoNaip
+
+TEMP_TIF = os.path.join(os.path.dirname(__file__), 'temp', 'temp_tile_geo.tif')
 
 
 def get_geometries(shp, **filter_attrs):
@@ -32,12 +41,47 @@ def get_geometries(shp, **filter_attrs):
     return df['geometry']
 
 
-def visualize_geometries(geometries, state='montana'):
+def get_naip_polygon(bbox):
+    return Polygon([[bbox[0], bbox[1]], [bbox[0], bbox[3]], [bbox[2], bbox[3]],
+                    [bbox[2], bbox[1]]])
+
+
+def visualize_geometries(geometries, state='montana', out_dir=None):
     for g in geometries:
-        center = g.centroid
-        box = g.bounds
-        array, profile = ApfoNaip(box).get_image(state)
-        pass
+        naip_args = dict([('dst_crs', '4326'),
+                          ('centroid', (g.centroid.y, g.centroid.x)),
+                          ('buffer', 1000)])
+        naip = ApfoNaip(**naip_args)
+        array, profile = naip.get_image(state)
+        naip_geometry = get_naip_polygon(naip.bbox)
+        naip.save(array, profile, TEMP_TIF, crs=naip_args['dst_crs'])
+        naip.close()
+        
+        src = rasterio.open(TEMP_TIF)
+        rasterio.plot.show((src, 1))
+        ax = mpl.pyplot.gca()
+        clip_geometries = [geo for geo in geometries if geo.intersects(naip_geometry)]
+        patches = [PolygonPatch(feature, edgecolor="red", facecolor="none", linewidth=2) for feature in clip_geometries]
+        ax.add_collection(mpl.collections.PatchCollection(patches, match_original=True))
+
+        opt = input('Keep this training data?')
+        if opt in ['Yes', 'YES', 'yes', 'y']:
+            name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            _dir = os.path.join(out_dir, name)
+            os.mkdir(_dir)
+            os.rename(TEMP_TIF, os.path.join(_dir, '{}_multi.tif'.format(name)))
+
+            naip_bool_name = os.path.join(_dir, '{}_bool.tif'.format(name))
+            meta = src.meta.copy()
+            meta.update(compress='lzw')
+            with rasterio.open(naip_bool_name, 'w', **meta) as out:
+                out_arr = out.read(1)
+                shapes = ((geom, value) for geom, value in zip(counties.geometry, counties.LSAD_NUM))
+                burned = geometries.values.rasterize(shapes=shapes, fill=0, out=out_arr, transform=out.transform)
+                out.write_band(1, burned)
+        else:
+            pass
+        break
 
 
 if __name__ == '__main__':
@@ -52,4 +96,5 @@ if __name__ == '__main__':
 
     geos = get_geometries(s, **{'field': 'Irrigation', 'select': []})
     visualize_geometries(geos, state='WA')
+
 # ========================= EOF ====================================================================
