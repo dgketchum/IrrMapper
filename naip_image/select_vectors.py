@@ -21,7 +21,8 @@ sys.path.append(abspath)
 import random
 import string
 
-import matplotlib as mpl
+from matplotlib import pyplot as plt
+from matplotlib import collections as cplt
 import rasterio
 import rasterio.plot
 from descartes import PolygonPatch
@@ -61,11 +62,14 @@ def visualize_geometries(geometries, state='montana', out_dir=None):
         naip.close()
 
         src = rasterio.open(TEMP_TIF)
+        features = [geo for geo in geometries if geo.intersects(naip_geometry)]
         rasterio.plot.show((src, 1))
-        ax = mpl.pyplot.gca()
-        clips = [geo for geo in geometries if geo.intersects(naip_geometry)]
-        patches = [PolygonPatch(f) for f in clips]
-        ax.add_collection(mpl.collections.PatchCollection(patches))
+        ax = plt.gca()
+        patches = [ax.add_patch(PolygonPatch(p))for p in features]
+        ax.add_collection(cplt.PatchCollection(patches))
+        # ax.set_xlim(-119.00, -119.80)
+        # ax.set_ylim(46.8, 47.0)
+        break
 
         opt = input('Keep this training data?')
         if opt in ['Yes', 'YES', 'yes', 'y']:
