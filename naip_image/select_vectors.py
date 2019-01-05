@@ -31,7 +31,6 @@ from descartes import PolygonPatch
 from geopandas import read_file
 from pandas import DataFrame
 from shapely.geometry import Polygon
-
 from naip_image.naip import ApfoNaip
 
 TEMP_TIF = os.path.join(os.path.dirname(__file__), 'temp', 'temp_tile_geo.tif')
@@ -54,28 +53,16 @@ def get_naip_polygon(bbox):
 
 def visualize_geometries(geometries, state='montana', out_dir=None):
 
-    naip_geometry = None
-    array = None
-
     for g in geometries:
         naip_args = dict([('dst_crs', '4326'),
                           ('centroid', (g.centroid.y, g.centroid.x)),
                           ('buffer', 1000)])
 
-        if not os.path.isfile(TEMP_TIF):
-            print('dont have file')
-            naip = ApfoNaip(**naip_args)
-            array, profile = naip.get_image(state)
-            out_shape = array.shape
-            naip.save(array, profile, TEMP_TIF, crs=naip_args['dst_crs'])
-            naip_geometry = get_naip_polygon(naip.bbox)
-
+        naip = ApfoNaip(**naip_args)
+        array, profile = naip.get_image(state)
+        naip.save(array, profile, TEMP_TIF, crs=naip_args['dst_crs'])
+        naip_geometry = get_naip_polygon(naip.bbox)
         src = rasterio.open(TEMP_TIF)
-        if os.path.isfile(TEMP_TIF):
-            print('have file')
-            naip_geometry = get_naip_polygon(src.bounds)
-            out_shape = src.height, src.width
-            array = src.read()
 
         vectors = [geo for geo in geometries if geo.intersects(naip_geometry)]
         fig, ax = plt.subplots()
@@ -88,7 +75,6 @@ def visualize_geometries(geometries, state='montana', out_dir=None):
 
         opt = input('Keep this training data?')
         if opt in ['Yes', 'YES', 'yes', 'y']:
-
             name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             _dir = os.path.join(out_dir, name)
             os.mkdir(_dir)
@@ -109,10 +95,8 @@ def visualize_geometries(geometries, state='montana', out_dir=None):
                 burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
                                    out_shape=(array.shape[1], array.shape[2]), transform=out.transform)
                 out.write(burned, 1)
-
         else:
             pass
-
 
 
 if __name__ == '__main__':
