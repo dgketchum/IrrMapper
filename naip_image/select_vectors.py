@@ -84,36 +84,35 @@ def visualize_geometries(geometries, state='montana', out_dir=None):
         ax.add_collection(cplt.PatchCollection(patches, match_original=True))
         ax.set_xlim(naip_geometry.bounds[0], naip_geometry.bounds[2])
         ax.set_ylim(naip_geometry.bounds[1], naip_geometry.bounds[3])
-        # plt.show()
+        plt.show()
 
-        # opt = input('Keep this training data?')
-        # if opt in ['Yes', 'YES', 'yes', 'y']:
+        opt = input('Keep this training data?')
+        if opt in ['Yes', 'YES', 'yes', 'y']:
 
-        name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        _dir = os.path.join(out_dir, name)
-        os.mkdir(_dir)
+            name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            _dir = os.path.join(out_dir, name)
+            os.mkdir(_dir)
 
-        fig_name = os.path.join(_dir, '{}_overview.png'.format(name))
-        plt.savefig(fig_name)
-        plt.close()
-        os.rename(TEMP_TIF, os.path.join(_dir, '{}_multi.tif'.format(name)))
+            fig_name = os.path.join(_dir, '{}_overview.png'.format(name))
+            plt.savefig(fig_name)
+            plt.close()
+            os.rename(TEMP_TIF, os.path.join(_dir, '{}_multi.tif'.format(name)))
 
-        naip_bool_name = os.path.join(_dir, '{}_bool.tif'.format(name))
-        meta = src.meta.copy()
-        meta.update(compress='lzw')
-        meta.update(nodata=0)
-        meta.update(count=1)
+            naip_bool_name = os.path.join(_dir, '{}_bool.tif'.format(name))
+            meta = src.meta.copy()
+            meta.update(compress='lzw')
+            meta.update(nodata=0)
+            meta.update(count=1)
 
-        bool_values = [(f, 1) for f in vectors]
-        with rasterio.open(naip_bool_name, 'w', **meta) as out:
-            burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
-                               out_shape=(array.shape[1], array.shape[2]), transform=out.transform)
-            out.write(burned, 1)
+            bool_values = [(f, 1) for f in vectors]
+            with rasterio.open(naip_bool_name, 'w', **meta) as out:
+                burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
+                                   out_shape=(array.shape[1], array.shape[2]), transform=out.transform)
+                out.write(burned, 1)
 
-        # else:
-        #     pass
+        else:
+            pass
 
-        break
 
 
 if __name__ == '__main__':
