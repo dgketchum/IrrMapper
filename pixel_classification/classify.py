@@ -225,6 +225,8 @@ class Classifier(object):
                 try:
                     stack[i, :, :] = arr
                 except ValueError:
+                    import pprint
+                    pprint.pprint(first_geo)
                     arr = warp_single_image(self.feature_ras, first_geo)
                     stack[i, :, :] = arr
 

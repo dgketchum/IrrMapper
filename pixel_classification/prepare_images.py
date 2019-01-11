@@ -95,7 +95,7 @@ class ImageStack(object):
     def build_evaluating(self):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
-        self.get_et()
+        # self.get_et()
         self.get_terrain()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
@@ -129,6 +129,7 @@ class ImageStack(object):
                                output_path=self.root, max_cloud_percent=self.max_cloud)
             self.path = g.p
             self.row = g.r
+            print("Path:", self.path, "Row:", self.row)
 
         g.select_scenes(self.n)
         self.scenes = g.selected_scenes

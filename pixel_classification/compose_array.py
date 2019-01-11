@@ -155,7 +155,7 @@ class PixelTrainingArray(object):
 
         for class_code, _dict in self.geography.attributes.items():
             print(_dict['ltype'])
-            polygons = self._get_polygons(_dict['path'])
+            polygons = self._get_polygons(_dict['path']) # this is a hardcoded shapefile name.
             _dict['instance_count'] = 0
 
             if len(polygons) > self.m_instances:
@@ -379,8 +379,8 @@ class PixelTrainingArray(object):
         Open the raster. Store the points in a Series - a labeled
         numpy array. Then in _purge array, we iterate over the masks
         and the paths_map and drop pixels where masks = 1 and pixels where bound = 0.
-        The
         """
+
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
