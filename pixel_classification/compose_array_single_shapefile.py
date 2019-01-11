@@ -211,7 +211,6 @@ class PTASingleShapefile:
             # sample from each polygon, based on area. 
             poly_pt_ct = 0
             #while poly_pt_ct < required_points: # I wasn't getting enough points.
-                # I feel like I was/am doing something wrong.
             x_range, y_range = self._random_points(poly.bounds)
             for coord in zip(x_range, y_range):
                 if Point(coord[0], coord[1]).within(poly):
