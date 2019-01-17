@@ -1,15 +1,17 @@
 import warnings
 import glob
 import os
+from  multiprocessing import Pool
 from numpy import save as nsave
 from compose_array_single_shapefile import PTASingleShapefile
+from fiona import open as fopen
+from shapely.geometry import shape
 from data_utils import download_images, get_shapefile_path_row, split_shapefile, create_master_raster, create_master_masked_raster
 
 def create_training_data(shapefile, shapefile_directory, image_directory, class_code,
         kernel_size, instances, training_directory, year, raster_directory, save=True):
 
-
-    p, r = get_shapefile_path_row(shapefile)
+    p, r = get_shapefile_path_row(shapefile) 
     suff = str(p) + '_' + str(r) + "_" + str(year)
     landsat_dir = os.path.join(image_directory, suff)
     satellite = 8
@@ -19,23 +21,24 @@ def create_training_data(shapefile, shapefile_directory, image_directory, class_
         os.mkdir(landsat_dir)
         ims = download_images(landsat_dir, p, r, year, satellite)
     else:
-        print("Images may have been downloaded for {}_{}_{}".format(p, r, year))
-        print("Check to make sure they're all there.")
         ims = download_images(landsat_dir, p, r, year, satellite)
-    
+
+    # print("Paths:", len(ims.paths_map))
+    if len(ims.paths_map) > 36:
+        print("AAAAAAAHHHH")
+        print(len(ims.paths_map), shapefile)
+
     ms = create_master_raster(ims, p, r, year, raster_directory)
     mms =  create_master_masked_raster(ims, p, r, year, raster_directory)
 
     shp_path = os.path.join(shapefile_directory, shapefile)
     pta = PTASingleShapefile(shapefile_path=shp_path, master_raster=ms,
-            training_directory=training_directory, overwrite_points=True, class_code=class_code,
-            path=p, row=r, paths_map=ims.paths_map, masks=ims.masks, 
+            training_directory=training_directory, overwrite_points=False, class_code=class_code,
+            path=p, row=r, paths_map=ims.paths_map, masks=ims.masks,
             instances=instances, kernel_size=kernel_size)
 
     pta.extract_sample()
 
-irrigated = {'MT_Sun_River_2013':2013,
-        "MT_Huntley_Main_2013":2013}
 
 
 def get_all_shapefiles(to_match, year, data_directory, irrigated):
@@ -52,55 +55,87 @@ def get_all_shapefiles(to_match, year, data_directory, irrigated):
                         oup = True
                 if not oup:
                     ls.append(f)
-        
     return ls
+
+def shapefile_area(shapefile):
+    summ = 0
+    with fopen(shapefile, "r") as src:
+        for feat in src:
+            poly = shape(feat['geometry'])
+            summ += poly.area
+    return summ
+
+def get_total_area(data_directory, filenames):
+    ''' Gets the total area of the polygons
+        in the files in filenames '''
+    tot = 0
+    for f in glob.glob(data_directory + "*.shp"):
+        if "sample" not in f:
+            for f2 in filenames:
+                if f2 in f:
+                    tot += shapefile_area(f)
+    return tot
+
+def required_points(shapefile, total_area, total_instances):
+    area = shapefile_area(shapefile)
+    frac = area / total_area
+    return int(total_instances * frac)
+
+def extract_data(data_directory, names, n_instances):
+
+    def is_it(f, names):
+        for e in names:
+            if e in f:
+                return True
+        return False
+
+    total_area = get_total_area(data_directory, names) # units?
+    for f in glob.glob(data_directory + "*.shp"):
+        if is_it(f, names) and 'sample' not in f:
+            req_points = required_points(f, total_area, n_instances)
+            ff = os.path.basename(f)
+            create_training_data(ff, data_directory, image_directory, 0, 41,
+                    req_points, train_dir, 2013, raster_dir)
+
+    return None
+
+def go(f):
+    data_directory = 'split_shapefiles_west/'
+    shp_dir = '/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup'
+    fname = os.path.basename(f) 
+    split_shapefile(shp_dir, fname, data_directory)
 
 
 if __name__ == "__main__":
-    
-    shp_dir = '/home/thomas/IrrigationGIS/western_states_irrgis/MT/MT_Main/'
+
+    irrigated = ['MT_Sun_River_2013', "MT_Huntley_Main_2013"]
+    other = ['other']
+    fallow = ['Fallow']
+    forest = ['Forrest']
+
     train_dir = 'training_data/'
-    data_directory = 'shapefile_data/'
+    data_directory = 'shapefile_data_western_us/'
     image_directory = 'image_data/'
     raster_dir = 'master_rasters'
     kernel_size = 57
 
-    # for f in glob.glob(shp_dir + "*.shp"):
-    #     fname = os.path.basename(f)
-    #     split_shapefile(shp_dir, fname, data_directory)
 
-    from pprint import pprint
-    for irr in irrigated:
-        for f in glob.glob(data_directory + "*.shp"):
-            if "sample" not in f:
-                if irr in f:
-                    shp = os.path.basename(f)
-                    others = get_all_shapefiles(shp, irrigated[irr], data_directory, irrigated)
-                    pprint(others)
-                    year = irrigated[irr]
-                    class_code = 1
-                    instances = 30000 
-                    shp = os.path.basename(f)
-                    n = shp[:-4] + "_train.h5"
-                    if not os.path.isfile(os.path.join(train_dir, n)):
-                        print("Creating training data for {}".format(n))
-                        create_training_data(shp, data_directory, image_directory,
-                                class_code=class_code, kernel_size=kernel_size, instances=instances, training_directory=train_dir, year=year, raster_directory=raster_dir) 
-                    else:
-                        print("Training data already created for", n)
+    shp_dir = '/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup/'
+    fnames = [f for f in glob.glob(shp_dir + "*.shp") if 'reproj' in f]
+    print(fnames)
+    # print(os.cpu_count())
+    instances = [1e5]*4
+    dd = [data_directory]*4
+    names = [irrigated, other, fallow, forest]
+    # note: the extraction of training data took 6h 29m
+    #with Pool(processes=None) as pool:
+    #    pool.starmap(extract_data, zip(dd, names, instances))
 
-                    for ff in others:
-                        shp = os.path.basename(ff)
-                        year = 2017
-                        class_code = 0
-                        n = shp[:-4] + "_train.h5"
-                        if not os.path.isfile(os.path.join(train_dir, n)):
-                            print("Creating training data for {}".format(n))
-                            create_training_data(shp, data_directory, image_directory,
-                                    class_code=class_code, kernel_size=kernel_size, instances=10000, training_directory=train_dir, year=year, raster_directory=raster_dir) 
-                        else:
-                            print("Training data already created for", n)
-                   
+    with Pool(os.cpu_count()) as pool:
+        pool.map(go, fnames)
+     # 12 minutes to 5 and a half.
+
+
 
 
 

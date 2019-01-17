@@ -95,7 +95,7 @@ class ImageStack(object):
     def build_evaluating(self):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
-        # self.get_et()
+        #self.get_et()
         self.get_terrain()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
@@ -268,8 +268,9 @@ class ImageStack(object):
     def _normalize_and_save_image(fname):
         norm = True
         with rasopen(fname, 'r') as rsrc:
-            if "normalized" not in rsrc.tags():
-                norm = False
+            if "normalized" in rsrc.tags():
+                return
+            else:    
                 rass_arr = rsrc.read()
                 rass_arr = rass_arr.astype(float32)
                 profile = rsrc.profile
@@ -278,11 +279,10 @@ class ImageStack(object):
                 scaler = StandardScaler() # z-normalization
                 scaler.fit(rass_arr)
                 rass_arr = scaler.transform(rass_arr)
-        if not norm:
-            with rasopen(fname, 'w', **profile) as dst:
-                dst.write(rass_arr, 1)
-                print("Normalizing", fname)
-                dst.update_tags(normalized=True)
+                with rasopen(fname, 'w', **profile) as dst:
+                    dst.write(rass_arr, 1)
+                    print("Normalized", fname)
+                    dst.update_tags(normalized=True)
 
 
 if __name__ == '__main__':

@@ -163,52 +163,74 @@ def get_pr(poly, wrs2):
 def split_shapefile(base, base_shapefile, data_directory):
     """ Shapefiles may deal with data over multiple path/rows.
     Data directory: where the split shapefiles will be saved."""
-    # TODO: un-hardcode this directory
-    wrs2 = fiona.open("../spatial_data/wrs2_descending_usa.shp")
+    path_row = defaultdict(list) 
+    id_mapping = {}
+    wrs2 = fiona.open('../spatial_data/wrs2_descending_usa.shp', 'r')
 
-    dct = defaultdict(list) 
-    shapefile_mapping = defaultdict(list)
-
-    with fiona.open(base + base_shapefile, "r") as src:
+    with fiona.open(os.path.join(base, base_shapefile), "r") as src:
         meta = deepcopy(src.meta)
         for feat in src:
-            feat_id = int(feat['id'])
-            shapefile_mapping[feat_id] = feat
+            idd = feat['id']
+            id_mapping[idd] = feat
             poly = shape(feat['geometry'])
             prs = get_pr(poly, wrs2)
-            dct[feat_id] = prs
+            for p in prs:
+                path_row[p].append(idd)
+
     wrs2.close()
-    id_mapping = defaultdict(list) 
-    for key in dct:
-        for e in dct[key]:
-            id_mapping[e].append(key)
-    # Now find the unique values between the lists.
-    for key1 in id_mapping:
-        for key2 in id_mapping:
-            if key1 != key2:
-                res = set(id_mapping[key2]) - set(id_mapping[key1])
-                # above line gives the keys that are present
-                # in the second list that do not appear in the first list. 
-                # By doing this for all path/rows, we can get all of the unique path/rows.
-                # Still need to test this.  
-                id_mapping[key2] = list(sorted(res))
+
+    # I have all path/rows and their corresponding features
+    # I need to figure out the unique features in each path row.
+    # How should I treat the non-unique features?
+    # Create a set of non-unique features and their 
+    # corresponding path/row. Also create
+    # a set of unique features. Then iterate over the 
+    # unique set and for each non-unique feature 
+    # place it in the path/row with the greatest number of
+    # unique points. 
+    non_unique = defaultdict(list)
+    unique = defaultdict(list)
+    for key in path_row:
+        ls = path_row[key] # all features in a given path/row
+        placeholder = ls
+        for key1 in path_row:
+            if key != key1:
+                ls1 = path_row[key1]
+                # find unique keys in ls
+                placeholder = set(placeholder) - set(ls1) #all 
+                # features present in placeholder that are not 
+                # present in ls1; i.e. unique keys
+        unique[key] = list(placeholder)
+        nu = set(ls) - set(placeholder) # all features present
+        # in ls that are not present in placeholder (non-unique)
+        for idd in list(nu):
+            non_unique[idd].append(key)
+   
+    for key in non_unique: # unique ids 
+        pr = None 
+        hi = 0
+        for pathrow in non_unique[key]: # path/rows corresponding to non
+            # unique features
+            if len(unique[pathrow]) > hi:
+                pr = pathrow 
+                hi = len(unique[pathrow])
+        if pr is not None:
+            unique[pr].append(key)
 
     prefix = os.path.splitext(base_shapefile)[0]
-    for key in id_mapping:
-        if len(id_mapping[key]):
-            out = prefix + "_" + key + ".shp"
-            print("Split shapefile saving to:", os.path.join(data_directory, out))
+    for key in unique:
+        out = prefix + "_" + key + ".shp"
+        if len(unique[key]):
             with fiona.open(os.path.join(data_directory, out), 'w', **meta) as dst:
-                for feat_id in id_mapping[key]:
-                    poly = shapefile_mapping[feat_id]
-                    dst.write(poly)
-
-    return 
+                print("Split shapefile saving to:", 
+                        os.path.join(data_directory, out))
+                for feat in unique[key]:
+                    dst.write(id_mapping[feat])
 
 def get_shapefile_path_row(shapefile):
     """This function assumes that the original
     shapefile has already been split, and relies on
-    the naming convention to get the path and row."""
+    the naming convention to get the path and row.  """
     # strip extension
     # TODO: Find some way to update shapefile metadata
     shp = shapefile[-9:-4].split("_")
