@@ -1,37 +1,36 @@
 import h5py
-import glob
+from glob import glob
 import tensorflow as tf
 import numpy as np
+from shuffle_data import next_batch
 
-N_INSTANCES_IRRIGATED = 30000
-N_INSTANCES_NOT = 10000
-
-def keras_model(kernel_size):
+def keras_model(kernel_size, n_classes):
     model = tf.keras.Sequential()
     # Must define the input shape in the first layer of the neural network
     model.add(tf.keras.layers.Conv2D(filters=64, kernel_size=2, padding='same', activation='relu',
-        input_shape=(kernel_size, kernel_size, 3))) 
+        input_shape=(36, kernel_size, kernel_size))) 
     model.add(tf.keras.layers.MaxPooling2D(pool_size=2))
     model.add(tf.keras.layers.Dropout(0.3))
     model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=2, padding='same', activation='relu'))
-    model.add(tf.keras.layers.MaxPooling2D(pool_size=2)) model.add(tf.keras.layers.Dropout(0.3))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=2)) 
+    model.add(tf.keras.layers.Dropout(0.3))
     model.add(tf.keras.layers.Flatten())
     model.add(tf.keras.layers.Dense(256, activation='relu'))
     model.add(tf.keras.layers.Dropout(0.5))
-    model.add(tf.keras.layers.Dense(2, activation='softmax'))
+    model.add(tf.keras.layers.Dense(n_classes, activation='softmax'))
     # Take a look at the model summary
     model.summary()
     return model
 
-def train_model(kernel_size):
+def train_model(kernel_size, features, labels, n_classes=4):
 
     from sklearn.model_selection import train_test_split
 
     x_train, x_test, y_train, y_test = train_test_split(features, labels,
             test_size=0.1, random_state=42)
 
-    model = keras_model(kernel_size)
-    model.compile(loss='binary_crossentropy',
+    model = keras_model(kernel_size, n_classes)
+    model.compile(loss='categorical_crossentropy',
                  optimizer='adam',
                  metrics=['accuracy'])
     model.fit(x_train,
@@ -46,56 +45,42 @@ def train_model(kernel_size):
 def make_one_hot(labels, n_classes):
     ret = np.zeros((len(labels), n_classes))
     for i, e in enumerate(labels):
-        ret[i, e] = 1
+        ret[i, int(e)] = 1
     return ret
 
-def generate_labels_and_features(filename, class_code, index_1, index_2, n_classes=2):
-    # approach:
-    # I have n files containing training data on disk.
-    # Loop through all classes and sample a subset
-    # of each file. This actually shouldn't be that hard.
-    # Then, shuffle the data (in memory?) and split it
-    # into training and test sets. 
-    with h5py.File(filename, 'r') as f:
-        data = f['cc:'+str(class_code)]
-    labels = [class_code]*(index_2-index_1)
-    labels = make_one_hot(labels, n_classes=n_classes)
 
-    return data[index_1:index_2, :, :, :] # this is an assumption about the shape of the data
+def get_next_batch(file_map, n_classes=4):
+    features, labels = next_batch(file_map)
+    labels = make_one_hot(labels, n_classes)
+    return features, labels
 
-def shuffle_data(training_directory, suffix='.h5'):
-    # Make piles, and shuffle that way.  
-    # Reference that website.  
-    # approach:
-    # for each (h5) file in directory:
-    #  open it, and make piles with it (in parallel)
-    #  then combine each litle pile into a large pile, 
-    #  but iterate through the littler piles when
-    #  creating the big pile 
-    return None
+def is_it(f, targets):
+    for e in targets:
+        if e in f and 'sample' not in f:
+            return True
+    return False
+
+
+if __name__ == '__main__':
+    train_dir = 'training_data/'
+    irrigated = ['MT_Sun_River_2013', "MT_Huntley_Main_2013"]
+    other = ['other']
+    fallow = ['Fallow']
+    forest = ['Forrest']
+    n = 10000
+    irr = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, irrigated)], 'instances':n}
+    fall = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, fallow)], 'instances':n}
+    forest_ = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, forest)], 'instances':n}
+    other_ = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, other)], 'instances':n}
     
+    #fall = [f for f in glob(shp_dir) if is_it(f, fallow)]
+    #forest_ = [f for f in glob(shp_dir) if is_it(f, forest)]
+    #other_ = [f for f in glob(shp_dir) if is_it(f, other)]
 
+    file_map = {0: irr, 1:fall, 2:forest_, 3:other_}
 
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    for i in range(2):
+        features, labels = get_next_batch(file_map)
+        print(features.shape, labels.shape)
+        train_model(41, features, labels)
 
