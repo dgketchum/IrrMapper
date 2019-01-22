@@ -81,7 +81,7 @@ def required_points(shapefile, total_area, total_instances):
     frac = area / total_area
     return int(total_instances * frac)
 
-def extract_data(data_directory, names, n_instances):
+def extract_data(data_directory, names, n_instances, class_code):
 
     def is_it(f, names):
         for e in names:
@@ -94,9 +94,8 @@ def extract_data(data_directory, names, n_instances):
         if is_it(f, names) and 'sample' not in f:
             req_points = required_points(f, total_area, n_instances)
             ff = os.path.basename(f)
-            create_training_data(ff, data_directory, image_directory, 0, 41,
-                    req_points, train_dir, 2013, raster_dir)
-
+            create_training_data(ff, data_directory, image_directory,
+                    class_code, 57, req_points, train_dir, 2013, raster_dir) 
     return None
 
 def go(f):
@@ -124,15 +123,17 @@ if __name__ == "__main__":
     fnames = [f for f in glob.glob(shp_dir + "*.shp") if 'reproj' in f]
     print(fnames)
     # print(os.cpu_count())
-    instances = [1e5]*4
+    instances = [50000, 1e5, 1e5, 1e5]
+    class_code = [0, 1, 2, 3]
     dd = [data_directory]*4
     names = [irrigated, other, fallow, forest]
     # note: the extraction of training data took 6h 29m
-    #with Pool(processes=None) as pool:
-    #    pool.starmap(extract_data, zip(dd, names, instances))
+    extract_data(dd[0], fallow, 1e5, 2)
+#    with Pool(8) as pool:
+#        pool.starmap(extract_data, zip(dd, names, instances, class_code))
 
-    with Pool(os.cpu_count()) as pool:
-        pool.map(go, fnames)
+    #with Pool(os.cpu_count()) as pool:
+    #    pool.map(go, fnames)
      # 12 minutes to 5 and a half.
 
 

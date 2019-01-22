@@ -107,7 +107,7 @@ class PTASingleShapefile:
         return None
     
     def _dump_data(self, data):
-        n = os.path.basename(self.shapefile_path)[:-4] + "_train.h5"
+        n = "class_{}_train.h5".format(self.class_code)
         if self.data_filename is None:
             to_save = os.path.join(self.training_directory, n)
         else:

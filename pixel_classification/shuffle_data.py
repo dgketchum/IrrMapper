@@ -2,18 +2,21 @@ import h5py
 from collections import defaultdict
 import numpy as np
 
-random_indices = np.random.choice(total_instances, total_instances, repeat=False)
-
 def one_epoch(filenames, random_indices, class_code, chunk_size=5000):
     ''' Filename is the name of the data file,
         instances the number of instances that can fit in memory.
     '''
     if not isinstance(filenames, list):
         filenames = [filenames]
-    for i in range(0, indices.shape[0], chunk_size):
+    for i in range(0, random_indices.shape[0], chunk_size):
         ret = load_sample(filenames, random_indices[i:i+chunk_size])
-        yield ret
+        yield ret, make_one_hot(np.ones((ret.shape[0]))*class_code, 4)
 
+def make_one_hot(labels, n_classes):
+    ret = np.zeros((len(labels), n_classes))
+    for i, e in enumerate(labels):
+        ret[i, int(e)] = 1
+    return ret
 
 def load_sample(fnames, random_indices):
     ''' Fnames: filenames of all files of class_code class

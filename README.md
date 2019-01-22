@@ -19,3 +19,4 @@ Then get the latest gdal:
 Then the latest master branch of rasterio:
 
 ```pip install git+https://github.com/mapbox/rasterio.git```
+Don't install latest version of rasterio. Install rasterio version=1.0a12. 
