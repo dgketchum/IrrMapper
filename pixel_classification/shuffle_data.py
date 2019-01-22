@@ -1,29 +1,24 @@
 import h5py
+from collections import defaultdict
 import numpy as np
 
-def next_batch(file_map):
-    '''File map: {class_code:{files:[], instances:int}}'''
-    features = [] 
-    labels = []
-    for class_code in file_map:
-        files = file_map[class_code]['files']
-        n_instances = file_map[class_code]['instances']
-        f = load_sample(n_instances, files)
-        l = np.ones(f.shape[0])*class_code
-        labels.append(l)
-        features.append(f)
-    feat_flat = [itm for sublist in features for itm in sublist]
-    labels_flat = [itm for sublist in labels for itm in sublist]
-    labels_flat = np.asarray(labels_flat)
-    features_flat = np.asarray(feat_flat)
-    return features_flat, labels_flat
+random_indices = np.random.choice(total_instances, total_instances, repeat=False)
 
-def load_sample(required_instances, fnames):
+def one_epoch(filenames, random_indices, class_code, chunk_size=5000):
+    ''' Filename is the name of the data file,
+        instances the number of instances that can fit in memory.
+    '''
+    if not isinstance(filenames, list):
+        filenames = [filenames]
+    for i in range(0, indices.shape[0], chunk_size):
+        ret = load_sample(filenames, random_indices[i:i+chunk_size])
+        yield ret
+
+
+def load_sample(fnames, random_indices):
     ''' Fnames: filenames of all files of class_code class
     required_instances: number of instances of training data required '''
-    total_instances, num_files = get_total_instances(fnames)
-    random_sample = np.random.choice(total_instances, required_instances, replace=False)
-    random_sample.sort()
+    random_indices.sort()
     ls = []
     last = 0
     offset = 0
@@ -33,15 +28,18 @@ def load_sample(required_instances, fnames):
                 if hdf5[key].shape[0]:
                     last = offset
                     offset += hdf5[key].shape[0] 
-                    indices = random_sample[random_sample < offset]
+                    indices = random_indices[random_indices < offset]
                     indices = indices[indices > last] 
                     try:
                         ls.append(hdf5[key][indices-last, :, :, :])
                     except UnboundLocalError as e:
+                        # When the index array is empty. This is
+                        # an unhandled exception in the hdf5 library
                         pass
 
     flattened = [e for sublist in ls for e in sublist]
     return np.asarray(flattened)
+
 
 def get_total_instances(fnames):
     total_instances = 0

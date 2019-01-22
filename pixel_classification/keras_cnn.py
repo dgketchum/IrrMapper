@@ -1,8 +1,9 @@
 import h5py
 from glob import glob
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 import numpy as np
-from shuffle_data import next_batch
+from shuffle_data import one_epoch
 
 def keras_model(kernel_size, n_classes):
     model = tf.keras.Sequential()
@@ -20,34 +21,33 @@ def keras_model(kernel_size, n_classes):
     model.add(tf.keras.layers.Dense(n_classes, activation='softmax'))
     # Take a look at the model summary
     model.summary()
-    return model
-
-def train_model(kernel_size, features, labels, n_classes=4):
-
-    from sklearn.model_selection import train_test_split
-
-    x_train, x_test, y_train, y_test = train_test_split(features, labels,
-            test_size=0.1, random_state=42)
-
-    model = keras_model(kernel_size, n_classes)
     model.compile(loss='categorical_crossentropy',
                  optimizer='adam',
                  metrics=['accuracy'])
+    return model
+
+def train_next_batch(model, features, labels, n_classes=4, epochs=5, batch_size=128):
+
+    # shuffle the labels again
+    x_train, x_test, y_train, y_test = train_test_split(features, labels,
+            test_size=0.1, random_state=42)
     model.fit(x_train,
              y_train,
-             batch_size=128,
-             epochs=10,
+             batch_size=batch_size,
+             epochs=epochs,
              validation_data=(x_test, y_test))
-    score = model.evaluate(x_test, y_test, verbose=0)
-    print('\n', 'Test accuracy:', score[1])
     return model
+
+
+def evaluate_model(features, labels):
+    score = model.evaluate(features, labels, verbose=0)
+    print('\n', 'Test accuracy:', score[1], '\n')
 
 def make_one_hot(labels, n_classes):
     ret = np.zeros((len(labels), n_classes))
     for i, e in enumerate(labels):
         ret[i, int(e)] = 1
     return ret
-
 
 def get_next_batch(file_map, n_classes=4):
     features, labels = next_batch(file_map)
@@ -63,24 +63,21 @@ def is_it(f, targets):
 
 if __name__ == '__main__':
     train_dir = 'training_data/'
-    irrigated = ['MT_Sun_River_2013', "MT_Huntley_Main_2013"]
-    other = ['other']
-    fallow = ['Fallow']
-    forest = ['Forrest']
-    n = 10000
-    irr = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, irrigated)], 'instances':n}
-    fall = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, fallow)], 'instances':n}
-    forest_ = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, forest)], 'instances':n}
-    other_ = {'files':[f for f in glob(train_dir + "*.h5") if is_it(f, other)], 'instances':n}
     
-    #fall = [f for f in glob(shp_dir) if is_it(f, fallow)]
-    #forest_ = [f for f in glob(shp_dir) if is_it(f, forest)]
-    #other_ = [f for f in glob(shp_dir) if is_it(f, other)]
+    n_epochs = 40 
+    model = keras_model(41, 4)
 
-    file_map = {0: irr, 1:fall, 2:forest_, 3:other_}
+    for i in range(n_epochs):
 
-    for i in range(2):
-        features, labels = get_next_batch(file_map)
-        print(features.shape, labels.shape)
-        train_model(41, features, labels)
+        random_indices = np.random.choice(total_instances, total_instances, repeat=False)
+
+
+
+        if i > 0:
+            evaluate_model(features, labels)
+
+        train_next_batch(model, features, labels, epochs=1)
+
+
+
 
