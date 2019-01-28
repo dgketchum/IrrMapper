@@ -122,7 +122,7 @@ class Classifier(object):
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
-        stack[stack == 0.] = np.nan
+        stack[stack == 0.] = np.nan # for "borders"
 
         if mask_path:
             ms = self.mask.shape
