@@ -1,4 +1,5 @@
 import h5py
+import os
 from glob import glob
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
@@ -30,7 +31,7 @@ def train_next_batch(model, features, labels, n_classes=4, epochs=5, batch_size=
 
     # shuffle the labels again
     x_train, x_test, y_train, y_test = train_test_split(features, labels,
-            test_size=0.1, random_state=42)
+            test_size=0.01, random_state=42)
     model.fit(x_train,
              y_train,
              batch_size=batch_size,
@@ -80,30 +81,40 @@ def generate():
         d4, l4 = ot[0], ot[1]
         features = np.concatenate((d1, d2, d3, d4))
         labels = np.concatenate((l1, l2, l3, l4))
-        yield (features, labels)
+        p = np.random.permutation(features.shape[0])
+        yield (features[p], labels[p])
 
 if __name__ == '__main__':
     train_dir = 'training_data/'
-    n_epochs = 10 
-    model = keras_model(57, 4)
-#     model.fit_generator(generate(), epochs=2, use_multiprocessing=True, steps_per_epoch=25)
+    model_dir = 'models/'
+    n_epochs = 1
+    kernel_size = 41
+    model = keras_model(kernel_size, 4) # kernel and n_classes
+    model.fit_generator(generate(), steps_per_epoch=200, epochs=2, verbose=1,
+            use_multiprocessing=True)
+   # possible: fit_generator from keras.
+    # model_name = 'model_kernel_{}'.format(kernel_size)
+    # total_instances = 100000
+    # for i in range(n_epochs):
+    #     random_indices = np.random.choice(total_instances, total_instances, replace=False)
+    #     irr = one_epoch(fnames(0), random_indices, 0)
+    #     fallow = one_epoch(fnames(1), random_indices, 1)
+    #     forest = one_epoch(fnames(2), random_indices, 2)
+    #     other = one_epoch(fnames(3), random_indices, 3)
 
-    total_instances = 100000
-    for i in range(n_epochs):
-        random_indices = np.random.choice(total_instances, total_instances, replace=False)
-        irr = one_epoch(fnames(0), random_indices, 0)
-        fallow = one_epoch(fnames(1), random_indices, 1)
-        forest = one_epoch(fnames(2), random_indices, 2)
-        other = one_epoch(fnames(3), random_indices, 3)
+    #     for irr, fall, fo, ot in zip(irr, fallow, forest, other):
+    #         d1, l1 = irr[0], irr[1]
+    #         d2, l2 = fall[0], fall[1]
+    #         d3, l3 = fo[0], fo[1]
+    #         d4, l4 = ot[0], ot[1]
+    #         features = np.concatenate((d1, d2, d3, d4))
+    #         labels = np.concatenate((l1, l2, l3, l4))
+    #         train_next_batch(model, features, labels, epochs=1)
 
-        for irr, fall, fo, ot in zip(irr, fallow, forest, other):
-            d1, l1 = irr[0], irr[1]
-            d2, l2 = fall[0], fall[1]
-            d3, l3 = fo[0], fo[1]
-            d4, l4 = ot[0], ot[1]
-            features = np.concatenate((d1, d2, d3, d4))
-            labels = np.concatenate((l1, l2, l3, l4))
-            # labels = make_one_hot(labels, 4)
-            train_next_batch(model, features, labels, epochs=1)
+    #     print("\nCustom epoch {}/{}\n".format(i+1, n_epochs))
 
-        print("\nCustom epoch {}/{}\n".format(i, n_epochs))
+    # model_path = os.path.join(model_dir, model_name)
+    # if not os.path.isfile(model_path):
+    #     model.save(model_path)
+
+

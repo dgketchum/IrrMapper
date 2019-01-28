@@ -35,7 +35,7 @@ from shapely.geometry import shape, Point, mapping
 from shapely.ops import unary_union
 loc = os.path.dirname(__file__)
 WRS_2 = loc.replace('pixel_classification',
-        os.path.join('spatial_data', 'wrs2_descending.shp'))
+        os.path.join('spatial_data', 'wrs2_usa_descending.shp'))
 
 '''
 This script contains a class meant to gather data from rasters using a polygon shapefile.
@@ -57,7 +57,7 @@ class PTASingleShapefile:
 
     def __init__(self, master_raster=None, shapefile_path=None, class_code=None, path=None,
             row=None, masked_raster=None, training_directory=None, paths_map=None, masks=None,
-            instances=None, overwrite_points=None, kernel_size=None, data_filename=None):
+            instances=None, sz=1000, overwrite_points=None, kernel_size=None, data_filename=None):
         self.shapefile_path = shapefile_path
         self.path = path
         self.object_id = 0
@@ -70,6 +70,7 @@ class PTASingleShapefile:
         self.class_code = class_code
         self.crs = self._get_crs()
         self.m_instances = instances
+        self.sz = sz
         self.master_raster = master_raster
         self.masked_raster = masked_raster
         if masked_raster is not None:
@@ -113,17 +114,15 @@ class PTASingleShapefile:
         else:
             to_save = self.data_filename
         with h5py.File(to_save, 'a') as f:
-            dset = f.create_dataset("cc:{}:{}".format(self.class_code,
+            pref = os.path.basename(self.shapefile_path)
+            dset = f.create_dataset("{}_{}".format(pref,
                 str(datetime.now())), data=data)
 
     def training_data_from_master_raster(self):
 
         ofs = self.kernel_size // 2
-        # Query how much memory I have left?
-        sz = 5000 # some heuristic that indicates when I run out of memory
-
+        sz = self.sz # some heuristic that indicates when I run out of memory
         tmp_arr = []
-
         with rasopen(self.master_raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             affine = rsrc.transform
@@ -135,6 +134,7 @@ class PTASingleShapefile:
                 qq = asarray(tmp_arr)
                 del tmp_arr
                 self._dump_data(qq)
+                del qq
                 tmp_arr = []
 
             x, y = self._geo_point_to_projected_coords(row['X'], row['Y'])
@@ -151,6 +151,8 @@ class PTASingleShapefile:
             print("Writing to disk...") 
             qq = asarray(tmp_arr)
             self._dump_data(qq)
+            del qq
+            del tmp_arr
 
     def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.

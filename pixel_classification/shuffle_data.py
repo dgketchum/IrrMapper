@@ -2,9 +2,9 @@ import h5py
 from collections import defaultdict
 import numpy as np
 
-def one_epoch(filenames, random_indices, class_code, chunk_size=5000):
+def one_epoch(filenames, random_indices, class_code, chunk_size=500):
     ''' Filename is the name of the data file,
-        instances the number of instances that can fit in memory.
+        chunk_size the number of instances that can fit in memory.
     '''
     if not isinstance(filenames, list):
         filenames = [filenames]

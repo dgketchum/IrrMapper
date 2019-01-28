@@ -1,6 +1,7 @@
 import warnings
 import glob
 import os
+import gc
 from  multiprocessing import Pool
 from numpy import save as nsave
 from compose_array_single_shapefile import PTASingleShapefile
@@ -9,7 +10,7 @@ from shapely.geometry import shape
 from data_utils import download_images, get_shapefile_path_row, split_shapefile, create_master_raster, create_master_masked_raster
 
 def create_training_data(shapefile, shapefile_directory, image_directory, class_code,
-        kernel_size, instances, training_directory, year, raster_directory, save=True):
+        kernel_size, instances, training_directory, year, raster_directory, chunk_size=2000, save=True):
 
     p, r = get_shapefile_path_row(shapefile) 
     suff = str(p) + '_' + str(r) + "_" + str(year)
@@ -23,11 +24,6 @@ def create_training_data(shapefile, shapefile_directory, image_directory, class_
     else:
         ims = download_images(landsat_dir, p, r, year, satellite)
 
-    # print("Paths:", len(ims.paths_map))
-    if len(ims.paths_map) > 36:
-        print("AAAAAAAHHHH")
-        print(len(ims.paths_map), shapefile)
-
     ms = create_master_raster(ims, p, r, year, raster_directory)
     mms =  create_master_masked_raster(ims, p, r, year, raster_directory)
 
@@ -35,11 +31,9 @@ def create_training_data(shapefile, shapefile_directory, image_directory, class_
     pta = PTASingleShapefile(shapefile_path=shp_path, master_raster=ms,
             training_directory=training_directory, overwrite_points=False, class_code=class_code,
             path=p, row=r, paths_map=ims.paths_map, masks=ims.masks,
-            instances=instances, kernel_size=kernel_size)
+            instances=instances, kernel_size=kernel_size, sz=chunk_size)
 
     pta.extract_sample()
-
-
 
 def get_all_shapefiles(to_match, year, data_directory, irrigated):
     ''' Get all shapefiles in same p/r as to_match '''
@@ -81,7 +75,7 @@ def required_points(shapefile, total_area, total_instances):
     frac = area / total_area
     return int(total_instances * frac)
 
-def extract_data(data_directory, names, n_instances, class_code):
+def extract_data(data_directory, names, n_instances, class_code, kernel_size):
 
     def is_it(f, names):
         for e in names:
@@ -95,8 +89,8 @@ def extract_data(data_directory, names, n_instances, class_code):
             req_points = required_points(f, total_area, n_instances)
             ff = os.path.basename(f)
             create_training_data(ff, data_directory, image_directory,
-                    class_code, 57, req_points, train_dir, 2013, raster_dir) 
-    return None
+                    class_code, kernel_size, req_points, train_dir, 2013, raster_dir) 
+        gc.collect()
 
 def go(f):
     data_directory = 'split_shapefiles_west/'
@@ -121,16 +115,22 @@ if __name__ == "__main__":
 
     shp_dir = '/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup/'
     fnames = [f for f in glob.glob(shp_dir + "*.shp") if 'reproj' in f]
-    print(fnames)
-    # print(os.cpu_count())
     instances = [50000, 1e5, 1e5, 1e5]
+    i2 = [1e5, 1e5]
     class_code = [0, 1, 2, 3]
-    dd = [data_directory]*4
-    names = [irrigated, other, fallow, forest]
+    c2 = [2, 3]
+    dd = [data_directory]*2
+    dd2 = dd.copy()
+    ks = [41]*2
+    ks2 = ks.copy()
+    names = [irrigated, other] 
+    names2 = [fallow, forest]
     # note: the extraction of training data took 6h 29m
-    extract_data(dd[0], fallow, 1e5, 2)
-#    with Pool(8) as pool:
-#        pool.starmap(extract_data, zip(dd, names, instances, class_code))
+    # extract_data(dd[0], fallow, 1e5, 2, 41)
+    with Pool() as pool:
+        pool.starmap(extract_data, zip(dd, names, instances, class_code, ks))
+    with Pool() as pool:
+        pool.starmap(extract_data, zip(dd2, names2, i2, c2, ks2))
 
     #with Pool(os.cpu_count()) as pool:
     #    pool.map(go, fnames)
