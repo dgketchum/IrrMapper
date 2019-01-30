@@ -149,6 +149,24 @@ def download_images(project_directory, path, row, year, satellite=8):
     return image_stack
 
 
+def construct_tree(wrs2):
+    from sklearn.neighbors import KDTree
+    centroids = []
+    path_rows = [] # a mapping
+    features = []
+    for feature in wrs2:
+        tile = shape(feature['geometry'])
+        centroid = tile.centroid
+        centroids.append(centroid)
+        z = feature['properties']
+        p = z['PATH']
+        r = z['ROW']
+        path_rows.append(str(p) + "_" + str(r))
+        features.append(feature)
+
+    tree = KDTree(centroids)
+    return tree, path_rows, features
+
 def get_pr(poly, wrs2):
     ls = []
     for feature in wrs2:
@@ -160,13 +178,31 @@ def get_pr(poly, wrs2):
             ls.append(str(p) + "_" + str(r))
     return ls
 
+def get_pr_subset(poly, tiles):
+    ls = []
+    for feature in tiles:
+        tile = shape(feature['geometry'])
+        if poly.within(tile):
+            z = feature['properties']
+            p = z['PATH']
+            r = z['ROW']
+            ls.append(str(p) + "_" + str(r))
+    return ls
+
 def split_shapefile(base, base_shapefile, data_directory):
     """ Shapefiles may deal with data over multiple path/rows.
-    Data directory: where the split shapefiles will be saved."""
+    Data directory: where the split shapefiles will be saved.
+    base: directory containing base_shapefile."""
     path_row = defaultdict(list) 
     id_mapping = {}
     wrs2 = fiona.open('../spatial_data/wrs2_descending_usa.shp', 'r')
+    tree, path_rows, features = construct_tree(wrs2)
+    wrs2.close()
 
+
+
+    import time
+    start = time.time()
     with fiona.open(os.path.join(base, base_shapefile), "r") as src:
         meta = deepcopy(src.meta)
         for feat in src:
@@ -178,7 +214,11 @@ def split_shapefile(base, base_shapefile, data_directory):
                 path_row[p].append(idd)
 
     wrs2.close()
+    print(time.time() - start)
 
+    start = time.time()
+    # TODO: Solve this more efficiently.
+    # DOUBLE TODO: Solve this more efficiently.
     # I have all path/rows and their corresponding features
     # I need to figure out the unique features in each path row.
     # How should I treat the non-unique features?
@@ -188,11 +228,11 @@ def split_shapefile(base, base_shapefile, data_directory):
     # unique set and for each non-unique feature 
     # place it in the path/row with the greatest number of
     # unique points. 
-    non_unique = defaultdict(list)
+    non_unique_ids = defaultdict(list)
     unique = defaultdict(list)
     for key in path_row:
         ls = path_row[key] # all features in a given path/row
-        placeholder = ls
+        placeholder = ls.copy()
         for key1 in path_row:
             if key != key1:
                 ls1 = path_row[key1]
@@ -201,24 +241,35 @@ def split_shapefile(base, base_shapefile, data_directory):
                 # features present in placeholder that are not 
                 # present in ls1; i.e. unique keys
         unique[key] = list(placeholder)
-        nu = set(ls) - set(placeholder) # all features present
-        # in ls that are not present in placeholder (non-unique)
-        for idd in list(nu):
-            non_unique[idd].append(key)
+        if len(ls) != len(placeholder): 
+            nu = set(ls) - set(placeholder) # all features present in ls that are not present in placeholder (non-unique)
+            for idd in list(nu):
+                non_unique_ids[idd].append(key)
    
-    for key in non_unique: # unique ids 
+    print(time.time() - start)
+    start = time.time()
+    match_key = []
+    for key in non_unique_ids: # unique ids 
         pr = None 
         hi = 0
-        for pathrow in non_unique[key]: # path/rows corresponding to non
+        for pathrow in non_unique_ids[key]: # path/rows corresponding to non
             # unique features
             if len(unique[pathrow]) > hi:
                 pr = pathrow 
                 hi = len(unique[pathrow])
+
         if pr is not None:
             unique[pr].append(key)
+        else:
+            choice = non_unique_ids[key].sort()
+            unique[choice].append(key)
 
+    print(time.time() - start)
     prefix = os.path.splitext(base_shapefile)[0]
     for key in unique:
+        if key is None:
+            print(key, unique[key])
+            continue
         out = prefix + "_" + key + ".shp"
         if len(unique[key]):
             with fiona.open(os.path.join(data_directory, out), 'w', **meta) as dst:
@@ -238,7 +289,3 @@ def get_shapefile_path_row(shapefile):
     
 if __name__ == "__main__":
     pass
-    # base = "/home/thomas/IrrigationGIS/western_states_irrgis/MT/"
-    # base_shapefile = "MT_Huntley_Main_2013_3728.shp"
-    # data_directory = "shapefile_data/"
-    # split_shapefile(base, base_shapefile, data_directory)
