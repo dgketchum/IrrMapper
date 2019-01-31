@@ -6,13 +6,12 @@ import fiona
 from lxml import html
 from requests import get
 from copy import deepcopy
-from numpy import zeros
-import re
+from numpy import zeros, asarray, array, reshape
 from rasterio import float32, open as rasopen
 from prepare_images import ImageStack
+from sklearn.neighbors import KDTree
 import sat_image
 
-WRS_2 = '../spatial_data/wrs2_descending.shp' 
 
 def create_master_masked_raster(image_stack, path, row, year, raster_directory):
     masks = image_stack.masks
@@ -41,9 +40,6 @@ def create_master_masked_raster(image_stack, path, row, year, raster_directory):
             try:
                 stack[i, :, :] = arr
             except ValueError: 
-                import pprint
-                pprint.pprint(first_geo)
-                # error was thrown here b/c source raster didn't have crs
                 arr = sat_image.warped_vrt.warp_single_image(mask_raster, first_geo)
                 stack[i, :, :] = arr
 
@@ -100,36 +96,6 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
 
     return pth
 
-
-def get_path_row(lat, lon):
-    """
-    :param lat: Latitude float
-    :param lon: Longitude float
-            'convert_pr_to_ll' [path, row to coordinates]
-    :return: lat, lon tuple or path, row tuple
-    """
-    conversion_type = 'convert_ll_to_pr'
-    base = 'https://landsat.usgs.gov/landsat/lat_long_converter/tools_latlong.php'
-    unk_number = 1508518830987
-
-    full_url = '{}?rs={}&rsargs[]={}&rsargs[]={}&rsargs[]=1&rsrnd={}'.format(base,
-                                                                             conversion_type,
-                                                                             lat, lon,
-                                                                             unk_number)
-    r = get(full_url)
-    tree = html.fromstring(r.text)
-
-    # remember to view source html to build xpath
-    # i.e. inspect element > network > find GET with relevant PARAMS
-    # > go to GET URL > view source HTML
-    p_string = tree.xpath('//table/tr[1]/td[2]/text()')
-    path = int(re.search(r'\d+', p_string[0]).group())
-
-    r_string = tree.xpath('//table/tr[1]/td[4]/text()')
-    row = int(re.search(r'\d+', r_string[0]).group())
-
-    return path, row
-
 def get_shapefile_lat_lon(shapefile):
     with fiona.open(shapefile, "r") as src:
         minx, miny, maxx, maxy = src.bounds
@@ -137,7 +103,6 @@ def get_shapefile_lat_lon(shapefile):
         lonc = (maxx + minx) / 2
 
     return latc, lonc 
-
 
 def download_images(project_directory, path, row, year, satellite=8):
 
@@ -148,24 +113,22 @@ def download_images(project_directory, path, row, year, satellite=8):
     # a cloud mask.
     return image_stack
 
-
-def construct_tree(wrs2):
-    from sklearn.neighbors import KDTree
+def construct_kdtree(wrs2):
     centroids = []
     path_rows = [] # a mapping
     features = []
     for feature in wrs2:
         tile = shape(feature['geometry'])
-        centroid = tile.centroid
-        centroids.append(centroid)
+        centroid = tile.centroid.coords[0]
+        centroids.append([centroid[0], centroid[1]])
         z = feature['properties']
         p = z['PATH']
         r = z['ROW']
         path_rows.append(str(p) + "_" + str(r))
         features.append(feature)
 
-    tree = KDTree(centroids)
-    return tree, path_rows, features
+    tree = KDTree(asarray(centroids))
+    return tree, asarray(path_rows), asarray(features)
 
 def get_pr(poly, wrs2):
     ls = []
@@ -190,33 +153,36 @@ def get_pr_subset(poly, tiles):
     return ls
 
 def split_shapefile(base, base_shapefile, data_directory):
-    """ Shapefiles may deal with data over multiple path/rows.
+    """Previous method took ~25 minutes to get all path/rows.
+    Now, with kdtree, 25 seconds.
+    Shapefiles may deal with data over multiple path/rows.
     Data directory: where the split shapefiles will be saved.
     base: directory containing base_shapefile."""
     path_row = defaultdict(list) 
     id_mapping = {}
     wrs2 = fiona.open('../spatial_data/wrs2_descending_usa.shp', 'r')
-    tree, path_rows, features = construct_tree(wrs2)
+    tree, path_rows, features = construct_kdtree(wrs2)
     wrs2.close()
 
-
-
-    import time
-    start = time.time()
+    cent_arr = array([0, 0])
     with fiona.open(os.path.join(base, base_shapefile), "r") as src:
         meta = deepcopy(src.meta)
         for feat in src:
             idd = feat['id']
             id_mapping[idd] = feat
             poly = shape(feat['geometry'])
-            prs = get_pr(poly, wrs2)
+            centroid = poly.centroid.coords[0]
+            cent_arr[0] = centroid[0]
+            cent_arr[1] = centroid[1]
+            centroid = cent_arr.reshape(1, -1)
+            dist, ind = tree.query(centroid, k=10)
+            tiles = features[ind[0]]
+            prs = get_pr_subset(poly, tiles)
             for p in prs:
                 path_row[p].append(idd)
 
     wrs2.close()
-    print(time.time() - start)
 
-    start = time.time()
     # TODO: Solve this more efficiently.
     # DOUBLE TODO: Solve this more efficiently.
     # I have all path/rows and their corresponding features
@@ -246,8 +212,6 @@ def split_shapefile(base, base_shapefile, data_directory):
             for idd in list(nu):
                 non_unique_ids[idd].append(key)
    
-    print(time.time() - start)
-    start = time.time()
     match_key = []
     for key in non_unique_ids: # unique ids 
         pr = None 
@@ -261,10 +225,11 @@ def split_shapefile(base, base_shapefile, data_directory):
         if pr is not None:
             unique[pr].append(key)
         else:
-            choice = non_unique_ids[key].sort()
+            choice = non_unique_ids[key]
+            choice.sort()
+            choice = choice[0]
             unique[choice].append(key)
 
-    print(time.time() - start)
     prefix = os.path.splitext(base_shapefile)[0]
     for key in unique:
         if key is None:

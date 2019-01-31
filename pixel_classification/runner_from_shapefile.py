@@ -127,13 +127,14 @@ if __name__ == "__main__":
     names2 = [fallow, forest]
     # note: the extraction of training data took 6h 29m
     # extract_data(dd[0], fallow, 1e5, 2, 41)
-    with Pool() as pool:
-        pool.starmap(extract_data, zip(dd, names, instances, class_code, ks))
-    with Pool() as pool:
-        pool.starmap(extract_data, zip(dd2, names2, i2, c2, ks2))
+    # with Pool() as pool:
+    #     pool.starmap(extract_data, zip(dd, names, instances, class_code, ks))
+    # with Pool() as pool:
+    #     pool.starmap(extract_data, zip(dd2, names2, i2, c2, ks2))
 
-    #with Pool(os.cpu_count()) as pool:
+    fnames = [f for f in glob.glob(shp_dir + "*.shp") if 'reproj' in f and 'irri' in f and 'un' not
+            in f]
+    go(fnames[0])
+    #with Pool() as pool:
     #    pool.map(go, fnames)
-     # 12 minutes to 5 and a half.
-
-
+    # 12 minutes to 5 and a half.

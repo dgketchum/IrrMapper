@@ -102,10 +102,6 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
     if not os.path.isdir(sub):
         os.mkdir(sub)
 
-    from pixel_classification.runner_from_shapefile import get_shapefile_center
-
-    # lat, lon = get_shapefile_center('/home/thomas/IrrigationGIS/western_states_irrgis/MT/MT_3927.shp')
-
     i = ImageStack(root=sub, satellite=sat, path=path, row=row,
                    n_landsat=n_images, year=year, max_cloud_pct=70)
     i.build_evaluating()
