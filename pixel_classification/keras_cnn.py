@@ -66,55 +66,39 @@ def fnames(class_code):
 
 # Yield the concatenated training array?
 
-def generate():
-    total_instances = 100000
-    random_indices = np.random.choice(total_instances, total_instances, replace=False)
-    irr = one_epoch(fnames(0), random_indices, 0)
-    fallow = one_epoch(fnames(1), random_indices, 1)
-    forest = one_epoch(fnames(2), random_indices, 2)
-    other = one_epoch(fnames(3), random_indices, 3)
-    j = 0
-    for irr, fall, fo, ot in zip(irr, fallow, forest, other):
-        d1, l1 = irr[0], irr[1]
-        d2, l2 = fall[0], fall[1]
-        d3, l3 = fo[0], fo[1]
-        d4, l4 = ot[0], ot[1]
-        features = np.concatenate((d1, d2, d3, d4))
-        labels = np.concatenate((l1, l2, l3, l4))
-        p = np.random.permutation(features.shape[0])
-        yield (features[p], labels[p])
-
 if __name__ == '__main__':
     train_dir = 'training_data/'
     model_dir = 'models/'
     n_epochs = 1
     kernel_size = 41
-    model = keras_model(kernel_size, 4) # kernel and n_classes
-    model.fit_generator(generate(), steps_per_epoch=200, epochs=2, verbose=1,
-            use_multiprocessing=True)
-   # possible: fit_generator from keras.
-    # model_name = 'model_kernel_{}'.format(kernel_size)
-    # total_instances = 100000
-    # for i in range(n_epochs):
-    #     random_indices = np.random.choice(total_instances, total_instances, replace=False)
-    #     irr = one_epoch(fnames(0), random_indices, 0)
-    #     fallow = one_epoch(fnames(1), random_indices, 1)
-    #     forest = one_epoch(fnames(2), random_indices, 2)
-    #     other = one_epoch(fnames(3), random_indices, 3)
+    model_name = 'model_kernel_{}'.format(kernel_size)
+    total_instances = 100000
+    for i in range(n_epochs):
+        random_indices = np.random.choice(total_instances, total_instances, replace=False)
+        cs = 5342
+        irr = one_epoch(fnames(0), random_indices, 0, chunk_size=cs)
+        fallow = one_epoch(fnames(1), random_indices, 1, chunk_size=cs)
+        forest = one_epoch(fnames(2), random_indices, 2, chunk_size=cs)
+        other = one_epoch(fnames(3), random_indices, 3, chunk_size=cs)
 
-    #     for irr, fall, fo, ot in zip(irr, fallow, forest, other):
-    #         d1, l1 = irr[0], irr[1]
-    #         d2, l2 = fall[0], fall[1]
-    #         d3, l3 = fo[0], fo[1]
-    #         d4, l4 = ot[0], ot[1]
-    #         features = np.concatenate((d1, d2, d3, d4))
-    #         labels = np.concatenate((l1, l2, l3, l4))
-    #         train_next_batch(model, features, labels, epochs=1)
+        for irr, fall, fo, ot in zip(irr, fallow, forest, other):
+            d1, l1 = irr[0], irr[1]
+            print(d1.shape)
+            d2, l2 = fall[0], fall[1]
+            print(d2.shape)
+            d3, l3 = fo[0], fo[1]
+            print(d3.shape)
+            d4, l4 = ot[0], ot[1]
+            print(d4.shape)
+            #features = np.concatenate((d1, d2, d3, d4))
+            #labels = np.concatenate((l1, l2, l3, l4))
+            #train_next_batch(model, features, labels, epochs=1)
 
-    #     print("\nCustom epoch {}/{}\n".format(i+1, n_epochs))
+        print("\nCustom epoch {}/{}\n".format(i+1, n_epochs))
+        break
 
-    # model_path = os.path.join(model_dir, model_name)
-    # if not os.path.isfile(model_path):
-    #     model.save(model_path)
+    model_path = os.path.join(model_dir, model_name)
+    if not os.path.isfile(model_path):
+        model.save(model_path)
 
 

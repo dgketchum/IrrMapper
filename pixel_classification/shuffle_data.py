@@ -2,7 +2,7 @@ import h5py
 from collections import defaultdict
 import numpy as np
 
-def one_epoch(filenames, random_indices, class_code, chunk_size=500):
+def one_epoch(filenames, random_indices, class_code, chunk_size=500, n_classes=4):
     ''' Filename is the name of the data file,
         chunk_size the number of instances that can fit in memory.
     '''
@@ -10,7 +10,7 @@ def one_epoch(filenames, random_indices, class_code, chunk_size=500):
         filenames = [filenames]
     for i in range(0, random_indices.shape[0], chunk_size):
         ret = load_sample(filenames, random_indices[i:i+chunk_size])
-        yield ret, make_one_hot(np.ones((ret.shape[0]))*class_code, 4)
+        yield ret, make_one_hot(np.ones((ret.shape[0]))*class_code, n_classes)
 
 def make_one_hot(labels, n_classes):
     ret = np.zeros((len(labels), n_classes))
@@ -32,12 +32,10 @@ def load_sample(fnames, random_indices):
                     last = offset
                     offset += hdf5[key].shape[0] 
                     indices = random_indices[random_indices < offset]
-                    indices = indices[indices > last] 
+                    indices = indices[indices >= last] 
                     try:
                         ls.append(hdf5[key][indices-last, :, :, :])
                     except UnboundLocalError as e:
-                        # When the index array is empty. This is
-                        # an unhandled exception in the hdf5 library
                         pass
 
     flattened = [e for sublist in ls for e in sublist]
