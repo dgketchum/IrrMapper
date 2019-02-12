@@ -33,6 +33,7 @@ from pyproj import Proj, transform
 from rasterio import open as rasopen
 from shapely.geometry import shape, Point, mapping
 from shapely.ops import unary_union
+from data_utils import get_shapefile_path_row
 loc = os.path.dirname(__file__)
 WRS_2 = loc.replace('pixel_classification',
         os.path.join('spatial_data', 'wrs2_usa_descending.shp'))
@@ -53,6 +54,156 @@ class NoCoordinateReferenceError(Exception):
 class UnexpectedCoordinateReferenceSystemError(Exception):
     pass
 
+
+class ShapefileSamplePoints:
+
+    def __init__(self, shapefile_path=None, sample_point_directory=None, m_instances=None):
+        if sample_point_directory is None:
+            self.outfile = os.path.splitext(shapefile_path)[0]
+            self.outfile += "_sample_points.shp"
+        else:
+            self.outfile = sample_point_directory 
+        self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
+        self.m_instances = m_instances
+        self.object_id = 0
+        self.shapefile_path = shapefile_path
+        self.path, self.row = get_shapefile_path_row(shapefile_path)
+
+    def _random_points(self, coords):
+        min_x, max_x = coords[0], coords[2]
+        min_y, max_y = coords[1], coords[3]
+        x_range = linspace(min_x, max_x, num=2 * self.m_instances)
+        y_range = linspace(min_y, max_y, num=2 * self.m_instances)
+        shuffle(x_range), shuffle(y_range)
+        return x_range, y_range
+
+    def _add_entry(self, coord, val=0):
+        # TODO: Encode class_code in shapefile schema.
+        self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
+            'X': coord[0],
+            'Y': coord[1],
+            'POINT_TYPE': val},
+            ignore_index=True)
+        self.object_id += 1
+
+    def save_sample_points(self):
+
+        points_schema = {
+                'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
+                'geometry': 'Point'}
+        meta = self.tile_geometry.copy()
+        meta['schema'] = points_schema
+            
+        with fopen(self.outfile, 'w', **meta) as output:
+            for index, row in self.extracted_points.iterrows():
+                props = dict([('FID', row['FID']), ('POINT_TYPE', row['POINT_TYPE'])])
+                pt = Point(row['X'], row['Y'])
+                output.write({'properties': props,
+                    'geometry': mapping(pt)})
+        return None
+
+    def _get_polygons(self, vector):
+        with fopen(vector, 'r') as src:
+            crs = src.crs
+            if not crs:
+                raise NoCoordinateReferenceError(
+                        'Provided shapefile has no reference data.')
+                if crs['init'] != 'epsg:4326':
+                    raise UnexpectedCoordinateReferenceSystemError(
+                            'Provided shapefile should be in unprojected (geographic)'
+                            'coordinate system, i.e., WGS84, EPSG 4326, {} is not'.format(
+                                vector))
+            clipped = src.filter(mask=self.tile_bbox)
+            polys = []
+            bad_geo_count = 0
+            for feat in clipped:
+                try:
+                    geo = shape(feat['geometry'])
+                    polys.append(geo)
+                except AttributeError:
+                    bad_geo_count += 1
+
+        return polys
+
+    def create_sample_points(self, save_points=True):
+        """ Create a clipped training set from polygon shapefiles.
+
+        This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
+        to the path row provided, gets the bounding box and profile (aka meta) from
+        compose_array.get_tile_geometry, clips the training data to the landsat tile, then perform
+        s a union to reduce the number of polygon objects.
+        The dict object this uses has a template in pixel_classification.runspec.py.
+        Approach is to loop through the polygons, create a random grid of points over the
+        extent of each polygon, random shuffle order of points, loop over points, check if
+        point is within polygon, and if within, create a sample point.
+
+        If a relatively simple geometry is available, use create_negative_sample_points(), though if
+        there are > 10**4 polygons, it will probably hang on unary_union(). """
+
+        polygons = self._get_polygons(self.shapefile_path)
+        instance_count = 0
+        print("Making sample points. You have {} polygons".format(len(polygons)))
+        print("N_instances:", self.m_instances)
+
+        if len(polygons) > self.m_instances:
+            areas = zip(polygons, [x.area for x in polygons])
+            srt = sorted(areas, key=lambda x: x[1], reverse=True)
+            polygons = [x for x, y in srt[:self.m_instances]]
+
+        if not isinstance(polygons, list):
+            polygons = [polygons] # for the case of a single polygon.
+
+        positive_area = sum([x.area for x in polygons]) # the sum of all
+        # the areas.
+        class_count = 0
+
+        for i, poly in enumerate(polygons):
+            if class_count >= self.m_instances:
+                break
+            fractional_area = poly.area / positive_area # percent of
+            # total area that this polygon occupies
+            required_points = max([1, fractional_area * self.m_instances]) # how
+            # many points overall that are required to evenly
+            # sample from each polygon, based on area.
+            poly_pt_ct = 0
+            x_range, y_range = self._random_points(poly.bounds)
+            for coord in zip(x_range, y_range):
+                if instance_count >= self.m_instances:
+                    break
+                if Point(coord[0], coord[1]).within(poly): 
+                    self._add_entry(coord)
+                    poly_pt_ct += 1
+                    instance_count += 1
+                    # print(instance_count)
+                if poly_pt_ct >= required_points:
+                    break
+            class_count += poly_pt_ct
+
+        if save_points:
+            self.save_sample_points()
+
+    @property
+    def tile_bbox(self):
+        with fopen(WRS_2, 'r') as wrs:
+            for feature in wrs:
+                fp = feature['properties']
+                if fp['PATH'] == self.path and fp['ROW'] == self.row:
+                    bbox = feature['geometry']
+                    return bbox
+
+    def _get_crs(self):
+        for key, val in self.paths_map.items():
+            with rasopen(val, 'r') as src:
+                crs = src.crs
+            break
+        return crs
+
+    @property
+    def tile_geometry(self):
+        with fopen(WRS_2, 'r') as wrs:
+            wrs_meta = wrs.meta.copy()
+        return wrs_meta
+
 class PTASingleShapefile:
 
     def __init__(self, master_raster=None, shapefile_path=None, class_code=None, path=None,
@@ -72,24 +223,23 @@ class PTASingleShapefile:
         self.m_instances = instances
         self.sz = sz
         self.master_raster = master_raster
-        self.masked_raster = masked_raster
-        if masked_raster is not None:
-            print(masked_raster, "Masked raster present.")
         self.data = None
         self.kernel_size = kernel_size
         self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
 
     def extract_sample(self, save_points=True):
+        # TODO: Pare down this class' methods. 
+        # Because of the large data size, pickling output data
+        # (and therefore using a one-band at a time extraction approach)
+        # is not feasible. 
 
         out = os.path.splitext(self.shapefile_path)[0]
         out += "_sample_points.shp"
-        if os.path.isfile(out) and not self.overwrite_points:
+        if os.path.isfile(out):
             print("sample points already created")
             self._populate_array_from_points(out)
         else:
-            self.create_sample_points()
-            if save_points:
-                self.save_sample_points()
+            print("Sample points not detected at {}".format(out))
         if self.master_raster is not None:
             self.training_data_from_master_raster()
         else:
@@ -103,10 +253,6 @@ class PTASingleShapefile:
                 val = feat['properties']['POINT_TYPE']
                 self._add_entry(coords, val=val)
 
-    def _verify_point(self, x, y):
-        """ Check to see if x, y is masked. """
-        return None
-    
     def _dump_data(self, data):
         n = "class_{}_train.h5".format(self.class_code)
         if self.data_filename is None:
@@ -154,69 +300,6 @@ class PTASingleShapefile:
             del qq
             del tmp_arr
 
-    def create_sample_points(self):
-        """ Create a clipped training set from polygon shapefiles.
-
-        This complicated-looking function finds the wrs_2 descending Landsat tile corresponding
-        to the path row provided, gets the bounding box and profile (aka meta) from
-        compose_array.get_tile_geometry, clips the training data to the landsat tile, then perform
-        s a union to reduce the number of polygon objects.
-        The dict object this uses has a template in pixel_classification.runspec.py.
-        Approach is to loop through the polygons, create a random grid of points over the
-        extent of each polygon, random shuffle order of points, loop over points, check if
-        point is within polygon, and if within, create a sample point.
-
-        If a relatively simple geometry is available, use create_negative_sample_points(), though if
-        there are > 10**4 polygons, it will probably hang on unary_union(). """
-
-        polygons = self._get_polygons(self.shapefile_path)
-        instance_count = 0
-        print("Making sample points. You have {} polygons".format(len(polygons)))
-        print("N_instances:", self.m_instances)
-
-        if len(polygons) < 2:
-            warnings.warn("You have < 2 polygons in shapefile {}.  ".format(os.path.basename(self.shapefile_path), Warning))
-
-        if len(polygons) > self.m_instances:
-            areas = zip(polygons, [x.area for x in polygons])
-            srt = sorted(areas, key=lambda x: x[1], reverse=True)
-            polygons = [x for x, y in srt[:self.m_instances]]
-
-        #polygons = unary_union(polygons) # this 
-        # can be very inefficient in tse where 
-        if not isinstance(polygons, list):
-            polygons = [polygons] # for the case of a single polygon.
-
-        positive_area = sum([x.area for x in polygons]) # the sum of all
-        # the areas.
-        class_count = 0
-
-        for i, poly in enumerate(polygons):
-            if class_count >= self.m_instances:
-                break
-            fractional_area = poly.area / positive_area # percent of
-            # total area that this polygon occupies
-            required_points = max([1, fractional_area * self.m_instances]) # how
-            # many points overall that are required to evenly
-            # sample from each polygon, based on area.
-            poly_pt_ct = 0
-            # while poly_pt_ct < required_points: # I wasn't getting enough points.
-            x_range, y_range = self._random_points(poly.bounds)
-            for coord in zip(x_range, y_range):
-                if instance_count >= self.m_instances:
-                    break
-                if Point(coord[0], coord[1]).within(poly): 
-                    self._add_entry(coord, val=self.class_code)
-                    poly_pt_ct += 1
-                    instance_count += 1
-                    # print(instance_count)
-                if poly_pt_ct >= required_points:
-                    break
-
-            class_count += poly_pt_ct
-        print("Final instance count:", instance_count)
-
-
     def populate_raster_data_array(self, save=True):
 
         for key, val in self.paths_map.items():
@@ -241,7 +324,6 @@ class PTASingleShapefile:
         for key, val in data.items():
             setattr(self, key, val)
 
-
     def _purge_raster_array(self):
         data_array = deepcopy(self.extracted_points)
         target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
@@ -261,7 +343,6 @@ class PTASingleShapefile:
                     if sub_raster[self.kernel_size // 2][self.kernel_size // 2] == 0.:
                         data_array.loc[idx, :] = nan
         except TypeError as e:
-            print(sub_raster, msk, idx)
             data_array.loc[idx, :] = nan
 
         data_array = data_array.join(target_vals, how='outer')
@@ -273,23 +354,6 @@ class PTASingleShapefile:
         data_array = data_array.drop(['POINT_TYPE'],
                 axis=1, inplace=False)
         return data_array, target_vals
-
-    def _random_points(self, coords):
-        min_x, max_x = coords[0], coords[2]
-        min_y, max_y = coords[1], coords[3]
-        x_range = linspace(min_x, max_x, num=10 * self.m_instances)
-        y_range = linspace(min_y, max_y, num=10 * self.m_instances)
-        shuffle(x_range), shuffle(y_range)
-        return x_range, y_range
-
-    def _add_entry(self, coord, val=0):
-
-        self.extracted_points = self.extracted_points.append({'FID': int(self.object_id),
-            'X': coord[0],
-            'Y': coord[1],
-            'POINT_TYPE': val},
-            ignore_index=True)
-        self.object_id += 1
 
     def _geo_point_to_projected_coords(self, x, y):
 
@@ -324,29 +388,6 @@ class PTASingleShapefile:
 
         return s
 
-    def _get_polygons(self, vector):
-        with fopen(vector, 'r') as src:
-            crs = src.crs
-            if not crs:
-                raise NoCoordinateReferenceError(
-                        'Provided shapefile has no reference data.')
-                if crs['init'] != 'epsg:4326':
-                    raise UnexpectedCoordinateReferenceSystemError(
-                            'Provided shapefile should be in unprojected (geographic)'
-                            'coordinate system, i.e., WGS84, EPSG 4326, {} is not'.format(
-                                vector))
-            clipped = src.filter(mask=self.tile_bbox)
-            polys = []
-            bad_geo_count = 0
-            for feat in clipped:
-                try:
-                    geo = shape(feat['geometry'])
-                    polys.append(geo)
-                except AttributeError:
-                    bad_geo_count += 1
-
-        return polys
-
     @property
     def tile_bbox(self):
         with fopen(WRS_2, 'r') as wrs:
@@ -363,36 +404,8 @@ class PTASingleShapefile:
             break
         return crs
 
-
-    def save_sample_points(self):
-
-        points_schema = {
-                'properties': dict([('FID', 'int:10'), ('POINT_TYPE', 'int:10')]),
-                'geometry': 'Point'}
-        meta = self.tile_geometry.copy()
-        meta['schema'] = points_schema
-
-        out = os.path.splitext(self.shapefile_path)[0]
-        out += "_sample_points.shp"
-            
-        with fopen(out, 'w', **meta) as output:
-            for index, row in self.extracted_points.iterrows():
-                props = dict([('FID', row['FID']), ('POINT_TYPE', row['POINT_TYPE'])])
-                pt = Point(row['X'], row['Y'])
-                output.write({'properties': props,
-                    'geometry': mapping(pt)})
-        return None
-
     @property
     def tile_geometry(self):
         with fopen(WRS_2, 'r') as wrs:
             wrs_meta = wrs.meta.copy()
         return wrs_meta
-
-    def to_pickle(self, data, path):
-
-        with open(path, 'wb') as handle:
-            pickle.dump(data, handle, protocol=2)
-
-        return path
-

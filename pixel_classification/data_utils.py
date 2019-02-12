@@ -183,17 +183,6 @@ def split_shapefile(base, base_shapefile, data_directory):
 
     wrs2.close()
 
-    # TODO: Solve this more efficiently.
-    # DOUBLE TODO: Solve this more efficiently.
-    # I have all path/rows and their corresponding features
-    # I need to figure out the unique features in each path row.
-    # How should I treat the non-unique features?
-    # Create a set of non-unique features and their 
-    # corresponding path/row. Also create
-    # a set of unique features. Then iterate over the 
-    # unique set and for each non-unique feature 
-    # place it in the path/row with the greatest number of
-    # unique points. 
     non_unique_ids = defaultdict(list)
     unique = defaultdict(list)
     for key in path_row:
@@ -233,7 +222,6 @@ def split_shapefile(base, base_shapefile, data_directory):
     prefix = os.path.splitext(base_shapefile)[0]
     for key in unique:
         if key is None:
-            print(key, unique[key])
             continue
         out = prefix + "_" + key + ".shp"
         if len(unique[key]):

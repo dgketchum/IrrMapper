@@ -22,12 +22,12 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import mean, datetime64
 from collections import OrderedDict
-
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
-from bounds import RasterBounds
+from met.thredds import GridMet, TopoWX
+from bounds import RasterBounds, GeoBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
 from rasterio import open as rasopen, float32
@@ -87,6 +87,7 @@ class ImageStack(object):
     def build_training(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
+        self.get_precip()
         self.get_et()
         self.get_terrain()
         self.get_cdl()
@@ -129,7 +130,6 @@ class ImageStack(object):
                                output_path=self.root, max_cloud_percent=self.max_cloud)
             self.path = g.p
             self.row = g.r
-            print("Path:", self.path, "Row:", self.row)
 
         g.select_scenes(self.n)
         self.scenes = g.selected_scenes
@@ -141,6 +141,20 @@ class ImageStack(object):
         self._get_geography()
         if fmask:
             [self._make_fmask(d) for d in self.image_dirs]
+
+    def get_precip(self):
+        poly = self.landsat.get_tile_geometry()
+        print(type(poly))
+        dates = self.scenes['DATE_ACQUIRED'].values
+        # Assuming these are date strings. Or datetime objects.
+        bounds = poly.bounds
+        for date in dates:
+            print("Date", date)
+            print(type(date))
+            gm = GridMet(variable='pr', bounds=GeoBounds(wsen=bounds), date=date)
+            out = gm.get_data_subset()
+            outfile = os.path.join(self.root, 'GridMet{}.tif'.format(date))
+            gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
 
     def get_terrain(self):
         """Get digital elevation maps from amazon web services
@@ -174,7 +188,6 @@ class ImageStack(object):
         for i, d in enumerate(self.image_dirs):
             l = self.landsat_mapping[self.sat_abv](d)
             _id = l.landsat_scene_id
-            print(self.path, self.row)
             get_image(image_dir=d, parent_dir=self.root, image_exists=True, image_id=_id,
                       satellite=self.sat, path=self.path, row=self.row, image_date=l.date_acquired,
                       landsat_object=self.landsat, overwrite=False)
