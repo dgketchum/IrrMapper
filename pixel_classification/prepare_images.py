@@ -22,9 +22,11 @@ abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 from numpy import mean, datetime64
 from collections import OrderedDict
+from datetime import datetime
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
+from shapely.geometry import shape
 from sat_image.warped_vrt import warp_vrt
 from met.thredds import GridMet, TopoWX
 from bounds import RasterBounds, GeoBounds
@@ -97,6 +99,7 @@ class ImageStack(object):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et()
+        self.get_precip()
         self.get_terrain()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
@@ -144,20 +147,23 @@ class ImageStack(object):
 
     def get_precip(self):
         poly = self.landsat.get_tile_geometry()
-        print(type(poly))
         dates = self.scenes['DATE_ACQUIRED'].values
-        # Assuming these are date strings. Or datetime objects.
-        bounds = poly.bounds
+        b = poly[0]['coordinates'][0] 
+        # Change the coordinate system
+        bb = shape(poly[0]).bounds
+        # Ask david
+        bb = (60.5284298033, 29.318572496, 75.1580277851, 38.4862816432)
         for date in dates:
-            print("Date", date)
-            print(type(date))
-            gm = GridMet(variable='pr', bounds=GeoBounds(wsen=bounds), date=date)
+            d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
+            bds = GeoBounds(wsen=bb)
+            gm = GridMet(variable='pr', bounds=bds, target_profile=self.profile, date=d)
             out = gm.get_data_subset()
             outfile = os.path.join(self.root, 'GridMet{}.tif'.format(date))
             gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
 
     def get_terrain(self):
-        """Get digital elevation maps from amazon web services
+        """
+        Get digital elevation maps from amazon web services
         save in the project root directory with filenames enumerated
         in the next three lines.
 

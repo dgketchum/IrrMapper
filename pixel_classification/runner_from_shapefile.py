@@ -73,6 +73,9 @@ if __name__ == "__main__":
     r = 28
     year = 2013
     satellite = 8
+    image_directory += str(p) + "_" + str(r) + "_" + str(year)
+    if not os.path.isdir(image_directory):
+        os.mkdir(image_directory)
 
     ims = download_images(image_directory, p, r, year, satellite)
 

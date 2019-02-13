@@ -104,10 +104,10 @@ def get_shapefile_lat_lon(shapefile):
 
     return latc, lonc 
 
-def download_images(project_directory, path, row, year, satellite=8):
+def download_images(project_directory, path, row, year, satellite=8, n_landsat=3):
 
     image_stack = ImageStack(satellite=satellite, path=path, row=row, root=project_directory,
-            max_cloud_pct=70, n_landsat=3, year=year)
+            max_cloud_pct=70, n_landsat=n_landsat, year=year)
 
     image_stack.build_evaluating() # the difference b/t build_training() and build_eval() is
     # a cloud mask.
