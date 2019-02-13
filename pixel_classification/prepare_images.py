@@ -152,7 +152,7 @@ class ImageStack(object):
         # Change the coordinate system
         bb = shape(poly[0]).bounds
         # Ask david
-        bb = (60.5284298033, 29.318572496, 75.1580277851, 38.4862816432)
+        bb = (-124.84, -66.88, 24.89, 49.38) # bbox of usa for sanity check
         for date in dates:
             d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
             bds = GeoBounds(wsen=bb)
