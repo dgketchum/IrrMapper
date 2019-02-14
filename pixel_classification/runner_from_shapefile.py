@@ -27,7 +27,25 @@ def download_images_over_shapefile(shapefile, image_directory, year, master_rast
     
     return ims
 
-def create_sample_points_from_shapefile(shapefile_path, instances):
+def download_from_pr(p, r, image_directory, year, master_raster_directory):
+    '''Downloads p/r corresponding to the location of 
+       the shapefile, and creates master raster'''
+    suff = str(p) + '_' + str(r) + "_" + str(year)
+    landsat_dir = os.path.join(image_directory, suff)
+    satellite = 8
+    if year < 2013:
+        satellite = 7
+    if not os.path.isdir(landsat_dir):
+        os.mkdir(landsat_dir)
+        ims = download_images(landsat_dir, p, r, year, satellite)
+    else:
+        ims = download_images(landsat_dir, p, r, year, satellite)
+
+    ms = create_master_raster(ims, p, r, year, master_raster_directory)
+    
+    return ims
+
+def sample_points_from_shapefile(shapefile_path, instances):
     '''Hopefully this can be nicely parallelized.'''
     ssp = ShapefileSamplePoints(shapefile_path, m_instances=instances)
     ssp.create_sample_points(save_points=True)
@@ -65,37 +83,14 @@ def split_shapefiles_multiproc(f):
     fname = os.path.basename(f) 
     split_shapefile(shp_dir, fname, data_directory)
 
+# Need a function that takes a targets dict  
 
 if __name__ == "__main__":
 
     image_directory = 'image_data/'
-    p = 34
-    r = 28
+    master = 'master_rasters/'
+    p = 39
+    r = 27
     year = 2013
     satellite = 8
-    image_directory += str(p) + "_" + str(r) + "_" + str(year)
-    if not os.path.isdir(image_directory):
-        os.mkdir(image_directory)
-
-    ims = download_images(image_directory, p, r, year, satellite)
-
-    # irrigated = ['MT_Sun_River_2013', "MT_Huntley_Main_2013"]
-    # other = ['other']
-    # fallow = ['Fallow']
-    # forest = ['Forrest']
-
-    # train_dir = 'training_data/'
-    # data_directory = 'split_shapefiles_west/'
-    # image_directory = 'image_data/'
-    # raster_dir = 'master_rasters'
-    # kernel_size = 57
-
-    # fnames = [f for f in glob.glob(data_directory + "*.shp")]
-
-    # instances = 10000
-    # instances = [instances]*len(fnames)
-
-    # with Pool() as pool:
-    #     out = pool.starmap(create_sample_points_from_shapefile, zip(fnames, instances))
-
-
+    ims = download_from_pr(p, r, image_directory, year, master)

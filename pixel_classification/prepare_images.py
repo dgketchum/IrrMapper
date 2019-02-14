@@ -99,7 +99,7 @@ class ImageStack(object):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et()
-        self.get_precip()
+        #self.get_precip()
         self.get_terrain()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location

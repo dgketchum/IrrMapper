@@ -6,12 +6,35 @@ import fiona
 from lxml import html
 from requests import get
 from copy import deepcopy
-from numpy import zeros, asarray, array, reshape
+from numpy import zeros, asarray, array, reshape, nan
 from rasterio import float32, open as rasopen
+from rasterio.mask import mask
 from prepare_images import ImageStack
 from sklearn.neighbors import KDTree
-import sat_image
+from sat_image.warped_vrt import warp_single_image
+import geopandas as gpd
+import json
 
+NO_DATA = nan
+
+def get_features(gdf):
+    tmp = json.loads(gdf.to_json())
+    features = [feature['geometry'] for feature in tmp['features']]
+    return features
+
+def generate_class_mask(shapefile, master_raster):
+    ''' Generates a mask with class_val everywhere 
+    shapefile data is present and a no_data value everywhere else.
+    no_data is -1 in this case, as it is never a valid class label.
+    Switching coordinate reference systems is important here, or 
+    else the masking won't work.
+    '''
+    shp = gpd.read_file(shapefile)
+    with rasopen(master_raster, 'r') as src:
+        shp = shp.to_crs(src.crs)
+        features = get_features(shp)
+        out_image, out_transform = mask(src, shapes=features, nodata=nan)
+    return out_image
 
 def create_master_masked_raster(image_stack, path, row, year, raster_directory):
     masks = image_stack.masks
@@ -31,7 +54,6 @@ def create_master_masked_raster(image_stack, path, row, year, raster_directory):
 
         if first:
             first_geo = deepcopy(raster_geo)
-            print(first_geo, "FIRST_GEO")
             empty = zeros((len(masks.keys()), arr.shape[1], arr.shape[2]), float32)
             stack = empty
             stack[i, :, :] = arr
@@ -40,7 +62,7 @@ def create_master_masked_raster(image_stack, path, row, year, raster_directory):
             try:
                 stack[i, :, :] = arr
             except ValueError: 
-                arr = sat_image.warped_vrt.warp_single_image(mask_raster, first_geo)
+                arr = warp_single_image(mask_raster, first_geo)
                 stack[i, :, :] = arr
 
     first_geo.update(count=len(masks.keys()))
@@ -57,9 +79,26 @@ def create_master_masked_raster(image_stack, path, row, year, raster_directory):
 def create_master_raster(image_stack, path, row, year, raster_directory):
     fname = "master_raster_{}_{}_{}.tif".format(path, row, year)
     pth = os.path.join(raster_directory, fname)
+    mask_fname = "class_mask_{}_{}_{}.tif".format(path, row, year)
+    mask_path = os.path.join(raster_directory, mask_fname)
     if os.path.isfile(pth):
         print("Master raster already created for {}_{}_{}.".format(path, row, year))
-        return pth 
+        if os.path.isfile(mask_path):
+            print('Class mask template already created')
+            return pth
+        else:
+            print("Creating class mask template.")
+            with rasopen(pth, 'r') as src:
+                meta = src.meta.copy()
+                h = meta['height']
+                w = meta['width']
+
+            meta.update(count=1, dtype=float32)
+
+            with rasopen(mask_path, 'w', **meta) as msk:
+                out = zeros((h, w)).astype(float32)
+                msk.write(out, 1)
+            return pth
         
     paths_map = image_stack.paths_map
     first = True
@@ -83,11 +122,14 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
             try:
                 stack[i, :, :] = arr
             except ValueError: 
-                # import pprint
-                # pprint.pprint(first_geo)
-                # error was thrown here b/c source raster didn't have crs
-                arr = sat_image.warped_vrt.warp_single_image(feature_raster, first_geo)
+                # error can be thrown here if source raster doesn't have crs
+                arr = warp_single_image(feature_raster, first_geo)
                 stack[i, :, :] = arr
+
+    first_geo.update(count=1)
+    msk_out = zeros((stack.shape[1], stack.shape[0]))
+    with rasopen(mask_path, mode='w', **first_geo) as msk:
+        msk.write(msk_out)
 
     first_geo.update(count=len(paths_map.keys()))
 
@@ -97,6 +139,7 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
     return pth
 
 def get_shapefile_lat_lon(shapefile):
+    ''' Center of shapefile'''
     with fiona.open(shapefile, "r") as src:
         minx, miny, maxx, maxy = src.bounds
         latc = (maxy + miny) / 2
@@ -142,6 +185,8 @@ def get_pr(poly, wrs2):
     return ls
 
 def get_pr_subset(poly, tiles):
+    ''' Use when you only want to iterate
+    over a subset of wrs2 tiles.'''
     ls = []
     for feature in tiles:
         tile = shape(feature['geometry'])
@@ -153,13 +198,15 @@ def get_pr_subset(poly, tiles):
     return ls
 
 def split_shapefile(base, base_shapefile, data_directory):
-    """Previous method took ~25 minutes to get all path/rows.
-    Now, with kdtree, 25 seconds.
+    """
     Shapefiles may deal with data over multiple path/rows.
+    This is a method to get the minimum number of
+    path/rows required to cover all features. 
     Data directory: where the split shapefiles will be saved.
     base: directory containing base_shapefile."""
     path_row = defaultdict(list) 
     id_mapping = {}
+    # TODO: un hardcode this directory.
     wrs2 = fiona.open('../spatial_data/wrs2_descending_usa.shp', 'r')
     tree, path_rows, features = construct_kdtree(wrs2)
     wrs2.close()
@@ -180,8 +227,6 @@ def split_shapefile(base, base_shapefile, data_directory):
             prs = get_pr_subset(poly, tiles)
             for p in prs:
                 path_row[p].append(idd)
-
-    wrs2.close()
 
     non_unique_ids = defaultdict(list)
     unique = defaultdict(list)
@@ -226,8 +271,7 @@ def split_shapefile(base, base_shapefile, data_directory):
         out = prefix + "_" + key + ".shp"
         if len(unique[key]):
             with fiona.open(os.path.join(data_directory, out), 'w', **meta) as dst:
-                print("Split shapefile saving to:", 
-                        os.path.join(data_directory, out))
+                print("Saving split shapefile to: {}".format(os.path.join(data_directory, out)))
                 for feat in unique[key]:
                     dst.write(id_mapping[feat])
 
