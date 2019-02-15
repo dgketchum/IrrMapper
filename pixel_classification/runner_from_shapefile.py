@@ -88,9 +88,12 @@ def split_shapefiles_multiproc(f):
 if __name__ == "__main__":
 
     image_directory = 'image_data/'
+    shp = 'shapefile_data/backup'
     master = 'master_rasters/'
     p = 39
     r = 27
     year = 2013
+
     satellite = 8
-    ims = download_from_pr(p, r, image_directory, year, master)
+    for f in glob.glob(os.path.join(shp, "*.shp")):
+        download_images_over_shapefile(f, image_directory, year, master)

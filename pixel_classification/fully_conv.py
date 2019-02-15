@@ -13,8 +13,10 @@ Concatenate, Dropout, UpSampling2D)
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import TensorBoard
 from data_utils import generate_class_mask, get_shapefile_path_row
+from multiprocessing import Pool
+from rasterio import open as rasopen
 
-NO_DATA = np.nan 
+NO_DATA = -1
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
@@ -148,9 +150,60 @@ def all_matching_shapefiles(to_match, shapefile_directory):
     out = []
     pr = get_shapefile_path_row(to_match)
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
-        if get_shapefile_path_row(f) == pr:
+        if get_shapefile_path_row(f) == pr and to_match not in f:
             out.append(f)
     return out
+
+def generate_binary_train(shapefile_directory, image_directory, box_size):
+
+    for f in glob(os.path.join(shapefile_directory, "*.shp")):
+        if target in f:
+            all_matches = all_matching_shapefiles(f, shapefile_directory)
+            p, r = get_shapefile_path_row(f)
+            suffix = '{}_{}_{}.tif'.format(p, r, year)
+            master_raster = os.path.join(image_directory, train_raster + suffix)
+            mask_file = os.path.join(image_directory, mask_raster + suffix)
+            if not os.path.isfile(master_raster):
+                print("Master raster not created for {}".format(suffix))
+                # TODO: More extensive error handling.
+            else:
+                target_mask = generate_class_mask(f, mask_file)
+                class_mask = np.ones((n_classes, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
+                class_mask[1, :, :] = target_mask
+
+                required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
+                masks = []
+                for match in all_matches:
+                    msk = generate_class_mask(match, mask_file)
+                    samp = random_sample(msk, required_instances, box_size)
+                    masks.append(samp)
+
+                for i, s in enumerate(masks):
+                    class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
+                # May need to do some preprocessing.    
+                yield class_mask, load_raster(master_raster)
+
+def random_sample(class_mask, n_instances, box_size, class_code=0):
+    out = np.where(class_mask != NO_DATA)
+    # returns (elements from class_mask, indices_x, indices_y)
+    out_x = out[1]
+    out_y = out[2] 
+    indices = np.random.choice(len(out_x), size=n_instances, replace=False)
+    out_x = out_x[indices]
+    out_y = out_y[indices] 
+    class_mask[:, :, :] = NO_DATA
+    if box_size == 0:
+        class_mask[:, out_x, out_y] = class_code
+    else:
+        ofs = box_size // 2
+        for x, y in zip(out_x, out_y):
+            class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = class_code
+    return class_mask
+
+def load_raster(master_raster):
+    with rasopen(master_raster, 'r') as src:
+        arr = src.read()
+    return arr
 
 if __name__ == '__main__':
     # Steps:
@@ -167,8 +220,10 @@ if __name__ == '__main__':
     # Here assume steps 3 and 4 are done and then synthesize
     # the steps into one coherent file.
     # need an easier way to specify year.
+    # Let's do a binary classification model.
 
     shapefile_directory = 'shapefile_data/backup'
+    sample_dir = os.path.join(shapefile_directory, 'sample_points')
     image_directory = 'master_rasters'
     target = 'irrigated'
     fallow = 'Fallow'
@@ -179,19 +234,9 @@ if __name__ == '__main__':
     done = set()
     train_raster = 'master_raster_'
     mask_raster = 'class_mask_'
+    n_classes = 2
+    box_size = 6
 
-    for f in glob(os.path.join(shapefile_directory, "*.shp")):
-        if target in f:
-            out = all_matching_shapefiles(f, shapefile_directory)
-            p, r = get_shapefile_path_row(f)
-            suffix = '{}_{}_{}.tif'.format(p, r, year)
-            master_raster = os.path.join(image_directory, train_raster + suffix)
-            mask_file = os.path.join(image_directory, mask_raster + suffix)
-            if not os.path.isfile(master_raster):
-                print("Master raster not created for {}".format(suffix))
-            else:
-                for shp in out:
-                    mask = generate_class_mask(shp, mask_file)
-                    plt.imshow(mask[0, :, :])
-                    plt.colorbar()
-                    plt.show()
+
+                            
+

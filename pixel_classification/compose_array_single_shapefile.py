@@ -58,11 +58,11 @@ class UnexpectedCoordinateReferenceSystemError(Exception):
 class ShapefileSamplePoints:
 
     def __init__(self, shapefile_path=None, sample_point_directory=None, m_instances=None):
-        if sample_point_directory is None:
-            self.outfile = os.path.splitext(shapefile_path)[0]
-            self.outfile += "_sample_points.shp"
-        else:
-            self.outfile = sample_point_directory 
+        self.outfile = os.path.splitext(shapefile_path)[0]
+        self.outfile += "_sample_points.shp"
+        if sample_point_directory:
+            self.outfile = os.path.join(sample_point_directory, self.outfile)
+
         self.extracted_points = DataFrame(columns=['FID', 'X', 'Y', 'POINT_TYPE'])
         self.m_instances = m_instances
         self.object_id = 0
