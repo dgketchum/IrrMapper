@@ -26,24 +26,27 @@ from datetime import datetime
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
-from shapely.geometry import shape
 from sat_image.warped_vrt import warp_vrt
 from met.thredds import GridMet, TopoWX
 from bounds import RasterBounds, GeoBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
+from functools import partial
+from pyproj import Proj, transform as pytransform
+from shapely.geometry import shape, Polygon, mapping
+from shapely.ops import transform
 from rasterio import open as rasopen, float32
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
 from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters
 from sklearn.preprocessing import StandardScaler
+from geopandas.geodataframe import GeoDataFrame
 
 class ImageStack(object):
     """
     Prepare a stack of images from Landsat, terrain, etc. Save stack in identical geometry.
     """
 
-    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None, max_cloud_pct=None, start=None, end=None,
-            year=None, n_landsat=None):
+    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None, max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -99,7 +102,7 @@ class ImageStack(object):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et()
-        #self.get_precip()
+        self.get_precip()
         self.get_terrain()
         self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
@@ -146,17 +149,36 @@ class ImageStack(object):
             [self._make_fmask(d) for d in self.image_dirs]
 
     def get_precip(self):
-        poly = self.landsat.get_tile_geometry()
+        poly_in = self.landsat.get_tile_geometry()
+        poly_in = Polygon(poly_in[0]['coordinates'][0])
+        project = partial(
+                pytransform, 
+                Proj(self.profile['crs']),
+                Proj(init='epsg:32612'))
+        for_bounds = partial(
+                pytransform, 
+                Proj(self.profile['crs']),
+                Proj(init='epsg:4326'))
         dates = self.scenes['DATE_ACQUIRED'].values
-        b = poly[0]['coordinates'][0] 
         # Change the coordinate system
-        bb = shape(poly[0]).bounds
         # Ask david
-        bb = (-124.84, -66.88, 24.89, 49.38) # bbox of usa for sanity check
+        poly = transform(project, poly_in)
+        poly_bounds = transform(for_bounds, poly_in)
+        poly = Polygon(poly.exterior.coords)
+        from rasterio.crs import CRS
+        geometry = [mapping(poly)] 
+        geometry[0]['crs'] = CRS({'init':'epsg:32612'})
+        feat = {'type': 'Polygon', 'coordinates': list(poly.exterior.coords)}
+        bounds = poly.bounds
+        print(bounds)
+        bounds = (bounds[2], bounds[1], bounds[0], bounds[3])
+        bounds = (-124.84, -66.88, 24.89, 49.38) # bbox of usa for sanity check
+        bounds = poly_bounds.bounds
         for date in dates:
             d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
-            bds = GeoBounds(wsen=bb)
-            gm = GridMet(variable='pr', bounds=bds, target_profile=self.profile, date=d)
+            bds = GeoBounds(wsen=bounds)
+            gm = GridMet(variable='pr', clip_feature=geometry,
+                    bbox=bds, target_profile=self.profile, date=d)
             out = gm.get_data_subset()
             outfile = os.path.join(self.root, 'GridMet{}.tif'.format(date))
             gm.save_raster(out, self.landsat.rasterio_geometry, outfile)

@@ -10,7 +10,9 @@ from data_utils import download_images, get_shapefile_path_row, split_shapefile,
 
 def download_images_over_shapefile(shapefile, image_directory, year, master_raster_directory):
     '''Downloads p/r corresponding to the location of 
-       the shapefile, and creates master raster'''
+       the shapefile, and creates master raster.
+       Image_directory: where to save the raw images.
+       mr_directory: "                    " master_rasters.'''
     p, r = get_shapefile_path_row(shapefile) 
     suff = str(p) + '_' + str(r) + "_" + str(year)
     landsat_dir = os.path.join(image_directory, suff)
@@ -90,8 +92,6 @@ if __name__ == "__main__":
     image_directory = 'image_data/'
     shp = 'shapefile_data/backup'
     master = 'master_rasters/'
-    p = 39
-    r = 27
     year = 2013
 
     satellite = 8
