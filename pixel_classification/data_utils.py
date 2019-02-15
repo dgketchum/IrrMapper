@@ -128,7 +128,7 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
                 stack[i, :, :] = arr
 
     first_geo.update(count=1)
-    msk_out = zeros((stack.shape[1], stack.shape[0]))
+    msk_out = zeros((1, stack.shape[1], stack.shape[2])).astype(float32)
     with rasopen(mask_path, mode='w', **first_geo) as msk:
         msk.write(msk_out)
 

@@ -36,8 +36,9 @@ from pyproj import Proj, transform as pytransform
 from shapely.geometry import shape, Polygon, mapping
 from shapely.ops import transform
 from rasterio import open as rasopen, float32
+from rasterio.crs import CRS
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
-from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters
+from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters, climate_rasters
 from sklearn.preprocessing import StandardScaler
 from geopandas.geodataframe import GeoDataFrame
 
@@ -161,18 +162,15 @@ class ImageStack(object):
                 Proj(init='epsg:4326'))
         dates = self.scenes['DATE_ACQUIRED'].values
         # Change the coordinate system
-        # Ask david
+        # The issue: the CRSs for the bounding box and for the mask are different.
+        # In _project, the incorrect CRS was making it throw an error.
+        # the fix? Inputting bounds in a unprojected CRS and 
+        # a projected shape for masking.
         poly = transform(project, poly_in)
         poly_bounds = transform(for_bounds, poly_in)
         poly = Polygon(poly.exterior.coords)
-        from rasterio.crs import CRS
         geometry = [mapping(poly)] 
         geometry[0]['crs'] = CRS({'init':'epsg:32612'})
-        feat = {'type': 'Polygon', 'coordinates': list(poly.exterior.coords)}
-        bounds = poly.bounds
-        print(bounds)
-        bounds = (bounds[2], bounds[1], bounds[0], bounds[3])
-        bounds = (-124.84, -66.88, 24.89, 49.38) # bbox of usa for sanity check
         bounds = poly_bounds.bounds
         for date in dates:
             d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
@@ -283,10 +281,13 @@ class ImageStack(object):
             s = d
 
         for sc in scenes:
+
             paths = os.listdir(os.path.join(self.root, sc))
+            c = climate_rasters(self.root)
             b = [os.path.join(self.root, sc, x) for x in paths if x.endswith(landsat_rasters()[self.sat])]
             a = [os.path.join(self.root, sc, x) for x in paths if x.endswith(ancillary_rasters())]
-            bands = a + b
+            bands = a + b + c
+            
             bands.sort()
             for p in bands:
                 band_dct[os.path.basename(p).split('.')[0]] = p

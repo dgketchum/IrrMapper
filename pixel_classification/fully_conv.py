@@ -238,5 +238,11 @@ if __name__ == '__main__':
     box_size = 6
 
 
-                            
+    for i, j in generate_binary_train(shapefile_directory, image_directory, box_size):
+                           
+        fig, ax = plt.subplots(ncols=2)
+        ax[0].imshow(i[0, :, :])
+        ax[1].imshow(i[1, :, :])
+        plt.show()
+        
 

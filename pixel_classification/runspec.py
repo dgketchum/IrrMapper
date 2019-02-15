@@ -16,7 +16,7 @@
 
 import os
 import sys
-
+from glob import glob
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 
@@ -34,6 +34,9 @@ def landsat_rasters():
          8: ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF', 'B5.TIF', 'B6.TIF',
              'B7.TIF', 'B8.TIF', 'B9.TIF', 'B10.TIF', 'B11.TIF')}
     return b
+
+def climate_rasters(root):
+    return [f for f in glob(os.path.join(root, "*.tif")) if 'GridMet' in f]
 
 
 def ancillary_rasters():

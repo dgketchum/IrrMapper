@@ -94,6 +94,14 @@ if __name__ == "__main__":
     master = 'master_rasters/'
     year = 2013
 
+    template = "{}_{}_{}"
+
+    done = set()
+
     satellite = 8
     for f in glob.glob(os.path.join(shp, "*.shp")):
-        download_images_over_shapefile(f, image_directory, year, master)
+        p, r = get_shapefile_path_row(f)
+        t = template.format(p,r,year)
+        if t not in done:
+            done.add(t)
+            download_images_over_shapefile(f, image_directory, year, master)
