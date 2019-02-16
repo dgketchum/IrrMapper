@@ -1,5 +1,5 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import keras.backend as K
 import matplotlib.pyplot as plt
@@ -17,21 +17,23 @@ from multiprocessing import Pool
 from rasterio import open as rasopen
 
 NO_DATA = -1
+MAX_POOL_SHP = 8
+CHUNK_SIZE = 1000
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
        are not data, given a y_true 
        that has NODATA values. '''
-    y_true = tf.reshape(y_true, (1080*1920, 2))
-    y_pred = tf.reshape(y_pred, (1080*1920, 2))
+    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], 2))
+    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], 2))
     masked = tf.not_equal(y_true, NO_DATA)
     y_true_mask = tf.boolean_mask(y_true, masked)
     y_pred_mask = tf.boolean_mask(y_pred, masked)
     return tf.keras.losses.binary_crossentropy(y_true_mask, y_pred_mask)
 
-def fcnn_functional(image_shape, n_classes):
+def fcnn_functional(n_classes):
 
-    x = Input(image_shape)
+    x = Input((None, None, 36))
 
     c1 = Conv2D(filters=32, kernel_size=(3,3), activation='relu', padding='same')(x)
     c1 = Conv2D(filters=32, kernel_size=(3,3), activation='relu', padding='same')(c1)
@@ -108,43 +110,27 @@ def augment_data(image, class_mask):
         class_mask = np.flipud(class_mask)
     return image, class_mask
 
-def generate(image_directory, box_size):
-    while True:
-        for f in glob(image_directory + "*.json"):
-            jpg = f[:-13] + ".jpg"
-            class_mask, input_image = generate_class_mask(f, jpg, box_size=box_size)
-            if class_mask is None:
-                continue
-            if np.random.randint(2): 
-                input_image, class_mask = augment_data(input_image, class_mask)
+def preprocess_data(master, mask):
+    shp = master.shape
+    rows = shp[1]; cols = shp[2]
+    cut_rows = rows % MAX_POOL_SHP 
+    cut_cols = cols % MAX_POOL_SHP
+    out_m = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+    out_m[0, :, :, :] = master[:, cut_rows:, cut_cols:]
+    shp = mask.shape
+    out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+    out_mask[0, :, :, :] = mask[:, cut_rows:, cut_cols:]
+    out_m = np.swapaxes(out_m, 1, 3)
+    out_mask = np.swapaxes(out_mask, 1, 3)
+    return out_m, out_mask
 
-            X, y = preprocess_training_data(input_image, class_mask)
-
-            yield X, y
-
-def create_model(image_shape, n_classes):
-    model = fcnn_functional(image_shape, n_classes)
+def create_model(n_classes):
+    model = fcnn_functional(n_classes)
     model.compile(loss=custom_objective,
                  optimizer='adam', 
                  metrics=['accuracy'])
     return model
 
-def train_model(train_directory, test_directory, image_shape, box_size=6, epochs=15):
-    n_classes = 2
-    model = create_model(image_shape, n_classes)
-    tb = TensorBoard(log_dir='graphs/')
-    n_augmented = 0
-    train_generator = generate(train_directory, box_size)
-    test_generator = generate(test_directory, box_size)
-    model.fit_generator(train_generator, 
-            steps_per_epoch=50, 
-            epochs=epochs,
-            verbose=1,
-            callbacks=[tb],
-            validation_data=test_generator,
-            validation_steps=4,
-            use_multiprocessing=True)
-    return model
 
 def all_matching_shapefiles(to_match, shapefile_directory):
     out = []
@@ -154,8 +140,9 @@ def all_matching_shapefiles(to_match, shapefile_directory):
             out.append(f)
     return out
 
-def generate_binary_train(shapefile_directory, image_directory, box_size):
+def generate_binary_train(shapefile_directory, image_directory, box_size, target):
 
+    #while True:
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
         if target in f:
             all_matches = all_matching_shapefiles(f, shapefile_directory)
@@ -181,7 +168,17 @@ def generate_binary_train(shapefile_directory, image_directory, box_size):
                 for i, s in enumerate(masks):
                     class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
                 # May need to do some preprocessing.    
-                yield class_mask, load_raster(master_raster)
+                master = load_raster(master_raster)
+                for i in range(0, master.shape[1], CHUNK_SIZE):
+                    for j in range(0, master.shape[2], CHUNK_SIZE):
+                        sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                        sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                        sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
+                        if np.all(sub_mask == NO_DATA):
+                            continue
+                        else:
+                            yield sub_master, sub_mask
+
 
 def random_sample(class_mask, n_instances, box_size, class_code=0):
     out = np.where(class_mask != NO_DATA)
@@ -205,6 +202,24 @@ def load_raster(master_raster):
         arr = src.read()
     return arr
 
+def train_model(shapefile_directory, image_directory, box_size=6, epochs=15):
+    # image shape will change here, so it must be
+    # inferred at runtime.
+    n_classes = 2
+    model = create_model(n_classes)
+    tb = TensorBoard(log_dir='graphs/')
+    n_augmented = 0
+    train_generator = generate_binary_train(shapefile_directory, image_directory, box_size,
+    'irrigated')
+    model.fit_generator(train_generator, 
+            steps_per_epoch=13, 
+            epochs=epochs,
+            verbose=1,
+            callbacks=[tb],
+            use_multiprocessing=False)
+    return model
+
+
 if __name__ == '__main__':
     # Steps:
     # 1. split shapefiles
@@ -221,10 +236,9 @@ if __name__ == '__main__':
     # the steps into one coherent file.
     # need an easier way to specify year.
     # Let's do a binary classification model.
-
     shapefile_directory = 'shapefile_data/backup'
     sample_dir = os.path.join(shapefile_directory, 'sample_points')
-    image_directory = 'master_rasters'
+    image_directory = 'master_rasters/backup'
     target = 'irrigated'
     fallow = 'Fallow'
     forest = 'Forrest'
@@ -237,12 +251,4 @@ if __name__ == '__main__':
     n_classes = 2
     box_size = 6
 
-
-    for i, j in generate_binary_train(shapefile_directory, image_directory, box_size):
-                           
-        fig, ax = plt.subplots(ncols=2)
-        ax[0].imshow(i[0, :, :])
-        ax[1].imshow(i[1, :, :])
-        plt.show()
-        
-
+    train_model(shapefile_directory, image_directory)
