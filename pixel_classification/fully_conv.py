@@ -17,8 +17,8 @@ from multiprocessing import Pool
 from rasterio import open as rasopen
 
 NO_DATA = -1
-MAX_POOL_SHP = 8
-CHUNK_SIZE = 1000
+MAX_POOLS = 3
+CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
@@ -33,7 +33,7 @@ def custom_objective(y_true, y_pred):
 
 def fcnn_functional(n_classes):
 
-    x = Input((None, None, 36))
+    x = Input((None, None, 39))
 
     c1 = Conv2D(filters=32, kernel_size=(3,3), activation='relu', padding='same')(x)
     c1 = Conv2D(filters=32, kernel_size=(3,3), activation='relu', padding='same')(c1)
@@ -113,13 +113,31 @@ def augment_data(image, class_mask):
 def preprocess_data(master, mask):
     shp = master.shape
     rows = shp[1]; cols = shp[2]
-    cut_rows = rows % MAX_POOL_SHP 
-    cut_cols = cols % MAX_POOL_SHP
+    cut_rows = rows % (2**MAX_POOLS) 
+    cut_cols = cols % (2**MAX_POOLS)
     out_m = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
-    out_m[0, :, :, :] = master[:, cut_rows:, cut_cols:]
-    shp = mask.shape
-    out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
-    out_mask[0, :, :, :] = mask[:, cut_rows:, cut_cols:]
+
+    if cut_cols != 0 and cut_rows != 0:
+        out_m[0, :, :, :] = master[:, :-cut_rows, :-cut_cols]
+        shp = mask.shape
+        out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+        out_mask[0, :, :, :] = mask[:, :-cut_rows, :-cut_cols]
+    elif cut_cols == 0 and cut_rows != 0:
+        out_m[0, :, :, :] = master[:, :-cut_rows, :]
+        shp = mask.shape
+        out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+        out_mask[0, :, :, :] = mask[:, :-cut_rows, :]
+    elif cut_cols != 0 and cut_rows == 0:
+        out_m[0, :, :, :] = master[:, :, :-cut_cols]
+        shp = mask.shape
+        out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+        out_mask[0, :, :, :] = mask[:, :, :-cut_cols]
+    else:
+        out_m[0, :, :, :] = master[:, :, :]
+        shp = mask.shape
+        out_mask = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
+        out_mask[0, :, :, :] = mask[:, :, :]
+
     out_m = np.swapaxes(out_m, 1, 3)
     out_mask = np.swapaxes(out_mask, 1, 3)
     return out_m, out_mask
@@ -140,9 +158,8 @@ def all_matching_shapefiles(to_match, shapefile_directory):
             out.append(f)
     return out
 
-def generate_binary_train(shapefile_directory, image_directory, box_size, target):
+def instances_per_epoch(shapefile_directory, image_directory, box_size, target):
 
-    #while True:
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
         if target in f:
             all_matches = all_matching_shapefiles(f, shapefile_directory)
@@ -157,14 +174,12 @@ def generate_binary_train(shapefile_directory, image_directory, box_size, target
                 target_mask = generate_class_mask(f, mask_file)
                 class_mask = np.ones((n_classes, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
                 class_mask[1, :, :] = target_mask
-
                 required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
                 masks = []
                 for match in all_matches:
                     msk = generate_class_mask(match, mask_file)
                     samp = random_sample(msk, required_instances, box_size)
                     masks.append(samp)
-
                 for i, s in enumerate(masks):
                     class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
                 # May need to do some preprocessing.    
@@ -178,6 +193,44 @@ def generate_binary_train(shapefile_directory, image_directory, box_size, target
                             continue
                         else:
                             yield sub_master, sub_mask
+
+
+def generate_binary_train(shapefile_directory, image_directory, box_size, target):
+
+    while True:
+        for f in glob(os.path.join(shapefile_directory, "*.shp")):
+            if target in f:
+                all_matches = all_matching_shapefiles(f, shapefile_directory)
+                p, r = get_shapefile_path_row(f)
+                suffix = '{}_{}_{}.tif'.format(p, r, year)
+                master_raster = os.path.join(image_directory, train_raster + suffix)
+                mask_file = os.path.join(image_directory, mask_raster + suffix)
+                if not os.path.isfile(master_raster):
+                    print("Master raster not created for {}".format(suffix))
+                    # TODO: More extensive error handling.
+                else:
+                    target_mask = generate_class_mask(f, mask_file)
+                    class_mask = np.ones((n_classes, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
+                    class_mask[1, :, :] = target_mask
+                    required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
+                    masks = []
+                    for match in all_matches:
+                        msk = generate_class_mask(match, mask_file)
+                        samp = random_sample(msk, required_instances, box_size)
+                        masks.append(samp)
+                    for i, s in enumerate(masks):
+                        class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
+                    # May need to do some preprocessing.    
+                    master = load_raster(master_raster)
+                    for i in range(0, master.shape[1], CHUNK_SIZE):
+                        for j in range(0, master.shape[2], CHUNK_SIZE):
+                            sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                            sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                            sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
+                            if np.all(sub_mask == NO_DATA):
+                                continue
+                            else:
+                                yield sub_master, sub_mask
 
 
 def random_sample(class_mask, n_instances, box_size, class_code=0):
@@ -202,7 +255,22 @@ def load_raster(master_raster):
         arr = src.read()
     return arr
 
-def train_model(shapefile_directory, image_directory, box_size=6, epochs=15):
+def evaluate_image(master_raster, model):
+
+    if not os.path.isfile(master_raster):
+        print("Master raster not created for {}".format(suffix))
+        # TODO: More extensive error handling.
+    else:
+        master = load_raster(master_raster)
+        out = np.zeros(master.shape)
+        for i in range(0, master.shape[1], CHUNK_SIZE):
+            for j in range(0, master.shape[2], CHUNK_SIZE):
+                sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
+
+
+def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=6, epochs=3):
     # image shape will change here, so it must be
     # inferred at runtime.
     n_classes = 2
@@ -212,7 +280,7 @@ def train_model(shapefile_directory, image_directory, box_size=6, epochs=15):
     train_generator = generate_binary_train(shapefile_directory, image_directory, box_size,
     'irrigated')
     model.fit_generator(train_generator, 
-            steps_per_epoch=13, 
+            steps_per_epoch=steps_per_epoch, 
             epochs=epochs,
             verbose=1,
             callbacks=[tb],
@@ -238,7 +306,7 @@ if __name__ == '__main__':
     # Let's do a binary classification model.
     shapefile_directory = 'shapefile_data/backup'
     sample_dir = os.path.join(shapefile_directory, 'sample_points')
-    image_directory = 'master_rasters/backup'
+    image_directory = 'master_rasters/'
     target = 'irrigated'
     fallow = 'Fallow'
     forest = 'Forrest'
@@ -251,4 +319,9 @@ if __name__ == '__main__':
     n_classes = 2
     box_size = 6
 
-    train_model(shapefile_directory, image_directory)
+   #  k = 0
+   #  for i in instances_per_epoch(shapefile_directory, image_directory, box_size, 'irrigated'):
+   #      k += 1
+   #  print("INSTANCES:", k)
+
+    train_model(shapefile_directory, 76, image_directory)
