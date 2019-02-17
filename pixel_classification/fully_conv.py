@@ -15,11 +15,17 @@ from tensorflow.keras.callbacks import TensorBoard
 from data_utils import generate_class_mask, get_shapefile_path_row
 from multiprocessing import Pool
 from rasterio import open as rasopen
+from rasterio.mask import mask
+from shapely.geometry import shape
+from fiona import open as fopen
+import json
+import geopandas as gpd
 
 NO_DATA = -1
 MAX_POOLS = 3
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
 NUM_CLASSES = 2
+WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
@@ -375,7 +381,7 @@ def evaluate_image(master_raster, model, outfile=None):
                 sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask, return_cuts=True)
                 preds = model.predict(sub_master)
                 preds = preds[0, :, :, :]
-                preds = np.argmax(preds, axis=2)
+                preds = preds[:, :, 1] #np.argmax(preds, axis=2)
                 if cut_cols == 0 and cut_rows == 0:
                     out[j:j+CHUNK_SIZE, i:i+CHUNK_SIZE] = preds
                 elif cut_cols == 0 and cut_rows != 0:
@@ -391,7 +397,14 @@ def evaluate_image(master_raster, model, outfile=None):
                 else:
                     print("whatcha got goin on here?")
             print("Percent done: {:.3f}".format(i / master.shape[1]))
+
+    plt.imshow(preds)
+    plt.colorbar()
+    plt.show()
     out = np.swapaxes(out, 0, 1)
+    out[out == 0] = np.nan
+    arr = np.expand_dims(arr, axis=0)
+    arr = arr.astype(np.float32)
 
     if outfile:
         save_raster(out, outfile, meta)
@@ -418,6 +431,27 @@ def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=
             use_multiprocessing=False)
     return model
 
+def get_features(gdf, path, row):
+    tmp = json.loads(gdf.to_json())
+    features = []
+    for feature in tmp['features']:
+        if feature['properties']['PATH'] == path and feature['properties']['ROW'] == row: 
+            features.append(feature['geometry'])
+    return features
+
+def clip_raster(evaluated, path, row, outfile=None):
+
+    shp = gpd.read_file(WRS2)
+
+    with rasopen(evaluated, 'r') as src:
+        print(src.crs)
+        shp = shp.to_crs(src.crs)
+        meta = src.meta.copy()
+        features = get_features(shp, path, row)
+        out_image, out_transform = mask(src, shapes=features, nodata=np.nan)
+
+    if outfile:
+        save_raster(out_image, outfile, meta)
 
 if __name__ == '__main__':
     # Steps:
@@ -448,7 +482,19 @@ if __name__ == '__main__':
     train_raster = 'master_raster_'
     mask_raster = 'class_mask_'
     n_classes = 2
-    out_directory = 'fully_conv_evaluated_images/'
+    out_directory = 'evaluated_images_fully_conv/'
+
+    # for f in glob(os.path.join(out_directory, "*.tif")):
+    #     if 'clipped' not in f:
+    #         out = os.path.basename(f)
+    #         os.path.split(out)[1]
+    #         out = out[out.find("_")+1:]
+    #         path = out[:2]
+    #         row = out[3:5]
+    #         out = os.path.splitext(out)[0]
+    #         out = 'eval_clipped_' + out + ".tif"
+    #         out = os.path.join(out_directory, out)
+    #         clip_raster(f, int(path), int(row), outfile=out)
 
     pth = 'test_model.h5'
     if not os.path.isfile(pth):
@@ -460,9 +506,12 @@ if __name__ == '__main__':
 
     for f in glob(os.path.join(image_directory, "*.tif")):
         if "class" not in f:
-            print(os.path.splitext(f)[0])
+            out = os.path.basename(f)
+            os.path.split(out)[1]
+            out = out[out.find("_")+1:]
+            out = out[out.find("_"):]
+            out = os.path.splitext(out)[0]
+            out = 'eval_probability' + out + ".tif"
+            out = os.path.join(out_directory, out)
+            evaluate_image(f, model, out)
 
-    #        out = evaluate_image(f, model)
-    #        plt.imshow(out)
-    #        plt.colorbar()
-    #        plt.show()

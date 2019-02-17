@@ -32,7 +32,6 @@ def generate_class_mask(shapefile, master_raster):
     shp = gpd.read_file(shapefile)
     with rasopen(master_raster, 'r') as src:
         shp = shp.to_crs(src.crs)
-        arr = src.read()
         features = get_features(shp)
         out_image, out_transform = mask(src, shapes=features, nodata=NO_DATA)
     return out_image
