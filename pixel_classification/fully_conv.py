@@ -19,6 +19,7 @@ from rasterio import open as rasopen
 NO_DATA = -1
 MAX_POOLS = 3
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
+NUM_CLASSES = 2
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
@@ -210,7 +211,7 @@ def generate_binary_train(shapefile_directory, image_directory, box_size, target
                     # TODO: More extensive error handling.
                 else:
                     target_mask = generate_class_mask(f, mask_file)
-                    class_mask = np.ones((n_classes, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
+                    class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
                     class_mask[1, :, :] = target_mask
                     required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
                     masks = []
@@ -262,18 +263,28 @@ def evaluate_image(master_raster, model):
         # TODO: More extensive error handling.
     else:
         master = load_raster(master_raster)
-        out = np.zeros(master.shape)
+        class_mask = np.zeros((2, master.shape[1], master.shape[2]))
+        out = np.zeros((master.shape[1], master.shape[2]))
         for i in range(0, master.shape[1], CHUNK_SIZE):
             for j in range(0, master.shape[2], CHUNK_SIZE):
                 sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
+                preds = model.predict(sub_master)
+                preds = preds[0, :, :, :]
+                fig, ax = plt.subplots(ncols=2)
+                i1 = ax[0].imshow(preds[:, :, 0])
+                i2 = ax[1].imshow(preds[:, :, 1])
+                fig.colorbar(i1, ax=ax[0])
+                fig.colorbar(i2, ax=ax[1])
+                plt.show()
+                out[i:i+CHUNK_SIZE, j:j+CHUNK_SIZE] = np.argmax(preds, axis=2)
+    return out
 
 
 def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=6, epochs=3):
     # image shape will change here, so it must be
     # inferred at runtime.
-    n_classes = 2
     model = create_model(n_classes)
     tb = TensorBoard(log_dir='graphs/')
     n_augmented = 0
@@ -323,5 +334,21 @@ if __name__ == '__main__':
    #  for i in instances_per_epoch(shapefile_directory, image_directory, box_size, 'irrigated'):
    #      k += 1
    #  print("INSTANCES:", k)
+    pth = 'test_model.h5'
+    if not os.path.isfile(pth):
+        model = train_model(shapefile_directory, 75, image_directory, epochs=1)
+        model.save(pth)
+    else:
+        model = tf.keras.models.load_model(pth,
+                custom_objects={'custom_objective':custom_objective})
 
-    train_model(shapefile_directory, 76, image_directory)
+    for f in glob(os.path.join(image_directory, "*.tif")):
+        if "class" not in f:
+            out = evaluate_image(f, model)
+            plt.imshow(out)
+            plt.show()
+
+
+
+
+
