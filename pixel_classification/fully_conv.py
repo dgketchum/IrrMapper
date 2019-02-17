@@ -78,6 +78,21 @@ def fcnn_functional(n_classes):
     model.summary()
     return model
 
+def fcnn_model(n_classes):
+    model = tf.keras.Sequential()
+    # Must define the input shape in the first layer of the neural network
+    model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=8, padding='same', activation='relu',
+        input_shape=(None, None, 39)))
+    model.add(tf.keras.layers.Conv2D(filters=64, kernel_size=4, padding='same', activation='relu'))
+    model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, padding='same', activation='relu'))
+    model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=2, padding='same', activation='relu'))
+    model.add(tf.keras.layers.Dropout(0.5))
+    model.add(tf.keras.layers.Conv2D(filters=n_classes, kernel_size=2, padding='same',
+        activation='softmax')) # 1x1 convolutions for pixel-wise prediciton.
+    # Take a look at the model summary
+    #model.summary()
+    return model
+
 def one_hot_encoding(class_mask, n_classes):
     '''Assumes classes range from 0 -> (n-1)'''
     shp = class_mask.shape
@@ -144,7 +159,7 @@ def preprocess_data(master, mask):
     return out_m, out_mask
 
 def create_model(n_classes):
-    model = fcnn_functional(n_classes)
+    model = fcnn_model(n_classes)
     model.compile(loss=custom_objective,
                  optimizer='adam', 
                  metrics=['accuracy'])
@@ -196,6 +211,108 @@ def instances_per_epoch(shapefile_directory, image_directory, box_size, target):
                             yield sub_master, sub_mask
 
 
+def generate_balanced_data(shapefile_directory, image_directory, box_size, target):
+    ''' This is pretty much for binary classification.'''
+    #while True:
+    for f in glob(os.path.join(shapefile_directory, "*.shp")):
+        if target in f:
+            all_matches = all_matching_shapefiles(f, shapefile_directory)
+            p, r = get_shapefile_path_row(f)
+            suffix = '{}_{}_{}.tif'.format(p, r, year)
+            master_raster = os.path.join(image_directory, train_raster + suffix)
+            mask_file = os.path.join(image_directory, mask_raster + suffix)
+            if not os.path.isfile(master_raster):
+                print("Master raster not created for {}".format(suffix))
+                # TODO: More extensive error handling.
+            else:
+                target_mask = generate_class_mask(f, mask_file)
+                class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
+                class_mask[1, :, :] = target_mask
+                required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
+                masks = []
+                for match in all_matches:
+                    msk = generate_class_mask(match, mask_file)
+                    samp = random_sample(msk, required_instances, box_size)
+                    masks.append(samp)
+                for i, s in enumerate(masks):
+                    class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
+
+                master = load_raster(master_raster)
+                print(f)
+                for i in range(0, master.shape[1], CHUNK_SIZE):
+                    for j in range(0, master.shape[2], CHUNK_SIZE):
+                        sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                        sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                        if np.all(sub_mask == NO_DATA):
+                            continue
+                        else:
+                            n_negative = len(np.where(sub_mask[0, :, :] != NO_DATA)[1]) 
+                            positive = np.where(target_mask[:, :] != NO_DATA)
+                            sorted_x = sorted(positive[1])
+                            sorted_y = sorted(positive[2])
+                            l = len(sorted_x) // 2
+                            center_x = sorted_x[l]
+                            center_y = sorted_y[l]
+                            ofs = CHUNK_SIZE // 2
+                            sub_positive = target_mask[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
+                            sub_master_positive = master[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
+                            required_instances = min(len(np.where(sub_positive[0, :, :] != NO_DATA)[1]), n_negative)
+                            sub_negative = random_sample(sub_mask[0, :, :], required_instances,
+                                    box_size=0, class_code=1)
+                            sub_master_negative = sub_master
+                            sub_positive = random_sample(sub_positive[0, :, :], required_instances,
+                                   box_size=0, class_code=1)
+                            one_hot_pos = np.ones((2, sub_positive.shape[0], sub_positive.shape[1]))*NO_DATA
+                            one_hot_neg = np.ones((2, sub_negative.shape[0], sub_negative.shape[1]))*NO_DATA
+                            one_hot_pos[1, :, :] = sub_positive
+                            one_hot_neg[0, :, :] = sub_negative
+                            sub_mas_pos, class_mask_pos = preprocess_data(sub_master_positive,
+                                    one_hot_pos)
+                            sub_mas_neg, class_mask_neg = preprocess_data(sub_master_negative,
+                                    one_hot_neg)
+                            ims = [sub_mas_pos, sub_mas_neg]
+                            class_masks = [class_mask_pos, class_mask_neg]
+                            for ii, jj in zip(ims, class_masks):
+                                yield ii, jj
+
+
+
+def random_sample(class_mask, n_instances, box_size, class_code=1):
+    out = np.where(class_mask != NO_DATA)
+    class_mask = class_mask.copy()
+    # returns (indices_z, indices_x, indices_y)
+    try:
+        out_x = out[1]
+        out_y = out[2] 
+    except IndexError as e:
+        out_x = out[0]
+        out_y = out[1] 
+
+    indices = np.random.choice(len(out_x), size=n_instances, replace=False)
+    out_x = out_x[indices]
+    out_y = out_y[indices] 
+
+    try:
+        class_mask[:, :, :] = NO_DATA
+        if box_size == 0:
+            class_mask[0, out_x, out_y] = class_code
+        else:
+            ofs = box_size // 2
+            for x, y in zip(out_x, out_y):
+                class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = class_code
+
+    except IndexError as e:
+        class_mask[:, :] = NO_DATA
+        if box_size == 0:
+            class_mask[out_x, out_y] = class_code
+        else:
+            ofs = box_size // 2
+            for x, y in zip(out_x, out_y):
+                class_mask[x-ofs:x+ofs, y-ofs:y+ofs] = class_code
+
+    return class_mask
+
+
 def generate_binary_train(shapefile_directory, image_directory, box_size, target):
 
     while True:
@@ -234,23 +351,6 @@ def generate_binary_train(shapefile_directory, image_directory, box_size, target
                                 yield sub_master, sub_mask
 
 
-def random_sample(class_mask, n_instances, box_size, class_code=0):
-    out = np.where(class_mask != NO_DATA)
-    # returns (elements from class_mask, indices_x, indices_y)
-    out_x = out[1]
-    out_y = out[2] 
-    indices = np.random.choice(len(out_x), size=n_instances, replace=False)
-    out_x = out_x[indices]
-    out_y = out_y[indices] 
-    class_mask[:, :, :] = NO_DATA
-    if box_size == 0:
-        class_mask[:, out_x, out_y] = class_code
-    else:
-        ofs = box_size // 2
-        for x, y in zip(out_x, out_y):
-            class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = class_code
-    return class_mask
-
 def load_raster(master_raster):
     with rasopen(master_raster, 'r') as src:
         arr = src.read()
@@ -288,7 +388,7 @@ def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=
     model = create_model(n_classes)
     tb = TensorBoard(log_dir='graphs/')
     n_augmented = 0
-    train_generator = generate_binary_train(shapefile_directory, image_directory, box_size,
+    train_generator = generate_balanced_data(shapefile_directory, image_directory, box_size,
     'irrigated')
     model.fit_generator(train_generator, 
             steps_per_epoch=steps_per_epoch, 
@@ -328,15 +428,10 @@ if __name__ == '__main__':
     train_raster = 'master_raster_'
     mask_raster = 'class_mask_'
     n_classes = 2
-    box_size = 6
 
-   #  k = 0
-   #  for i in instances_per_epoch(shapefile_directory, image_directory, box_size, 'irrigated'):
-   #      k += 1
-   #  print("INSTANCES:", k)
     pth = 'test_model.h5'
     if not os.path.isfile(pth):
-        model = train_model(shapefile_directory, 75, image_directory, epochs=1)
+        model = train_model(shapefile_directory, 76, image_directory, epochs=1)
         model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
@@ -347,8 +442,3 @@ if __name__ == '__main__':
             out = evaluate_image(f, model)
             plt.imshow(out)
             plt.show()
-
-
-
-
-
