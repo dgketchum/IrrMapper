@@ -1,5 +1,5 @@
 import os
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import keras.backend as K
 import matplotlib.pyplot as plt
@@ -75,7 +75,7 @@ def fcnn_functional(n_classes):
     c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='softmax', padding='same')(u3_c1)
 
     model = Model(inputs=x, outputs=c5) 
-    model.summary()
+    #model.summary()
     return model
 
 def fcnn_model(n_classes):
@@ -126,7 +126,7 @@ def augment_data(image, class_mask):
         class_mask = np.flipud(class_mask)
     return image, class_mask
 
-def preprocess_data(master, mask):
+def preprocess_data(master, mask, return_cuts=False):
     shp = master.shape
     rows = shp[1]; cols = shp[2]
     cut_rows = rows % (2**MAX_POOLS) 
@@ -156,10 +156,13 @@ def preprocess_data(master, mask):
 
     out_m = np.swapaxes(out_m, 1, 3)
     out_mask = np.swapaxes(out_mask, 1, 3)
+    if return_cuts:
+        return out_m, out_mask, cut_rows, cut_cols
+
     return out_m, out_mask
 
 def create_model(n_classes):
-    model = fcnn_model(n_classes)
+    model = fcnn_functional(n_classes)
     model.compile(loss=custom_objective,
                  optimizer='adam', 
                  metrics=['accuracy'])
@@ -213,67 +216,66 @@ def instances_per_epoch(shapefile_directory, image_directory, box_size, target):
 
 def generate_balanced_data(shapefile_directory, image_directory, box_size, target):
     ''' This is pretty much for binary classification.'''
-    #while True:
-    for f in glob(os.path.join(shapefile_directory, "*.shp")):
-        if target in f:
-            all_matches = all_matching_shapefiles(f, shapefile_directory)
-            p, r = get_shapefile_path_row(f)
-            suffix = '{}_{}_{}.tif'.format(p, r, year)
-            master_raster = os.path.join(image_directory, train_raster + suffix)
-            mask_file = os.path.join(image_directory, mask_raster + suffix)
-            if not os.path.isfile(master_raster):
-                print("Master raster not created for {}".format(suffix))
-                # TODO: More extensive error handling.
-            else:
-                target_mask = generate_class_mask(f, mask_file)
-                class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
-                class_mask[1, :, :] = target_mask
-                required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
-                masks = []
-                for match in all_matches:
-                    msk = generate_class_mask(match, mask_file)
-                    samp = random_sample(msk, required_instances, box_size)
-                    masks.append(samp)
-                for i, s in enumerate(masks):
-                    class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
+    while True:
+        for f in glob(os.path.join(shapefile_directory, "*.shp")):
+            if target in f:
+                all_matches = all_matching_shapefiles(f, shapefile_directory)
+                p, r = get_shapefile_path_row(f)
+                suffix = '{}_{}_{}.tif'.format(p, r, year)
+                master_raster = os.path.join(image_directory, train_raster + suffix)
+                mask_file = os.path.join(image_directory, mask_raster + suffix)
+                if not os.path.isfile(master_raster):
+                    print("Master raster not created for {}".format(suffix))
+                    # TODO: More extensive error handling.
+                else:
+                    target_mask = generate_class_mask(f, mask_file)
+                    class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
+                    class_mask[1, :, :] = target_mask
+                    required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
+                    masks = []
+                    for match in all_matches:
+                        msk = generate_class_mask(match, mask_file)
+                        samp = random_sample(msk, required_instances, box_size)
+                        masks.append(samp)
+                    for i, s in enumerate(masks):
+                        class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
 
-                master = load_raster(master_raster)
-                print(f)
-                for i in range(0, master.shape[1], CHUNK_SIZE):
-                    for j in range(0, master.shape[2], CHUNK_SIZE):
-                        sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                        sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                        if np.all(sub_mask == NO_DATA):
-                            continue
-                        else:
-                            n_negative = len(np.where(sub_mask[0, :, :] != NO_DATA)[1]) 
-                            positive = np.where(target_mask[:, :] != NO_DATA)
-                            sorted_x = sorted(positive[1])
-                            sorted_y = sorted(positive[2])
-                            l = len(sorted_x) // 2
-                            center_x = sorted_x[l]
-                            center_y = sorted_y[l]
-                            ofs = CHUNK_SIZE // 2
-                            sub_positive = target_mask[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
-                            sub_master_positive = master[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
-                            required_instances = min(len(np.where(sub_positive[0, :, :] != NO_DATA)[1]), n_negative)
-                            sub_negative = random_sample(sub_mask[0, :, :], required_instances,
-                                    box_size=0, class_code=1)
-                            sub_master_negative = sub_master
-                            sub_positive = random_sample(sub_positive[0, :, :], required_instances,
-                                   box_size=0, class_code=1)
-                            one_hot_pos = np.ones((2, sub_positive.shape[0], sub_positive.shape[1]))*NO_DATA
-                            one_hot_neg = np.ones((2, sub_negative.shape[0], sub_negative.shape[1]))*NO_DATA
-                            one_hot_pos[1, :, :] = sub_positive
-                            one_hot_neg[0, :, :] = sub_negative
-                            sub_mas_pos, class_mask_pos = preprocess_data(sub_master_positive,
-                                    one_hot_pos)
-                            sub_mas_neg, class_mask_neg = preprocess_data(sub_master_negative,
-                                    one_hot_neg)
-                            ims = [sub_mas_pos, sub_mas_neg]
-                            class_masks = [class_mask_pos, class_mask_neg]
-                            for ii, jj in zip(ims, class_masks):
-                                yield ii, jj
+                    master = load_raster(master_raster)
+                    for i in range(0, master.shape[1], CHUNK_SIZE):
+                        for j in range(0, master.shape[2], CHUNK_SIZE):
+                            sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                            sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                            if np.all(sub_mask == NO_DATA):
+                                continue
+                            else:
+                                n_negative = len(np.where(sub_mask[0, :, :] != NO_DATA)[1]) 
+                                positive = np.where(target_mask[:, :] != NO_DATA)
+                                sorted_x = sorted(positive[1])
+                                sorted_y = sorted(positive[2])
+                                l = len(sorted_x) // 2
+                                center_x = sorted_x[l]
+                                center_y = sorted_y[l]
+                                ofs = CHUNK_SIZE // 2
+                                sub_positive = target_mask[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
+                                sub_master_positive = master[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
+                                required_instances = min(len(np.where(sub_positive[0, :, :] != NO_DATA)[1]), n_negative)
+                                sub_negative = random_sample(sub_mask[0, :, :], required_instances,
+                                        box_size=0, class_code=1)
+                                sub_master_negative = sub_master
+                                sub_positive = random_sample(sub_positive[0, :, :], required_instances,
+                                       box_size=0, class_code=1)
+                                one_hot_pos = np.ones((2, sub_positive.shape[0], sub_positive.shape[1]))*NO_DATA
+                                one_hot_neg = np.ones((2, sub_negative.shape[0], sub_negative.shape[1]))*NO_DATA
+                                one_hot_pos[1, :, :] = sub_positive
+                                one_hot_neg[0, :, :] = sub_negative
+                                sub_mas_pos, class_mask_pos = preprocess_data(sub_master_positive,
+                                        one_hot_pos)
+                                sub_mas_neg, class_mask_neg = preprocess_data(sub_master_negative,
+                                        one_hot_neg)
+                                ims = [sub_mas_pos, sub_mas_neg]
+                                class_masks = [class_mask_pos, class_mask_neg]
+                                for ii, jj in zip(ims, class_masks):
+                                    yield ii, jj
 
 
 
@@ -354,33 +356,51 @@ def generate_binary_train(shapefile_directory, image_directory, box_size, target
 def load_raster(master_raster):
     with rasopen(master_raster, 'r') as src:
         arr = src.read()
-    return arr
+        meta = src.meta.copy()
+    return arr, meta
 
-def evaluate_image(master_raster, model):
+def evaluate_image(master_raster, model, outfile=None):
 
     if not os.path.isfile(master_raster):
         print("Master raster not created for {}".format(suffix))
         # TODO: More extensive error handling.
     else:
-        master = load_raster(master_raster)
+        master, meta = load_raster(master_raster)
         class_mask = np.zeros((2, master.shape[1], master.shape[2]))
-        out = np.zeros((master.shape[1], master.shape[2]))
+        out = np.zeros((master.shape[2], master.shape[1]))
         for i in range(0, master.shape[1], CHUNK_SIZE):
             for j in range(0, master.shape[2], CHUNK_SIZE):
                 sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
+                sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask, return_cuts=True)
                 preds = model.predict(sub_master)
                 preds = preds[0, :, :, :]
-                fig, ax = plt.subplots(ncols=2)
-                i1 = ax[0].imshow(preds[:, :, 0])
-                i2 = ax[1].imshow(preds[:, :, 1])
-                fig.colorbar(i1, ax=ax[0])
-                fig.colorbar(i2, ax=ax[1])
-                plt.show()
-                out[i:i+CHUNK_SIZE, j:j+CHUNK_SIZE] = np.argmax(preds, axis=2)
+                preds = np.argmax(preds, axis=2)
+                if cut_cols == 0 and cut_rows == 0:
+                    out[j:j+CHUNK_SIZE, i:i+CHUNK_SIZE] = preds
+                elif cut_cols == 0 and cut_rows != 0:
+                    ofs = master.shape[1]-cut_rows
+                    out[j:j+CHUNK_SIZE, i:ofs] = preds
+                elif cut_cols != 0 and cut_rows == 0:
+                    ofs = master.shape[2]-cut_cols
+                    out[j:ofs, i:i+CHUNK_SIZE] = preds
+                elif cut_cols != 0 and cut_rows != 0:
+                    ofs_col = master.shape[2]-cut_cols
+                    ofs_row = master.shape[1]-cut_rows
+                    out[j:ofs_col, i:ofs_row] = preds
+                else:
+                    print("whatcha got goin on here?")
+            print("Percent done: {:.3f}".format(i / master.shape[1]))
+    out = np.swapaxes(out, 0, 1)
+
+    if outfile:
+        save_raster(out, outfile, meta)
     return out
 
+def save_raster(arr, outfile, meta):
+    meta.update(count=1)
+    with rasopen(outfile, 'w', **meta) as dst:
+        dst.write(arr)
 
 def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=6, epochs=3):
     # image shape will change here, so it must be
@@ -428,10 +448,11 @@ if __name__ == '__main__':
     train_raster = 'master_raster_'
     mask_raster = 'class_mask_'
     n_classes = 2
+    out_directory = 'fully_conv_evaluated_images/'
 
     pth = 'test_model.h5'
     if not os.path.isfile(pth):
-        model = train_model(shapefile_directory, 76, image_directory, epochs=1)
+        model = train_model(shapefile_directory, 76, image_directory, epochs=2)
         model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
@@ -439,6 +460,9 @@ if __name__ == '__main__':
 
     for f in glob(os.path.join(image_directory, "*.tif")):
         if "class" not in f:
-            out = evaluate_image(f, model)
-            plt.imshow(out)
-            plt.show()
+            print(os.path.splitext(f)[0])
+
+    #        out = evaluate_image(f, model)
+    #        plt.imshow(out)
+    #        plt.colorbar()
+    #        plt.show()
