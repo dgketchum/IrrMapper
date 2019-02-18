@@ -81,7 +81,7 @@ def fcnn_functional(n_classes):
     c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='softmax', padding='same')(u3_c1)
 
     model = Model(inputs=x, outputs=c5) 
-    #model.summary()
+    model.summary()
     return model
 
 def fcnn_model(n_classes):
@@ -398,14 +398,10 @@ def evaluate_image(master_raster, model, outfile=None):
                     print("whatcha got goin on here?")
             print("Percent done: {:.3f}".format(i / master.shape[1]))
 
-    plt.imshow(preds)
-    plt.colorbar()
-    plt.show()
     out = np.swapaxes(out, 0, 1)
     out[out == 0] = np.nan
-    arr = np.expand_dims(arr, axis=0)
-    arr = arr.astype(np.float32)
-
+    out = np.expand_dims(out, axis=0)
+    out = out.astype(np.float32)
     if outfile:
         save_raster(out, outfile, meta)
     return out
@@ -450,6 +446,7 @@ def clip_raster(evaluated, path, row, outfile=None):
         features = get_features(shp, path, row)
         out_image, out_transform = mask(src, shapes=features, nodata=np.nan)
 
+    out_image[out_image == 0] = np.nan
     if outfile:
         save_raster(out_image, outfile, meta)
 
@@ -484,34 +481,35 @@ if __name__ == '__main__':
     n_classes = 2
     out_directory = 'evaluated_images_fully_conv/'
 
-    # for f in glob(os.path.join(out_directory, "*.tif")):
-    #     if 'clipped' not in f:
-    #         out = os.path.basename(f)
-    #         os.path.split(out)[1]
-    #         out = out[out.find("_")+1:]
-    #         path = out[:2]
-    #         row = out[3:5]
-    #         out = os.path.splitext(out)[0]
-    #         out = 'eval_clipped_' + out + ".tif"
-    #         out = os.path.join(out_directory, out)
-    #         clip_raster(f, int(path), int(row), outfile=out)
-
-    pth = 'test_model.h5'
-    if not os.path.isfile(pth):
-        model = train_model(shapefile_directory, 76, image_directory, epochs=2)
-        model.save(pth)
-    else:
-        model = tf.keras.models.load_model(pth,
-                custom_objects={'custom_objective':custom_objective})
-
-    for f in glob(os.path.join(image_directory, "*.tif")):
-        if "class" not in f:
+    for f in glob(os.path.join(out_directory, "*.tif")):
+        if 'probab' in f:
             out = os.path.basename(f)
             os.path.split(out)[1]
             out = out[out.find("_")+1:]
-            out = out[out.find("_"):]
+            out = out[out.find("_")+1:]
+            path = out[:2]
+            row = out[3:5]
             out = os.path.splitext(out)[0]
-            out = 'eval_probability' + out + ".tif"
+            out = 'eval_clipped_' + out + ".tif"
             out = os.path.join(out_directory, out)
-            evaluate_image(f, model, out)
+            clip_raster(f, int(path), int(row), outfile=f)
+
+    # pth = 'test_model.h5'
+    # if not os.path.isfile(pth):
+    #     model = train_model(shapefile_directory, 76, image_directory, epochs=2)
+    #     model.save(pth)
+    # else:
+    #     model = tf.keras.models.load_model(pth,
+    #             custom_objects={'custom_objective':custom_objective})
+
+    # for f in glob(os.path.join(image_directory, "*.tif")):
+    #     if "class" not in f:
+    #         out = os.path.basename(f)
+    #         os.path.split(out)[1]
+    #         out = out[out.find("_")+1:]
+    #         out = out[out.find("_"):]
+    #         out = os.path.splitext(out)[0]
+    #         out = 'eval_probability' + out + ".tif"
+    #         out = os.path.join(out_directory, out)
+    #         evaluate_image(f, model, out)
 

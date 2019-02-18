@@ -36,45 +36,6 @@ def generate_class_mask(shapefile, master_raster):
         out_image, out_transform = mask(src, shapes=features, nodata=NO_DATA)
     return out_image
 
-def create_master_masked_raster(image_stack, path, row, year, raster_directory):
-    masks = image_stack.masks
-    if not masks:
-        return None
-
-    first = True
-    stack = None
-
-    for i, feat in enumerate(masks.keys()): # ordered dict ensures accuracy here.
-
-        mask_raster = masks[feat] # maps bands to their location in filesystem.
-
-        with rasopen(mask_raster, mode='r') as src:
-            arr = src.read()
-            raster_geo = src.meta.copy()
-
-        if first:
-            first_geo = deepcopy(raster_geo)
-            empty = zeros((len(masks.keys()), arr.shape[1], arr.shape[2]), float32)
-            stack = empty
-            stack[i, :, :] = arr
-            first = False
-        else:
-            try:
-                stack[i, :, :] = arr
-            except ValueError: 
-                arr = warp_single_image(mask_raster, first_geo)
-                stack[i, :, :] = arr
-
-    first_geo.update(count=len(masks.keys()))
-
-    fname = "master_mask_raster_{}_{}_{}.tif".format(path, row, year)
-    pth = os.path.join(raster_directory, fname)
-
-    with rasopen(pth, mode='w', **first_geo) as dst:
-        dst.write(stack) 
-
-    return pth
-
 
 def create_master_raster(image_stack, path, row, year, raster_directory):
     fname = "master_raster_{}_{}_{}.tif".format(path, row, year)
@@ -134,6 +95,9 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
     first_geo.update(count=len(paths_map.keys()))
 
     with rasopen(pth, mode='w', **first_geo) as dst:
+        dst.update_tags(path=path)
+        dst.update_tags(row=row)
+        dst.update_tags(year=year)
         dst.write(stack)
 
     return pth
