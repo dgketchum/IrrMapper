@@ -96,7 +96,6 @@ class ImageStack(object):
         self.get_precip()
         self.get_et()
         self.get_terrain()
-        self.get_cdl()
         self.paths_map, self.masks = self._order_images()
 
     def build_evaluating(self):
@@ -105,7 +104,6 @@ class ImageStack(object):
         #self.get_et()
         self.get_precip()
         self.get_terrain()
-        self.get_cdl()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
 
