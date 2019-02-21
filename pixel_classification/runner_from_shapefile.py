@@ -6,7 +6,8 @@ from numpy import save as nsave
 from compose_array_single_shapefile import PTASingleShapefile, ShapefileSamplePoints
 from fiona import open as fopen
 from shapely.geometry import shape
-from data_utils import download_images, get_shapefile_path_row, split_shapefile, create_master_raster
+from data_utils import download_images, get_shapefile_path_row, split_shapefile, create_master_raster, filter_shapefile
+
 
 def download_images_over_shapefile(shapefile, image_directory, year, master_raster_directory):
     '''Downloads p/r corresponding to the location of 
@@ -85,19 +86,13 @@ def split_shapefiles_multiproc(f):
     fname = os.path.basename(f) 
     split_shapefile(shp_dir, fname, data_directory)
 
-# Need a function that takes a targets dict  
-
-if __name__ == "__main__":
-
+def dl_all_ims():
     image_directory = 'image_data/'
-    shp = 'shapefile_data/backup'
+    shp = 'shapefile_data/'
     master = 'master_rasters/'
     year = 2013
-
     template = "{}_{}_{}"
-
     done = set()
-
     satellite = 8
     for f in glob.glob(os.path.join(shp, "*.shp")):
         p, r = get_shapefile_path_row(f)
@@ -105,3 +100,12 @@ if __name__ == "__main__":
         if t not in done:
             done.add(t)
             download_images_over_shapefile(f, image_directory, year, master)
+
+if __name__ == "__main__":
+    # out_shapefile_directory = 'shapefile_data'
+    # shp = "/home/thomas/IrrigationGIS/western_states_irrgis/MT/MT_Main/" 
+    # for f in glob.glob(shp + "*.shp"):
+    #     filter_shapefile(f, out_shapefile_directory)
+    dl_all_ims()
+
+

@@ -102,7 +102,7 @@ class ImageStack(object):
         self.get_landsat(fmask=False)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et()
-        self.get_precip()
+        #self.get_precip()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
@@ -133,8 +133,6 @@ class ImageStack(object):
         else:
             g = GoogleDownload(self.start, self.end, self.sat, latitude=self.lat, longitude=self.lon,
                                output_path=self.root, max_cloud_percent=self.max_cloud)
-            self.path = g.p
-            self.row = g.r
 
         g.select_scenes(self.n)
         self.scenes = g.selected_scenes
@@ -171,13 +169,16 @@ class ImageStack(object):
         geometry[0]['crs'] = CRS({'init':'epsg:32612'})
         bounds = poly_bounds.bounds
         for date in dates:
-            d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
-            bds = GeoBounds(wsen=bounds)
-            gm = GridMet(variable='pr', clip_feature=geometry,
-                    bbox=bds, target_profile=self.profile, date=d)
-            out = gm.get_data_subset()
-            outfile = os.path.join(self.root, 'GridMet{}.tif'.format(date))
-            gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
+            outfile = os.path.join(self.root, 'precip_{}.tif'.format(date))
+            if not os.path.isfile(outfile):
+                print("Get {}".format(outfile))
+                d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
+                bds = GeoBounds(wsen=bounds)
+                gm = GridMet(variable='pr', clip_feature=geometry,
+                        bbox=bds, target_profile=self.profile, date=d)
+                out = gm.get_data_subset()
+                gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
+
 
     def get_terrain(self):
         """
@@ -281,10 +282,10 @@ class ImageStack(object):
         for sc in scenes:
 
             paths = os.listdir(os.path.join(self.root, sc))
-            c = climate_rasters(self.root)
+            #c = climate_rasters(self.root)
             b = [os.path.join(self.root, sc, x) for x in paths if x.endswith(landsat_rasters()[self.sat])]
             a = [os.path.join(self.root, sc, x) for x in paths if x.endswith(ancillary_rasters())]
-            bands = a + b + c
+            bands = a + b# + c
             
             bands.sort()
             for p in bands:
@@ -313,16 +314,16 @@ class ImageStack(object):
             else:    
                 rass_arr = rsrc.read()
                 rass_arr = rass_arr.astype(float32)
-                profile = rsrc.profile
+                profile = rsrc.profile.copy()
                 profile.update(dtype=float32)
                 rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
                 scaler = StandardScaler() # z-normalization
                 scaler.fit(rass_arr)
                 rass_arr = scaler.transform(rass_arr)
-                with rasopen(fname, 'w', **profile) as dst:
-                    dst.write(rass_arr, 1)
-                    print("Normalized", fname)
-                    dst.update_tags(normalized=True)
+        with rasopen(fname, 'w', **profile) as dst:
+            dst.write(rass_arr, 1)
+            print("Normalized", fname)
+            dst.update_tags(normalized=True)
 
 
 if __name__ == '__main__':

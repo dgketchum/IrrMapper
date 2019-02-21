@@ -2,7 +2,7 @@ import glob
 import os
 import geopandas as gpd
 import json
-import fiona
+from fiona import open as fopen
 from lxml import html
 from requests import get
 from copy import deepcopy
@@ -104,7 +104,7 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
 
 def get_shapefile_lat_lon(shapefile):
     ''' Center of shapefile'''
-    with fiona.open(shapefile, "r") as src:
+    with fopen(shapefile, "r") as src:
         minx, miny, maxx, maxy = src.bounds
         latc = (maxy + miny) / 2
         lonc = (maxx + minx) / 2
@@ -161,6 +161,43 @@ def get_pr_subset(poly, tiles):
             ls.append(str(p) + "_" + str(r))
     return ls
 
+def filter_shapefile(shapefile, out_directory): 
+    """ Shapefiles may span multiple path/rows.
+    For training, we want all of the data available.
+    This function filters the polygons contained in
+    the shapefile into separate files for each path/row
+    contained in the shapefile. """
+    path_row_map = defaultdict(list)
+    wrs2 = fopen('../spatial_data/wrs2_descending_usa.shp', 'r')
+    tree, path_rows, features = construct_kdtree(wrs2)
+    wrs2.close()
+
+    cent_arr = array([0, 0])
+    with fopen(shapefile, "r") as src:
+        meta = deepcopy(src.meta)
+        for feat in src:
+            poly = shape(feat['geometry'])
+            centroid = poly.centroid.coords[0]
+            cent_arr[0] = centroid[0]
+            cent_arr[1] = centroid[1]
+            centroid = cent_arr.reshape(1, -1)
+            dist, ind = tree.query(centroid, k=10)
+            tiles = features[ind[0]]
+            prs = get_pr_subset(poly, tiles)
+            for p in prs:
+                path_row_map[p].append(feat)
+
+    outfile = os.path.basename(shapefile)
+    outfile = os.path.splitext(outfile)[0]
+
+    for path_row in path_row_map:
+        out = outfile + path_row + ".shp"
+        with fopen(os.path.join(out_directory, out), 'w', **meta) as dst:
+            print("Saving {}".format(out))
+            for feat in path_row_map[path_row]:
+                dst.write(feat)
+
+
 def split_shapefile(base, base_shapefile, data_directory):
     """
     Shapefiles may deal with data over multiple path/rows.
@@ -171,12 +208,12 @@ def split_shapefile(base, base_shapefile, data_directory):
     path_row = defaultdict(list) 
     id_mapping = {}
     # TODO: un hardcode this directory.
-    wrs2 = fiona.open('../spatial_data/wrs2_descending_usa.shp', 'r')
+    wrs2 = fopen('../spatial_data/wrs2_descending_usa.shp', 'r')
     tree, path_rows, features = construct_kdtree(wrs2)
     wrs2.close()
 
     cent_arr = array([0, 0])
-    with fiona.open(os.path.join(base, base_shapefile), "r") as src:
+    with fopen(os.path.join(base, base_shapefile), "r") as src:
         meta = deepcopy(src.meta)
         for feat in src:
             idd = feat['id']
@@ -234,7 +271,7 @@ def split_shapefile(base, base_shapefile, data_directory):
             continue
         out = prefix + "_" + key + ".shp"
         if len(unique[key]):
-            with fiona.open(os.path.join(data_directory, out), 'w', **meta) as dst:
+            with fopen(os.path.join(data_directory, out), 'w', **meta) as dst:
                 print("Saving split shapefile to: {}".format(os.path.join(data_directory, out)))
                 for feat in unique[key]:
                     dst.write(id_mapping[feat])
