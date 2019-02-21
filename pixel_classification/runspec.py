@@ -36,7 +36,7 @@ def landsat_rasters():
     return b
 
 def climate_rasters(root):
-    return [f for f in glob(os.path.join(root, "*.tif")) if 'GridMet' in f]
+    return [f for f in glob(os.path.join(root, "*.tif")) if 'precip' in f]
 
 
 def ancillary_rasters():

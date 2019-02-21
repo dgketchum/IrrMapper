@@ -1,19 +1,19 @@
-from shapely.geometry import shape
 import glob
 import os
-from collections import defaultdict
+import geopandas as gpd
+import json
 import fiona
 from lxml import html
 from requests import get
 from copy import deepcopy
 from numpy import zeros, asarray, array, reshape, nan
+from shapely.geometry import shape
+from collections import defaultdict
 from rasterio import float32, open as rasopen
 from rasterio.mask import mask
 from prepare_images import ImageStack
 from sklearn.neighbors import KDTree
 from sat_image.warped_vrt import warp_single_image
-import geopandas as gpd
-import json
 
 NO_DATA = -1
 
@@ -74,7 +74,7 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
             raster_geo = src.meta.copy()
 
         if first:
-            first_geo = deepcopy(raster_geo)
+            first_geo = raster_geo.copy()
             empty = zeros((len(paths_map.keys()), arr.shape[1], arr.shape[2]), float32)
             stack = empty
             stack[i, :, :] = arr
@@ -84,6 +84,9 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
                 stack[i, :, :] = arr
             except ValueError: 
                 # error can be thrown here if source raster doesn't have crs
+                # OR ! Because rasterio version.
+                # However, deepcopy becomes an issue with the latest
+                # version of rasterio.
                 arr = warp_single_image(feature_raster, first_geo)
                 stack[i, :, :] = arr
 
@@ -95,9 +98,6 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
     first_geo.update(count=len(paths_map.keys()))
 
     with rasopen(pth, mode='w', **first_geo) as dst:
-        dst.update_tags(path=path)
-        dst.update_tags(row=row)
-        dst.update_tags(year=year)
         dst.write(stack)
 
     return pth
