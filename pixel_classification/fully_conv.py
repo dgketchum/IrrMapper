@@ -167,7 +167,7 @@ def evaluate_image(master_raster, model, outfile=None):
             print("Percent done: {:.3f}".format(i / master.shape[1]))
 
     out = np.swapaxes(out, 0, 1)
-    out[out == 0] = np.nan
+    #out[out == 0] = np.nan
     out = np.expand_dims(out, axis=0)
     out = out.astype(np.float32)
     if outfile:
@@ -248,20 +248,9 @@ if __name__ == '__main__':
     n_classes = 2
     out_directory = 'evaluated_images_fully_conv/'
 
-    # for f in glob(os.path.join('oversamplin', "*.tif")):
-    #     if 'corrected_master' in f:
-    #         out = os.path.basename(f)
-    #         os.path.split(out)[1]
-    #         out = out[out.find("_")+1:]
-    #         out = out[out.find("_")+1:]
-    #         path = out[:2]
-    #         row = out[3:5]
-    #         clip_raster(f, int(path), int(row), outfile=f)
-
-
-    pth = 'oversamplin/model_no_precip.h5'
+    pth = 'oversamplin/model_no_precip10epochs.h5'
     if not os.path.isfile(pth):
-        model = train_model(shapefile_directory, 76, image_directory, epochs=3)
+        model = train_model(shapefile_directory, 78, image_directory, epochs=7)
         model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
@@ -274,6 +263,16 @@ if __name__ == '__main__':
             out = out[out.find("_")+1:]
             out = out[out.find("_"):]
             out = os.path.splitext(out)[0]
-            out = 'no_precip' + out + ".tif"
+            out = 'no_precip10epochs' + out + ".tif"
             out = os.path.join('oversamplin', out)
             evaluate_image(f, model, out)
+
+    for f in glob(os.path.join('oversamplin', "*.tif")):
+        if 'no_precip' in f:
+            out = os.path.basename(f)
+            os.path.split(out)[1]
+            out = out[out.find("_")+1:]
+            out = out[out.find("_")+1:]
+            path = out[:2]
+            row = out[3:5]
+            clip_raster(f, int(path), int(row), outfile=f)

@@ -3,11 +3,13 @@ import os
 from glob import glob
 from data_utils import generate_class_mask, get_shapefile_path_row
 from rasterio import open as rasopen
+import time
+import pickle
 
 NO_DATA = -1
 MAX_POOLS = 3
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
-NUM_CLASSES = 2
+NUM_CLASSES = 4
 
 def random_sample(class_mask, n_instances, box_size, class_code=1):
     out = np.where(class_mask != NO_DATA)
@@ -49,43 +51,88 @@ def load_raster(master_raster):
         meta = src.meta.copy()
     return arr, meta
 
-def generate_binary_train(shapefile_directory, image_directory, box_size, target):
 
-    while True:
-        for f in glob(os.path.join(shapefile_directory, "*.shp")):
-            if target in f:
-                all_matches = all_matching_shapefiles(f, shapefile_directory)
-                p, r = get_shapefile_path_row(f)
-                suffix = '{}_{}_{}.tif'.format(p, r, year)
-                master_raster = os.path.join(image_directory, train_raster + suffix)
-                mask_file = os.path.join(image_directory, mask_raster + suffix)
-                if not os.path.isfile(master_raster):
-                    print("Master raster not created for {}".format(suffix))
-                    # TODO: More extensive error handling.
-                else:
-                    target_mask = generate_class_mask(f, mask_file)
-                    class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
-                    class_mask[1, :, :] = target_mask
-                    required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
-                    masks = []
-                    for match in all_matches:
-                        msk = generate_class_mask(match, mask_file)
-                        samp = random_sample(msk, required_instances, box_size)
-                        masks.append(samp)
-                    for i, s in enumerate(masks):
-                        class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
-                    # May need to do some preprocessing.    
-                    master = load_raster(master_raster)
-                    for i in range(0, master.shape[1], CHUNK_SIZE):
-                        for j in range(0, master.shape[2], CHUNK_SIZE):
-                            sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                            sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                            sub_master, sub_mask = preprocess_data(sub_master, sub_mask)
-                            if np.all(sub_mask == NO_DATA):
-                                continue
-                            else:
-                                yield sub_master, sub_mask
 
+def assign_class_code(target_dict, shapefilename):
+
+    for key in target_dict:
+        if key in shapefilename:
+            return target_dict[key]
+    print("{} has no known match in target_dict.".format(shapefilename))
+    return None
+
+
+class DataMask(object):
+
+    def __init__(self, mask, class_code):
+        self.mask = mask
+        self.class_code = class_code
+
+
+class DataTile(object):
+
+    def __init__(self, data, class_mask, class_code):
+        self.dict = {}
+        self.dict['data'] = data
+        self.dict['class_mask'] = class_mask
+        self.dict['class_code'] = class_code
+
+    def to_pickle(self, training_directory):
+        if not os.path.isdir(training_directory):
+            os.mkdir(training_directory)
+        template = os.path.join(training_directory,
+                'class_{}_data/'.format(self.dict['class_code']))
+        if not os.path.isdir(template):
+            os.mkdir(template)
+        # Need to save the dict object with a unique filename
+        outfile = os.path.join(template, str(int(time.time())) + ".pkl")
+        with open(outfile, 'wb') as f:
+            pickle.dump(self.dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def set_data(self, data):
+        self.dict['data'] = data
+
+    def set_code(self, class_code):
+        self.dict['class_code'] = class_code
+
+    def set_class_mask(self, class_mask):
+        self.dict['class_mask'] = class_mask
+
+
+def create_training_data(target_dict, shapefile_directory, image_directory, training_directory):
+    ''' target_dict: {filename or string in filename : class_code} '''
+    done = set()
+    train_raster = 'master_raster_'
+    mask_raster = 'class_mask_'
+    for f in glob(os.path.join(shapefile_directory, "*.shp")):
+        if f not in done:
+            all_matches = all_matching_shapefiles(f, shapefile_directory)
+            done.add(f)
+            for match in all_matches:
+                done.add(match)
+            p, r = get_shapefile_path_row(f)
+            suffix = '{}_{}_{}.tif'.format(p, r, year)
+            master_raster = os.path.join(image_directory, train_raster + suffix)
+            mask_file = os.path.join(image_directory, mask_raster + suffix) # for rasterio.mask.mask
+            # this file is projected the same as the shapefile.
+            master, meta = load_raster(master_raster)
+            masks = []
+            for match in all_matches:
+                msk = generate_class_mask(match, mask_file)
+                cc = assign_class_code(target_dict, match)
+                if cc is not None:
+                    dm = DataMask(msk, cc)
+                    masks.append(dm)
+
+            for i in range(0, master.shape[1], CHUNK_SIZE):
+                for j in range(0, master.shape[2], CHUNK_SIZE):
+                    sub_masks = []
+                    sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                    for msk in masks:
+                        s = msk.mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                        if not np.all(s == NO_DATA):
+                            dt = DataTile(sub_master, s, msk.class_code)
+                            dt.to_pickle(training_directory)
 
 def all_matching_shapefiles(to_match, shapefile_directory):
     out = []
@@ -225,4 +272,16 @@ def preprocess_data(master, mask, return_cuts=False):
     return out_m, out_mask
 
 if __name__ == '__main__':
-    pass
+    shapefile_directory = 'shapefile_data/'
+    image_directory = 'master_rasters/'
+    irr1 = 'Huntley'
+    irr2 = 'Sun_River'
+    fallow = 'Fallow'
+    forest = 'Forrest'
+    other = 'other'
+    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
+    year = 2013
+    done = set()
+    n_classes = 2
+    training_directory = 'training_data'
+    create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
