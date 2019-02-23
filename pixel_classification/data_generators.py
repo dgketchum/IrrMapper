@@ -1,17 +1,21 @@
 import numpy as np
 import os
-from glob import glob
-from data_utils import generate_class_mask, get_shapefile_path_row
-from rasterio import open as rasopen
 import time
 import pickle
+import matplotlib.pyplot as plt
+from glob import glob
+from random import sample
+from data_utils import generate_class_mask, get_shapefile_path_row
+from rasterio import open as rasopen
 
 NO_DATA = -1
 MAX_POOLS = 3
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
 NUM_CLASSES = 4
 
-def random_sample(class_mask, n_instances, box_size, class_code=1):
+def random_sample(class_mask, n_instances, box_size=0, fill_value=1):
+    if box_size:
+        n_instances /= box_size
     out = np.where(class_mask != NO_DATA)
     class_mask = class_mask.copy()
     try:
@@ -28,20 +32,20 @@ def random_sample(class_mask, n_instances, box_size, class_code=1):
     try:
         class_mask[:, :, :] = NO_DATA
         if box_size == 0:
-            class_mask[0, out_x, out_y] = class_code
+            class_mask[0, out_x, out_y] = fill_value
         else:
             ofs = box_size // 2
             for x, y in zip(out_x, out_y):
-                class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = class_code
+                class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = fill_value
 
     except IndexError as e:
         class_mask[:, :] = NO_DATA
         if box_size == 0:
-            class_mask[out_x, out_y] = class_code
+            class_mask[out_x, out_y] = fill_value
         else:
             ofs = box_size // 2
             for x, y in zip(out_x, out_y):
-                class_mask[x-ofs:x+ofs, y-ofs:y+ofs] = class_code
+                class_mask[x-ofs:x+ofs, y-ofs:y+ofs] = fill_value
 
     return class_mask
 
@@ -50,7 +54,6 @@ def load_raster(master_raster):
         arr = src.read()
         meta = src.meta.copy()
     return arr, meta
-
 
 
 def assign_class_code(target_dict, shapefilename):
@@ -209,6 +212,74 @@ def generate_balanced_data(shapefile_directory, image_directory, box_size, targe
                                 for ii, jj in zip(ims, class_masks):
                                     yield ii, jj
 
+class DataGen:
+
+    def __init__(self, class_filename):
+        self.file_list = None
+        self.class_filename = class_filename
+        self._get_files()
+        self.n_files = len(self.file_list)
+        self.first = True
+        self.idx = 0
+    
+    def _get_files(self):
+        self.file_list = [x[2] for x in os.walk(self.class_filename)][0]
+        self.file_list = [os.path.join(self.class_filename, x) for x in self.file_list]
+
+    def next(self):
+        if self.idx == self.n_files:
+            self.first = True
+        if self.first:
+            self.first = False
+            self.idx = 0
+            self.shuffled = sample(self.file_list, self.n_files)
+            out = self.shuffled[self.idx]
+            self.idx += 1
+        else:
+            out = self.shuffled[self.idx]
+            self.idx += 1
+        return self._from_pickle(out)
+    
+    def _from_pickle(self, filename):
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
+        return data
+
+
+def generate_training_data(n_classes, training_directory):
+    ''' Assumes data is stored in training_directory
+    in subdirectories labeled class_n_train '''
+    class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
+    generators = []
+    for d in class_dirs:
+        generators.append(DataGen(d))
+    # I want to 
+    # a. shuffle the filenames to draw.
+    # b. Define one epoch to be when we've iterated over all
+    # examples of the class with the most training examples.
+    min_samples = np.inf
+    data = []
+    for gen in generators:
+        out = gen.next()
+        data.append(out)
+        n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+        if n_samples < min_samples:
+            min_samples = n_samples
+
+    for subset in data:
+        samp = random_sample(subset['class_mask'], min_samples)
+        one_hot = np.ones((NUM_CLASSES, samp.shape[1], samp.shape[2]))*NO_DATA
+        one_hot[int(subset['class_code']), :, :] = samp
+        subset['class_mask'] = one_hot
+
+
+    # need to preprocess data. 
+    # This means ...
+    # Sample min() random examples from each data chunk.
+    # return the associated master_raster chunk and 
+    # the class_mask chunk, in one-hot form.
+
+
 
 def rotation(image, angle):
     return transform.rotate(image, angle, mode='constant', cval=NO_DATA)
@@ -218,6 +289,7 @@ def random_noise(image):
 
 def h_flip(image):
     return image[:, ::-1]
+
 
 def augment_data(image, class_mask):
     '''Randomly augments an image.'''
@@ -284,4 +356,5 @@ if __name__ == '__main__':
     done = set()
     n_classes = 2
     training_directory = 'training_data'
-    create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
+    #create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
+    generate_training_data(4, training_directory)
