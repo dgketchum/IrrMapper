@@ -4,9 +4,13 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import tensorflow as tf
 import keras.backend as K
+#tf.enable_eager_execution()
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import json
+import geopandas as gpd
+import sys
 from glob import glob
 from skimage import transform, util
 from tensorflow.keras.layers import (Conv2D, Input, MaxPooling2D, Conv2DTranspose, 
@@ -18,26 +22,37 @@ from rasterio import open as rasopen
 from rasterio.mask import mask
 from shapely.geometry import shape
 from fiona import open as fopen
-import json
-import geopandas as gpd
-from data_generators import generate_balanced_data, load_raster, preprocess_data
+from data_generators import generate_training_data, load_raster, preprocess_data
 
 NO_DATA = -1
 MAX_POOLS = 3
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
-NUM_CLASSES = 2
+NUM_CLASSES = 4
 WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
        are not data, given a y_true 
-       that has NODATA values. '''
-    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], 2))
-    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], 2))
+       that has NODATA values. The boolean mask 
+       operation is failing. It should output
+       a Tensor of shape (M, N_CLASSES), but instead outputs a (M, )
+       tensor.'''
+    # fig, ax = plt.subplots(ncols=2)
+    # boo = y_true.numpy()
+    # boo2 = y_pred.numpy()
+    # ax[0].imshow(boo[0, :, :, 0])
+    # ax[1].imshow(boo2[0, :, :, 0])
+    # plt.show()
+    # Let's see the argmax of y_true, y_pred.
+    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
+    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
     masked = tf.not_equal(y_true, NO_DATA)
-    y_true_mask = tf.boolean_mask(y_true, masked)
-    y_pred_mask = tf.boolean_mask(y_pred, masked)
-    return tf.keras.losses.binary_crossentropy(y_true_mask, y_pred_mask)
+    indices = tf.where(masked)
+    indices = tf.to_int32(indices)
+    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
+    y_true_mask = tf.gather_nd(params=y_true, indices=indices)
+    y_pred_mask = tf.gather_nd(params=y_pred, indices=indices)
+    return tf.keras.losses.categorical_crossentropy(y_true_mask, y_pred_mask)
 
 def fcnn_functional(n_classes):
 
@@ -89,7 +104,7 @@ def fcnn_model(n_classes):
     model = tf.keras.Sequential()
     # Must define the input shape in the first layer of the neural network
     model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=8, padding='same', activation='relu',
-        input_shape=(None, None, 39)))
+        input_shape=(None, None, 36)))
     model.add(tf.keras.layers.Conv2D(filters=64, kernel_size=4, padding='same', activation='relu'))
     model.add(tf.keras.layers.Conv2D(filters=32, kernel_size=4, padding='same', activation='relu'))
     model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=2, padding='same', activation='relu'))
@@ -100,20 +115,6 @@ def fcnn_model(n_classes):
     #model.summary()
     return model
 
-def one_hot_encoding(class_mask, n_classes):
-    '''Assumes classes range from 0 -> (n-1)'''
-    shp = class_mask.shape
-    out = np.ones((shp[0], shp[1], n_classes))*NO_DATA
-    for i in range(n_classes):
-        out[:, :, i][class_mask == i] = 1
-    return out
-
-def create_model(n_classes):
-    model = fcnn_functional(n_classes)
-    model.compile(loss=custom_objective,
-                 optimizer='adam', 
-                 metrics=['accuracy'])
-    return model
 
 def evaluate_image(master_raster, model, outfile=None):
 
@@ -134,7 +135,7 @@ def evaluate_image(master_raster, model, outfile=None):
                 sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask, return_cuts=True)
                 preds = model.predict(sub_master)
                 preds = preds[0, :, :, :]
-                preds = preds[:, :, 1] #np.argmax(preds, axis=2)
+                preds = np.argmax(preds, axis=2)
                 # fig, ax = plt.subplots(ncols=2)
                 # ax[0].imshow(master[38, :, :])
                 # x_plot.append([i, i+CHUNK_SIZE, i, i+CHUNK_SIZE])
@@ -164,7 +165,7 @@ def evaluate_image(master_raster, model, outfile=None):
                 else:
                     print("whatcha got goin on here?")
 
-            print("Percent done: {:.3f}".format(i / master.shape[1]))
+            sys.stdout.write("Percent done: {:.4f}\r".format(i / master.shape[1]))
 
     out = np.swapaxes(out, 0, 1)
     #out[out == 0] = np.nan
@@ -179,20 +180,24 @@ def save_raster(arr, outfile, meta):
     with rasopen(outfile, 'w', **meta) as dst:
         dst.write(arr)
 
-def train_model(shapefile_directory, steps_per_epoch, image_directory, box_size=6, epochs=3):
+def train_model(training_directory, steps_per_epoch, image_directory, box_size=0, epochs=3):
     # image shape will change here, so it must be
     # inferred at runtime.
-    model = create_model(n_classes)
+    model = create_model(NUM_CLASSES)
     tb = TensorBoard(log_dir='graphs/')
-    n_augmented = 0
-    train_generator = generate_balanced_data(shapefile_directory, image_directory, box_size,
-    'irrigated')
+    train_generator = generate_training_data(training_directory, box_size)
     model.fit_generator(train_generator, 
             steps_per_epoch=steps_per_epoch, 
             epochs=epochs,
             verbose=1,
             callbacks=[tb],
             use_multiprocessing=False)
+    return model
+
+def create_model(n_classes):
+    model = fcnn_functional(n_classes)
+    model.compile(loss=custom_objective,
+                 optimizer=tf.keras.optimizers.Adam())
     return model
 
 def get_features(gdf, path, row):
@@ -213,9 +218,21 @@ def clip_raster(evaluated, path, row, outfile=None):
         features = get_features(shp, path, row)
         out_image, out_transform = mask(src, shapes=features, nodata=np.nan)
 
-    out_image[out_image == 0] = np.nan
+    #out_image[out_image != 0] = np.nan
     if outfile:
         save_raster(out_image, outfile, meta)
+
+
+def clip_rasters(evaluated_tif_dir, include_string):
+    for f in glob(os.path.join(evaluated_tif_dir, "*.tif")):
+        if include_string in f:
+            out = os.path.basename(f)
+            os.path.split(out)[1]
+            out = out[out.find("_")+1:]
+            out = out[out.find("_")+1:]
+            path = out[:2]
+            row = out[3:5]
+            clip_raster(f, int(path), int(row), outfile=f)
 
 if __name__ == '__main__':
     # Steps:
@@ -247,10 +264,12 @@ if __name__ == '__main__':
     mask_raster = 'class_mask_'
     n_classes = 2
     out_directory = 'evaluated_images_fully_conv/'
+    training_directory = 'training_data'
 
-    pth = 'oversamplin/model_no_precip10epochs.h5'
+    m_dir = 'data_from_disk/balance/all_classes' 
+    pth = os.path.join(m_dir, "model_axx.h5")
     if not os.path.isfile(pth):
-        model = train_model(shapefile_directory, 78, image_directory, epochs=7)
+        model = train_model(training_directory, 87, image_directory, epochs=5)
         model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
@@ -263,16 +282,8 @@ if __name__ == '__main__':
             out = out[out.find("_")+1:]
             out = out[out.find("_"):]
             out = os.path.splitext(out)[0]
-            out = 'no_precip10epochs' + out + ".tif"
-            out = os.path.join('oversamplin', out)
+            out = 'evaluated_master' + out + ".tif"
+            out = os.path.join(m_dir, out)
             evaluate_image(f, model, out)
 
-    for f in glob(os.path.join('oversamplin', "*.tif")):
-        if 'no_precip' in f:
-            out = os.path.basename(f)
-            os.path.split(out)[1]
-            out = out[out.find("_")+1:]
-            out = out[out.find("_")+1:]
-            path = out[:2]
-            row = out[3:5]
-            clip_raster(f, int(path), int(row), outfile=f)
+    clip_rasters(m_dir, "evaluated")

@@ -4,7 +4,7 @@ import time
 import pickle
 import matplotlib.pyplot as plt
 from glob import glob
-from random import sample
+from random import sample, shuffle
 from data_utils import generate_class_mask, get_shapefile_path_row
 from rasterio import open as rasopen
 
@@ -129,7 +129,6 @@ def create_training_data(target_dict, shapefile_directory, image_directory, trai
 
             for i in range(0, master.shape[1], CHUNK_SIZE):
                 for j in range(0, master.shape[2], CHUNK_SIZE):
-                    sub_masks = []
                     sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                     for msk in masks:
                         s = msk.mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
@@ -246,9 +245,10 @@ class DataGen:
         return data
 
 
-def generate_training_data(n_classes, training_directory):
+def generate_training_data(training_directory, box_size=6):
     ''' Assumes data is stored in training_directory
-    in subdirectories labeled class_n_train '''
+    in subdirectories labeled class_n_train
+    and that n_classes is a global variable.'''
     class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
     generators = []
     for d in class_dirs:
@@ -257,28 +257,38 @@ def generate_training_data(n_classes, training_directory):
     # a. shuffle the filenames to draw.
     # b. Define one epoch to be when we've iterated over all
     # examples of the class with the most training examples.
-    min_samples = np.inf
-    data = []
-    for gen in generators:
-        out = gen.next()
-        data.append(out)
-        n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
-        if n_samples < min_samples:
-            min_samples = n_samples
+    while True:
+        min_samples = np.inf
+        data = []
+        for gen in generators:
+            out = gen.next().copy()
+            data.append(out)
+            n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+            if n_samples < min_samples:
+                min_samples = n_samples
+        for subset in data:
+            #min_samples = len(np.where(subset != NO_DATA)[0])
+            samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
+                    fill_value=1)
+            one_hot = np.ones((NUM_CLASSES, samp.shape[1], samp.shape[2]))*NO_DATA
+            one_hot[int(subset['class_code']), :, :] = samp
+            for i in range(NUM_CLASSES):
+                if i != int(subset['class_code']):
+                    one_hot[i, :, :][samp[0, :, :] != NO_DATA] = 0
+            subset['class_mask'] = one_hot
 
-    for subset in data:
-        samp = random_sample(subset['class_mask'], min_samples)
-        one_hot = np.ones((NUM_CLASSES, samp.shape[1], samp.shape[2]))*NO_DATA
-        one_hot[int(subset['class_code']), :, :] = samp
-        subset['class_mask'] = one_hot
+        masters = []
+        masks = []
+        for subset in data:
+            master, mask = preprocess_data(subset['data'], subset['class_mask'])
+            masters.append(master)
+            masks.append(mask)
 
-
-    # need to preprocess data. 
-    # This means ...
-    # Sample min() random examples from each data chunk.
-    # return the associated master_raster chunk and 
-    # the class_mask chunk, in one-hot form.
-
+        outt = list(zip(masters, masks))
+        shuffle(outt)
+        for ms, msk in outt:
+            msk = msk.astype(np.int32)
+            yield ms, msk
 
 
 def rotation(image, angle):
@@ -353,8 +363,6 @@ if __name__ == '__main__':
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
     year = 2013
-    done = set()
-    n_classes = 2
     training_directory = 'training_data'
     #create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
-    generate_training_data(4, training_directory)
+    generate_training_data(training_directory)
