@@ -245,7 +245,7 @@ class DataGen:
         return data
 
 
-def generate_training_data(training_directory, box_size=6):
+def generate_training_data(training_directory, box_size=0):
     ''' Assumes data is stored in training_directory
     in subdirectories labeled class_n_train
     and that n_classes is a global variable.'''
@@ -257,6 +257,7 @@ def generate_training_data(training_directory, box_size=6):
     # a. shuffle the filenames to draw.
     # b. Define one epoch to be when we've iterated over all
     # examples of the class with the most training examples.
+    # TODO: Apply image augmentation.
     while True:
         min_samples = np.inf
         data = []
@@ -267,7 +268,6 @@ def generate_training_data(training_directory, box_size=6):
             if n_samples < min_samples:
                 min_samples = n_samples
         for subset in data:
-            #min_samples = len(np.where(subset != NO_DATA)[0])
             samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
                     fill_value=1)
             one_hot = np.ones((NUM_CLASSES, samp.shape[1], samp.shape[2]))*NO_DATA
@@ -365,4 +365,4 @@ if __name__ == '__main__':
     year = 2013
     training_directory = 'training_data'
     #create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
-    generate_training_data(training_directory)
+    #generate_training_data(training_directory)

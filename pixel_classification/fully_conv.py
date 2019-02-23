@@ -116,7 +116,7 @@ def fcnn_model(n_classes):
     return model
 
 
-def evaluate_image(master_raster, model, outfile=None):
+def evaluate_image(master_raster, model, outfile=None, ii=None):
 
     if not os.path.isfile(master_raster):
         print("Master raster not created for {}".format(suffix))
@@ -125,7 +125,7 @@ def evaluate_image(master_raster, model, outfile=None):
         master, meta = load_raster(master_raster)
         
         class_mask = np.zeros((2, master.shape[1], master.shape[2]))
-        out = np.zeros((master.shape[2], master.shape[1]))
+        out = np.zeros((NUM_CLASSES, master.shape[2], master.shape[1]))
         x_plot =[]
         y_plot =[]
         for i in range(0, master.shape[1], CHUNK_SIZE):
@@ -135,52 +135,39 @@ def evaluate_image(master_raster, model, outfile=None):
                 sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask, return_cuts=True)
                 preds = model.predict(sub_master)
                 preds = preds[0, :, :, :]
-                preds = np.argmax(preds, axis=2)
-                # fig, ax = plt.subplots(ncols=2)
-                # ax[0].imshow(master[38, :, :])
-                # x_plot.append([i, i+CHUNK_SIZE, i, i+CHUNK_SIZE])
-                # y_plot.append([j, j+CHUNK_SIZE, j+CHUNK_SIZE, j])
-                # ax[0].plot(x_plot, y_plot, 'rx')
-                # ax[1].imshow(preds)
-                # plt.show()
-                # plot_or_not = input('Plot the master?')
-                # if plot_or_not == 'y':
-                #     for q in range(sub_master.shape[3]):
-                #         plt.figure()
-                #         plt.imshow(sub_master[0, :, :, q])
-                #         plt.show()
+                preds = np.swapaxes(preds, 1, 2)
+                preds = np.swapaxes(preds, 0, 1)
+                #preds = np.argmax(preds, axis=2)
 
                 if cut_cols == 0 and cut_rows == 0:
-                    out[j:j+CHUNK_SIZE, i:i+CHUNK_SIZE] = preds
+                    out[:,j:j+CHUNK_SIZE, i:i+CHUNK_SIZE] = preds
                 elif cut_cols == 0 and cut_rows != 0:
                     ofs = master.shape[1]-cut_rows
-                    out[j:j+CHUNK_SIZE, i:ofs] = preds
+                    out[:, j:j+CHUNK_SIZE, i:ofs] = preds
                 elif cut_cols != 0 and cut_rows == 0:
                     ofs = master.shape[2]-cut_cols
-                    out[j:ofs, i:i+CHUNK_SIZE] = preds
+                    out[:, j:ofs, i:i+CHUNK_SIZE] = preds
                 elif cut_cols != 0 and cut_rows != 0:
                     ofs_col = master.shape[2]-cut_cols
                     ofs_row = master.shape[1]-cut_rows
-                    out[j:ofs_col, i:ofs_row] = preds
+                    out[:, j:ofs_col, i:ofs_row] = preds
                 else:
                     print("whatcha got goin on here?")
 
-            sys.stdout.write("Percent done: {:.4f}\r".format(i / master.shape[1]))
+            sys.stdout.write("ii: {} Percent done: {:.4f}\r".format(ii, i / master.shape[1]))
 
-    out = np.swapaxes(out, 0, 1)
-    #out[out == 0] = np.nan
-    out = np.expand_dims(out, axis=0)
+    out = np.swapaxes(out, 1, 2)
     out = out.astype(np.float32)
     if outfile:
         save_raster(out, outfile, meta)
     return out
 
 def save_raster(arr, outfile, meta):
-    meta.update(count=1)
+    meta.update(count=NUM_CLASSES)
     with rasopen(outfile, 'w', **meta) as dst:
         dst.write(arr)
 
-def train_model(training_directory, steps_per_epoch, image_directory, box_size=0, epochs=3):
+def train_model(training_directory, steps_per_epoch, box_size=0, epochs=3):
     # image shape will change here, so it must be
     # inferred at runtime.
     model = create_model(NUM_CLASSES)
@@ -191,7 +178,7 @@ def train_model(training_directory, steps_per_epoch, image_directory, box_size=0
             epochs=epochs,
             verbose=1,
             callbacks=[tb],
-            use_multiprocessing=False)
+            use_multiprocessing=True)
     return model
 
 def create_model(n_classes):
@@ -222,17 +209,18 @@ def clip_raster(evaluated, path, row, outfile=None):
     if outfile:
         save_raster(out_image, outfile, meta)
 
-
 def clip_rasters(evaluated_tif_dir, include_string):
     for f in glob(os.path.join(evaluated_tif_dir, "*.tif")):
         if include_string in f:
             out = os.path.basename(f)
             os.path.split(out)[1]
             out = out[out.find("_")+1:]
-            out = out[out.find("_")+1:]
+            #out = out[out.find("_")+1:]
             path = out[:2]
             row = out[3:5]
             clip_raster(f, int(path), int(row), outfile=f)
+
+# TODO: Implement IoU so I can actually see how my model is doing.
 
 if __name__ == '__main__':
     # Steps:
@@ -267,14 +255,14 @@ if __name__ == '__main__':
     training_directory = 'training_data'
 
     m_dir = 'data_from_disk/balance/all_classes' 
-    pth = os.path.join(m_dir, "model_axx.h5")
+    pth = os.path.join(m_dir, "model_adam30epochs.h5")
     if not os.path.isfile(pth):
-        model = train_model(training_directory, 87, image_directory, epochs=5)
+        model = train_model(training_directory, 87, epochs=30)
         model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
                 custom_objects={'custom_objective':custom_objective})
-
+    ii = 0
     for f in glob(os.path.join(image_directory, "*.tif")):
         if "class" not  in f:
             out = os.path.basename(f)
@@ -282,8 +270,10 @@ if __name__ == '__main__':
             out = out[out.find("_")+1:]
             out = out[out.find("_"):]
             out = os.path.splitext(out)[0]
-            out = 'evaluated_master' + out + ".tif"
+            out = '30epochstestadamevaluated' + out + ".tif"
+            #out = 'testing' + out + ".tif"
             out = os.path.join(m_dir, out)
-            evaluate_image(f, model, out)
+            ii += 1
+            evaluate_image(f, model, outfile=out, ii=ii)
+    clip_rasters(m_dir, "test")
 
-    clip_rasters(m_dir, "evaluated")
