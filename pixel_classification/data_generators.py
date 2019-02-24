@@ -9,7 +9,7 @@ from data_utils import generate_class_mask, get_shapefile_path_row
 from rasterio import open as rasopen
 
 NO_DATA = -1
-MAX_POOLS = 3
+MAX_POOLS = 5
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
 NUM_CLASSES = 4
 
@@ -120,6 +120,7 @@ def create_training_data(target_dict, shapefile_directory, image_directory, trai
             # this file is projected the same as the shapefile.
             master, meta = load_raster(master_raster)
             masks = []
+            all_matches.append(f)
             for match in all_matches:
                 msk = generate_class_mask(match, mask_file)
                 cc = assign_class_code(target_dict, match)
@@ -284,9 +285,8 @@ def generate_training_data(training_directory, box_size=0):
             masters.append(master)
             masks.append(mask)
 
-        outt = list(zip(masters, masks))
-        shuffle(outt)
-        for ms, msk in outt:
+        # Shuffle order of data here?
+        for ms, msk in zip(masters, masks):
             msk = msk.astype(np.int32)
             yield ms, msk
 
@@ -363,6 +363,18 @@ if __name__ == '__main__':
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
     year = 2013
-    training_directory = 'training_data'
-    #create_training_data(target_dict, shapefile_directory, image_directory, training_directory)
-    #generate_training_data(training_directory)
+    train_dir = 'training_data/train/'
+    shp_train = 'shapefile_data/train/'
+    # create_training_data(target_dict, shp_train, image_directory, train_dir)
+    # print("Created training data")
+    test_dir = 'training_data/test/'
+    shp_test = 'shapefile_data/test/'
+    # create_training_data(target_dict, shp_test, image_directory, test_dir)
+    j = 0
+    for k in generate_training_data(train_dir):
+        j += 1
+    print("Train steps:", j)
+    j = 0
+    for k in generate_training_data(test_dir):
+        j += 1
+    print("Test steps:", j)
