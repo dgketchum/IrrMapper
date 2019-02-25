@@ -2,16 +2,23 @@ import numpy as np
 import os
 import time
 import pickle
+import sys
 import matplotlib.pyplot as plt
 from glob import glob
 from random import sample, shuffle
 from data_utils import generate_class_mask, get_shapefile_path_row
 from rasterio import open as rasopen
+from warnings import warn
 
 NO_DATA = -1
-MAX_POOLS = 5
+try:
+    MAX_POOLS = int(os.environ["MAX_POOLS"])
+    print("MAX_POOLS", MAX_POOLS)
+except:
+    warn("MAX_POOLS environment variable has not been set. Defaulting to 5.")
+    MAX_POOLS = 5
 CHUNK_SIZE = 1248 # some value that is evenly divisible by 2^3.
-NUM_CLASSES = 4
+NUM_CLASSES = 2
 
 def random_sample(class_mask, n_instances, box_size=0, fill_value=1):
     if box_size:
@@ -57,7 +64,6 @@ def load_raster(master_raster):
 
 
 def assign_class_code(target_dict, shapefilename):
-
     for key in target_dict:
         if key in shapefilename:
             return target_dict[key]
@@ -87,10 +93,12 @@ class DataTile(object):
                 'class_{}_data/'.format(self.dict['class_code']))
         if not os.path.isdir(template):
             os.mkdir(template)
-        # Need to save the dict object with a unique filename
-        outfile = os.path.join(template, str(int(time.time())) + ".pkl")
-        with open(outfile, 'wb') as f:
-            pickle.dump(self.dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+        outfile = os.path.join(template, str(time.time()) + ".pkl")
+        if not os.path.isfile(outfile):
+            with open(outfile, 'wb') as f:
+                pickle.dump(self.dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+        else:
+            print("What? Contact administrator.")
 
     def set_data(self, data):
         self.dict['data'] = data
@@ -102,9 +110,11 @@ class DataTile(object):
         self.dict['class_mask'] = class_mask
 
 
-def create_training_data(target_dict, shapefile_directory, image_directory, training_directory):
+def create_training_data(target_dict, shapefile_directory, image_directory, training_directory,
+        count):
     ''' target_dict: {filename or string in filename : class_code} '''
     done = set()
+    year = 2013
     train_raster = 'master_raster_'
     mask_raster = 'class_mask_'
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
@@ -127,15 +137,20 @@ def create_training_data(target_dict, shapefile_directory, image_directory, trai
                 if cc is not None:
                     dm = DataMask(msk, cc)
                     masks.append(dm)
-
+            
             for i in range(0, master.shape[1], CHUNK_SIZE):
                 for j in range(0, master.shape[2], CHUNK_SIZE):
                     sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                    q = 0
                     for msk in masks:
                         s = msk.mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                         if not np.all(s == NO_DATA):
+                            q += 1
                             dt = DataTile(sub_master, s, msk.class_code)
                             dt.to_pickle(training_directory)
+                            count += 1
+
+    return count
 
 def all_matching_shapefiles(to_match, shapefile_directory):
     out = []
@@ -145,72 +160,6 @@ def all_matching_shapefiles(to_match, shapefile_directory):
             out.append(f)
     return out
 
-def generate_balanced_data(shapefile_directory, image_directory, box_size, target, year=2013):
-    train_raster = 'master_raster_' # templates
-    mask_raster = 'class_mask_'
-    ''' This is pretty much for binary classification.'''
-    while True:
-        for f in glob(os.path.join(shapefile_directory, "*.shp")):
-            if target in f:
-                all_matches = all_matching_shapefiles(f, shapefile_directory)
-                p, r = get_shapefile_path_row(f)
-                suffix = '{}_{}_{}.tif'.format(p, r, year)
-                master_raster = os.path.join(image_directory, train_raster + suffix)
-                mask_file = os.path.join(image_directory, mask_raster + suffix)
-                if not os.path.isfile(master_raster):
-                    print("Master raster not created for {}".format(suffix))
-                    # TODO: More extensive error handling.
-                else:
-                    target_mask = generate_class_mask(f, mask_file)
-                    class_mask = np.ones((NUM_CLASSES, target_mask.shape[1], target_mask.shape[2]))*NO_DATA
-                    class_mask[1, :, :] = target_mask
-                    required_instances = len(np.where(target_mask != NO_DATA)[0]) // (box_size*len(all_matches))
-                    masks = []
-                    for match in all_matches:
-                        msk = generate_class_mask(match, mask_file)
-                        #samp = random_sample(msk, required_instances, box_size)
-                        #masks.append(samp)
-                        masks.append(msk)
-
-                    for i, s in enumerate(masks):
-                        class_mask[0, :, :][s[0, :, :] != NO_DATA] = 1
-
-                    master, meta = load_raster(master_raster)
-                    for i in range(0, master.shape[1], CHUNK_SIZE):
-                        for j in range(0, master.shape[2], CHUNK_SIZE):
-                            sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                            sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                            if np.all(sub_mask == NO_DATA):
-                                continue
-                            else:
-                                n_negative = len(np.where(sub_mask[0, :, :] != NO_DATA)[1]) 
-                                positive = np.where(target_mask[:, :] != NO_DATA)
-                                sorted_x = sorted(positive[1])
-                                sorted_y = sorted(positive[2])
-                                l = len(sorted_x) // 2
-                                center_x = sorted_x[l]
-                                center_y = sorted_y[l]
-                                ofs = CHUNK_SIZE // 2
-                                sub_positive = target_mask[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
-                                sub_master_positive = master[:, center_x - ofs: center_x + ofs, center_y - ofs: center_y + ofs]
-                                required_instances = min(len(np.where(sub_positive[0, :, :] != NO_DATA)[1]), n_negative)
-                                sub_negative = random_sample(sub_mask[0, :, :], required_instances,
-                                        box_size=0, class_code=1)
-                                sub_master_negative = sub_master
-                                sub_positive = random_sample(sub_positive[0, :, :], required_instances,
-                                       box_size=0, class_code=1)
-                                one_hot_pos = np.ones((2, sub_positive.shape[0], sub_positive.shape[1]))*NO_DATA
-                                one_hot_neg = np.ones((2, sub_negative.shape[0], sub_negative.shape[1]))*NO_DATA
-                                one_hot_pos[1, :, :] = sub_positive
-                                one_hot_neg[0, :, :] = sub_negative
-                                sub_mas_pos, class_mask_pos = preprocess_data(sub_master_positive,
-                                        one_hot_pos)
-                                sub_mas_neg, class_mask_neg = preprocess_data(sub_master_negative,
-                                        one_hot_neg)
-                                ims = [sub_mas_pos, sub_mas_neg]
-                                class_masks = [class_mask_pos, class_mask_neg]
-                                for ii, jj in zip(ims, class_masks):
-                                    yield ii, jj
 
 class DataGen:
 
@@ -308,8 +257,6 @@ def augment_data(image, class_mask):
         image = rotation(image, deg)
         class_mask = rotation(class_mask, deg)
     if np.random.randint(2):
-        image = random_noise(image)
-    if np.random.randint(2):
         image = h_flip(image)
         class_mask = h_flip(class_mask)
     if np.random.randint(2):
@@ -321,8 +268,12 @@ def augment_data(image, class_mask):
 def preprocess_data(master, mask, return_cuts=False):
     shp = master.shape
     rows = shp[1]; cols = shp[2]
-    cut_rows = rows % (2**MAX_POOLS) 
-    cut_cols = cols % (2**MAX_POOLS)
+    if MAX_POOLS != 0:
+        cut_rows = rows % (2**MAX_POOLS) 
+        cut_cols = cols % (2**MAX_POOLS)
+    else:
+        cut_rows = 0
+        cut_cols = 0
     out_m = np.zeros((1, shp[0], shp[1] - cut_rows, shp[2] - cut_cols))
 
     if cut_cols != 0 and cut_rows != 0:
@@ -361,20 +312,15 @@ if __name__ == '__main__':
     fallow = 'Fallow'
     forest = 'Forrest'
     other = 'other'
-    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
+    target_dict = {irr2:0, irr1:0, fallow:1, forest:1, other:1}
     year = 2013
-    train_dir = 'training_data/train/'
+    train_dir = 'training_data/binary/train/'
     shp_train = 'shapefile_data/train/'
-    # create_training_data(target_dict, shp_train, image_directory, train_dir)
-    # print("Created training data")
-    test_dir = 'training_data/test/'
+    count = 0
+    count = create_training_data(target_dict, shp_train, image_directory, train_dir, count)
+    print("You have {} instances per training epoch.".format(count))
+    test_dir = 'training_data/binary/test/'
     shp_test = 'shapefile_data/test/'
-    # create_training_data(target_dict, shp_test, image_directory, test_dir)
-    j = 0
-    for k in generate_training_data(train_dir):
-        j += 1
-    print("Train steps:", j)
-    j = 0
-    for k in generate_training_data(test_dir):
-        j += 1
-    print("Test steps:", j)
+    count = 0
+    count = create_training_data(target_dict, shp_test, image_directory, test_dir, count)
+    print("You have {} instances per test epoch.".format(count))
