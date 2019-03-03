@@ -290,7 +290,6 @@ class ImageStack(object):
             bands.sort()
             for p in bands:
                 band_dct[os.path.basename(p).split('.')[0]] = p
-                self._normalize_and_save_image(p)
 
             masks = [os.path.join(self.root, sc, x) for x in paths if x.endswith(mask_rasters())]
             for m in masks:
@@ -301,30 +300,8 @@ class ImageStack(object):
         static_files = [x for x in files if x.endswith(static_rasters())]
         for st in static_files:
             band_dct[os.path.basename(st).split('.')[0]] = os.path.join(self.root, st)
-            self._normalize_and_save_image(os.path.join(self.root, st))
 
         return band_dct, mask_dct
-
-    @staticmethod
-    def _normalize_and_save_image(fname):
-        norm = True
-        with rasopen(fname, 'r') as rsrc:
-            if "normalized" in rsrc.tags():
-                return
-            else:    
-                rass_arr = rsrc.read()
-                rass_arr = rass_arr.astype(float32)
-                profile = rsrc.profile.copy()
-                profile.update(dtype=float32)
-                rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
-                scaler = StandardScaler() # z-normalization
-                scaler.fit(rass_arr)
-                rass_arr = scaler.transform(rass_arr)
-        with rasopen(fname, 'w', **profile) as dst:
-            dst.write(rass_arr, 1)
-            print("Normalized", fname)
-            dst.update_tags(normalized=True)
-
 
 if __name__ == '__main__':
     pass

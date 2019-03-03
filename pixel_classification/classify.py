@@ -20,7 +20,7 @@ from copy import deepcopy
 from datetime import datetime
 from multiprocessing import cpu_count
 
-from multiprocess.pool import Pool
+from multiprocessing.pool import Pool
 from numpy.core.multiarray import concatenate
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
