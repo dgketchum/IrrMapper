@@ -25,36 +25,6 @@ CHUNK_SIZE = 608 # some value that is divisible by 2^MAX_POOLS.
 NUM_CLASSES = 4
 WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
-def m_acc(y_true, y_pred):
-    ''' Calculate accuracy from masked data.
-    The built-in accuracy metric uses all data (masked & unmasked).'''
-    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
-    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
-    masked = tf.not_equal(y_true, NO_DATA)
-    indices = tf.where(masked)
-    indices = tf.to_int32(indices)
-    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
-    y_true_masked = tf.gather_nd(params=y_true, indices=indices)
-    y_pred_masked = tf.gather_nd(params=y_pred, indices=indices)
-    return K.cast(K.equal(K.argmax(y_true_masked, axis=-1), K.argmax(y_pred_masked, axis=-1)), K.floatx())
-
-def custom_objective_binary(y_true, y_pred):
-    '''I want to mask all values that 
-       are not data, given a y_true 
-       that has NODATA values. The boolean mask 
-       operation is failing. It should output
-       a Tensor of shape (M, N_CLASSES), but instead outputs a (M, )
-       tensor.'''
-    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
-    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
-    masked = tf.not_equal(y_true, NO_DATA)
-    indices = tf.where(masked)
-    indices = tf.to_int32(indices)
-    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
-    y_true_masked = tf.gather_nd(params=y_true, indices=indices)
-    y_pred_masked = tf.gather_nd(params=y_pred, indices=indices)
-    return tf.keras.losses.binary_crossentropy(y_true_masked, y_pred_masked)
-
 def custom_objective(y_true, y_pred):
     '''I want to mask all values that 
        are not data, given a y_true 
@@ -62,15 +32,13 @@ def custom_objective(y_true, y_pred):
        operation is failing. It should output
        a Tensor of shape (M, N_CLASSES), but instead outputs a (M, )
        tensor.'''
-    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
-    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
-    masked = tf.not_equal(y_true, NO_DATA)
-    indices = tf.where(masked)
-    indices = tf.to_int32(indices)
-    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
-    y_true_masked = tf.gather_nd(params=y_true, indices=indices)
-    y_pred_masked = tf.gather_nd(params=y_pred, indices=indices)
-    return tf.keras.losses.categorical_crossentropy(y_true_masked, y_pred_masked)
+    y_true = tf.reshape(y_true, (K.shape(y_true)[0], K.shape(y_true)[1]*K.shape(y_true)[2]))
+    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[0], K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
+    y_true = tf.cast(y_true, tf.int32)
+    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y_pred, labels=y_true)
+    mask = tf.not_equal(y_true, NO_DATA)
+    losses = tf.boolean_mask(losses, mask)
+    return tf.reduce_mean(losses)
 
 
 def evaluate_image(master_raster, model, max_pools, outfile=None, ii=None):
@@ -153,10 +121,11 @@ def clip_rasters(evaluated_tif_dir, include_string):
             row = out[3:5]
             clip_raster(f, int(path), int(row), outfile=f)
 
-def evaluate_images(image_directory, include_string, max_pools, exclude_string, prefix, save_dir):
+def evaluate_images(image_directory, model, include_string, max_pools, exclude_string, prefix, save_dir):
     ii = 0
     for f in glob(os.path.join(image_directory, "*.tif")):
         if exclude_string not in f and include_string in f:
+            print(f)
             out = os.path.basename(f)
             os.path.split(out)[1]
             out = out[out.find("_"):]
@@ -213,12 +182,12 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
     model = model(NUM_CLASSES)
     if NUM_CLASSES <= 2:
         model.compile(loss=custom_objective_binary,
-                     metrics=[m_acc],
+                     metrics=['accuracy'],
                      optimizer='adam')
     else:
         model.compile(loss=custom_objective,
-                 metrics=['accuracy', m_acc],
-                 optimizer=tf.keras.optimizers.Adam(lr=0.0001))
+                 metrics=['accuracy'],
+                 optimizer=tf.keras.optimizers.Adam(lr=1e-6))
 
     tb = TensorBoard(log_dir='graphs/30epochssimple/')
     train = os.path.join(training_directory, 'train')
@@ -229,51 +198,34 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
             train=False, box_size=box_size)
     model.fit_generator(train_generator, 
             steps_per_epoch=steps_per_epoch, 
+            max_queue_size=2,
             epochs=epochs,
             verbose=1,
-            callbacks=[tb],
             class_weight=[31.0, 1, 2.16, 67.76],
-            use_multiprocessing=True)
-            #validation_data=test_generator,
-           #validation_steps=valid_steps,
+            use_multiprocessing=False)
 
     return model
 
 if __name__ == '__main__':
 
-    image_directory = 'master_rasters/'
+    image_directory = 'master_rasters/test/'
     training_directory = 'training_data/multiclass/'
-    m_dir = 'eval_test/multiclass/' 
+    m_dir = 'compare_model_outputs/multiclass/' 
 
-    #get_iou()
-    # models = [fcnn_functional, fcnn_functional_small, fcnn_model]
-    # save_dirs = [os.path.join(m_dir, "complex_fcnn"), os.path.join(m_dir, "simple_fcnn"), 
-    #         os.path.join(m_dir, 'no_pools')]
-    # model_names = ["multiclass_complex_fcnn.h5", 'multiclass_simple_fcnn.h5',
-    #         'multiclass_no_pools_fcnn.h5']
-    # raster_names = ["complex_fcnnmulticlass", "simple_fcnnmulticlass", "no_poolsmulticlass"]
-
-    models = [fcnn_functional]
-    save_dirs = [os.path.join(m_dir, "augmented/")]
-    model_names = ["complex_fcnn_augmented.h5"]
-    raster_names = ["class_weightscomplexaugmented"]
-    i = 1
     max_pools = 5
-    for model_func, save_dir, model_name, raster_name in zip(models, save_dirs, model_names, raster_names):
-        pth = os.path.join(save_dir, model_name)
-        if not os.path.isfile(pth):
-            model = train_model(training_directory, model_func, steps_per_epoch=764,
-                    valid_steps=246, max_pools=max_pools, epochs=5)
-            model.save(pth)
-        else:
-            model = tf.keras.models.load_model(pth,
-                    custom_objects={'m_acc':m_acc, 'custom_objective':custom_objective})
+    model_name = 'tst.h5'
+    save_dir = 'models/'
+    pth = os.path.join(save_dir, model_name)
+    model_func = fcnn_model 
+    if not os.path.isfile(pth):
+        model = train_model(training_directory, model_func, steps_per_epoch=764,
+                valid_steps=246, max_pools=max_pools, epochs=1)
+        model.save(pth)
+    else:
+        model = tf.keras.models.load_model(pth,
+                custom_objects={'custom_objective':custom_objective})
 
-        evaluate_images(image_directory, include_string="37_28", 
-                exclude_string="class", max_pools=max_pools, prefix=raster_name, save_dir=save_dir) 
-        clip_rasters(save_dir, "37_28")
-        if i == 2:
-            max_pools = 3
-        if i == 3:
-            max_pools = 0
-        i += 1
+    raster_name = 'doyouwork_'
+    evaluate_images(image_directory, model,  include_string="37_28", 
+             exclude_string="class", max_pools=max_pools, prefix=raster_name, save_dir=save_dir) 
+    clip_rasters(save_dir, "37_28")

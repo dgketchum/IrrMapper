@@ -205,7 +205,9 @@ class ShapefileSamplePoints:
         return wrs_meta
 
 class PTASingleShapefile:
-
+    # TODO: This class can be easily modified 
+    # for the extraction of pixel-wise data from landsat images
+    # on a large scale.
     def __init__(self, master_raster=None, shapefile_path=None, class_code=None, path=None,
             row=None, masked_raster=None, training_directory=None, paths_map=None, masks=None,
             instances=None, sz=1000, overwrite_points=None, kernel_size=None, data_filename=None):

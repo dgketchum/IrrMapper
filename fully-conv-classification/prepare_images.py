@@ -20,7 +20,7 @@ import sys
 
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
-from numpy import mean, datetime64
+from numpy import datetime64
 from collections import OrderedDict
 from datetime import datetime
 from landsat.google_download import GoogleDownload
@@ -206,7 +206,6 @@ class ImageStack(object):
             dem.terrain(attribute='aspect',
                         out_file=aspect_name, save_and_return=True)
             elev = dem.terrain(attribute='elevation')
-            elev = elev - mean(elev)
             dem.save(elev, geometry=dem.target_profile, output_filename=dif_elev)
 
     def get_et(self):

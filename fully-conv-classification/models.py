@@ -15,7 +15,7 @@ def fcnn_model(n_classes):
     model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=2, padding='same', activation='relu'))
     model.add(tf.keras.layers.Dropout(0.5))
     model.add(tf.keras.layers.Conv2D(filters=n_classes, kernel_size=2, padding='same',
-        activation='softmax')) # 1x1 convolutions for pixel-wise prediciton.
+        activation='relu')) # 1x1 convolutions for pixel-wise prediciton.
     # Take a look at the model summary
     #model.summary()
     return model
@@ -59,7 +59,7 @@ def fcnn_functional_small(n_classes):
 
     u3_c1 = Concatenate()([u3, c1])
 
-    c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='softmax', padding='same')(u3_c1)
+    c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='relu', padding='same')(u3_c1)
 
     model = Model(inputs=x, outputs=c5) 
     #model.summary()
@@ -147,7 +147,7 @@ def fcnn_functional(n_classes):
 
     u5_c1 = Concatenate()([u5, c1])
 
-    u6 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='softmax', padding='same')(u5_c1)
+    u6 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='relu', padding='same')(u5_c1)
 
     model = Model(inputs=x, outputs=u6) 
     #model.summary()

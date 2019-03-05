@@ -15,14 +15,14 @@ from prepare_images import ImageStack
 from sklearn.neighbors import KDTree
 from sat_image.warped_vrt import warp_single_image
 
-NO_DATA = -1
 
 def get_features(gdf):
     tmp = json.loads(gdf.to_json())
     features = [feature['geometry'] for feature in tmp['features']]
     return features
 
-def generate_class_mask(shapefile, master_raster):
+
+def generate_class_mask(shapefile, master_raster, no_data=-1):
     ''' Generates a mask with class_val everywhere 
     shapefile data is present and a no_data value everywhere else.
     no_data is -1 in this case, as it is never a valid class label.
@@ -33,11 +33,15 @@ def generate_class_mask(shapefile, master_raster):
     with rasopen(master_raster, 'r') as src:
         shp = shp.to_crs(src.crs)
         features = get_features(shp)
-        out_image, out_transform = mask(src, shapes=features, nodata=NO_DATA)
+        out_image, out_transform = mask(src, shapes=features, nodata=no_data)
     return out_image
 
 
-def create_master_raster(image_stack, path, row, year, raster_directory):
+def create_master_raster(paths_map, path, row, year, raster_directory, mean_map):
+    """ Creates a master raster with depth given by the organization of the
+    paths_map. Paths map is a dictionary of lists, with keys the band names 
+    (B1, B2...) and values the paths of the images in the filesystem 
+    corresponding to that band. """
     fname = "master_raster_{}_{}_{}.tif".format(path, row, year)
     pth = os.path.join(raster_directory, fname)
     mask_fname = "class_mask_{}_{}_{}.tif".format(path, row, year)
@@ -45,7 +49,7 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
     if os.path.isfile(pth):
         print("Master raster already created for {}_{}_{}.".format(path, row, year))
         if os.path.isfile(mask_path):
-            print('Class mask template already created')
+            print('Class mask template already created for {}_{}_{}'.format(path, row, year))
             return pth
         else:
             print("Creating class mask template.")
@@ -61,46 +65,64 @@ def create_master_raster(image_stack, path, row, year, raster_directory):
                 msk.write(out, 1)
             return pth
         
-    paths_map = image_stack.paths_map
     first = True
     stack = None
+    num_rasters = 0
+    for k in paths_map:
+        num_rasters += len(paths_map[k])
 
-    for i, feat in enumerate(paths_map.keys()): # ordered dict ensures accuracy here.
+    j = 0
+    for feat in paths_map.keys(): 
+        feature_rasters = paths_map[feat] # maps bands to their location in filesystem.
+        for feature_raster in feature_rasters:
+            band_mean = None
+            for band in mean_map:
+                if feature_raster.endswith(band):
+                    band_mean = mean_map[band]
 
-        feature_raster = paths_map[feat] # maps bands to their location in filesystem.
+            if band_mean is None:
+                print("Band mean not found in mean_mapping for {}".format(feature_raster))
+                return
 
-        with rasopen(feature_raster, mode='r') as src:
-            arr = src.read()
-            raster_geo = src.meta.copy()
+            with rasopen(feature_raster, mode='r') as src:
+                arr = src.read().astype(type(band_mean))
+                arr -= band_mean
+                raster_geo = src.meta.copy()
 
-        if first:
-            first_geo = raster_geo.copy()
-            empty = zeros((len(paths_map.keys()), arr.shape[1], arr.shape[2]), float32)
-            stack = empty
-            stack[i, :, :] = arr
-            first = False
-        else:
-            try:
-                stack[i, :, :] = arr
-            except ValueError: 
-                # error can be thrown here if source raster doesn't have crs
-                # OR ! Because rasterio version.
-                # However, deepcopy becomes an issue with the latest
-                # version of rasterio.
-                arr = warp_single_image(feature_raster, first_geo)
-                stack[i, :, :] = arr
+            if first:
+                first_geo = raster_geo.copy()
+                empty = zeros((num_rasters, arr.shape[1], arr.shape[2]), float32)
+                stack = empty
+                stack[j, :, :] = arr
+                j += 1
+                first = False
+            else:
+                try:
+                    stack[j, :, :] = arr
+                    j += 1
+                except ValueError: 
+                    # error can be thrown here if source raster doesn't have crs
+                    # OR ! Because rasterio version.
+                    # However, deepcopy becomes an issue with the latest
+                    # version of rasterio.
+                    arr = warp_single_image(feature_raster, first_geo)
+                    stack[j, :, :] = arr
+                    j += 1
 
-    first_geo.update(count=1)
-    msk_out = zeros((1, stack.shape[1], stack.shape[2])).astype(float32)
+    msk_out = zeros((1, stack.shape[1], stack.shape[2]))
+    first_geo.update(count=1, dtype=msk_out.dtype)
     with rasopen(mask_path, mode='w', **first_geo) as msk:
         msk.write(msk_out)
 
-    first_geo.update(count=len(paths_map.keys()))
+    first_geo.update(count=num_rasters, dtype=stack.dtype)
 
     with rasopen(pth, mode='w', **first_geo) as dst:
         dst.write(stack)
 
+    print("Master raster saved to {}.".format(pth))
+
     return pth
+
 
 def get_shapefile_lat_lon(shapefile):
     ''' Center of shapefile'''
@@ -110,6 +132,7 @@ def get_shapefile_lat_lon(shapefile):
         lonc = (maxx + minx) / 2
 
     return latc, lonc 
+
 
 def normalize_and_save_image(fname):
     norm = True
@@ -129,6 +152,31 @@ def normalize_and_save_image(fname):
         dst.write(rass_arr, 1)
         print("Normalized", fname)
         dst.update_tags(normalized=True)
+
+
+def raster_sum(raster):
+    with rasopen(raster, 'r') as src:
+        arr_masked = src.read(1, masked=True) # get rid of nodata values,
+        s = arr_masked.sum()
+        count = arr_masked.count()
+    return s, count
+
+
+def bandwise_mean(paths_list, band_name):
+    ''' Need to center the data to have 
+    a zero mean. This means iterating over all images, 
+    and taking the "band-wise" mean, then subtracting
+    that mean from the band. This mean should
+    also only be computed for the test set, but applied
+    to the training set. ''' 
+    n_pixels = 0
+    pixel_value_sum = 0
+    for filepath in paths_list:
+        p_sum, num_pix = raster_sum(filepath)
+        pixel_value_sum += p_sum
+        n_pixels += num_pix
+    return (pixel_value_sum / n_pixels, band_name)
+
 
 def download_images(project_directory, path, row, year, satellite=8, n_landsat=3):
 
@@ -295,6 +343,7 @@ def split_shapefile(base, base_shapefile, data_directory):
                 for feat in unique[key]:
                     dst.write(id_mapping[feat])
 
+
 def get_shapefile_path_row(shapefile):
     """This function assumes that the original
     shapefile has already been split, and relies on
@@ -303,6 +352,36 @@ def get_shapefile_path_row(shapefile):
     # TODO: Find some way to update shapefile metadata
     shp = shapefile[-9:-4].split("_")
     return int(shp[0]), int(shp[1])
+
+
+def shapefile_area(shapefile):
+    summ = 0
+    with fopen(shapefile, "r") as src:
+        for feat in src:
+            poly = shape(feat['geometry'])
+            summ += poly.area
+    return summ
+
+
+def get_total_area(data_directory, filenames):
+    ''' Gets the total area of the polygons
+        in the files in filenames
+        TODO: Get an equal-area projection'''
+
+    tot = 0
+    for f in glob.glob(data_directory + "*.shp"):
+        if "sample" not in f:
+            for f2 in filenames:
+                if f2 in f:
+                    tot += shapefile_area(f)
+    return tot
+
+
+def required_points(shapefile, total_area, total_instances):
+    area = shapefile_area(shapefile)
+    frac = area / total_area
+    return int(total_instances * frac)
     
+
 if __name__ == "__main__":
     pass

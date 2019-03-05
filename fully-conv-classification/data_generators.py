@@ -107,7 +107,7 @@ class DataTile(object):
         self.dict['class_mask'] = class_mask
 
 
-def create_training_data(target_dict, shapefile_directory, image_directory, training_directory,
+def extract_training_data(target_dict, shapefile_directory, image_directory, training_directory,
         count, save=True):
     ''' target_dict: {filename or string in filename : class_code} '''
     done = set()
@@ -127,7 +127,6 @@ def create_training_data(target_dict, shapefile_directory, image_directory, trai
             suffix = '{}_{}_{}.tif'.format(p, r, year)
             master_raster = os.path.join(image_directory, train_raster + suffix)
             mask_file = os.path.join(image_directory, mask_raster + suffix) # for rasterio.mask.mask
-            # this file is projected the same as the shapefile.
             masks = []
             all_matches.append(f)
             shp = None
@@ -201,54 +200,48 @@ def generate_training_data(training_directory, max_pools, random_sample=True, tr
     in subdirectories labeled class_n_train
     and that n_classes is a global variable.'''
     class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
+    # ADD if statement in class dirs.
     generators = []
     for d in class_dirs:
         generators.append(DataGen(d))
-    # TODO: Apply image augmentation.
+    q = 0
     while True:
         min_samples = np.inf
         data = []
         for gen in generators:
             out = gen.next().copy()
             data.append(out)
-            n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
-            if n_samples < min_samples:
-                min_samples = n_samples
+            if random_sample:
+                n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+                if n_samples < min_samples:
+                    min_samples = n_samples
+
         for subset in data:
             if random_sample:
                 samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
-                        fill_value=1)
+                        fill_value=subset['class_code'])
             else:
                 samp = subset['class_mask']
-                samp[samp != NO_DATA] = 1
-            one_hot = np.ones((NUM_CLASSES, samp.shape[1], samp.shape[2]))*NO_DATA
-            one_hot[int(subset['class_code']), :, :] = samp
-            for i in range(NUM_CLASSES):
-                if i != int(subset['class_code']):
-                    one_hot[i, :, :][samp[0, :, :] != NO_DATA] = 0
-            subset['class_mask'] = one_hot
+                samp[samp != NO_DATA] = subset['class_code']
+
+            subset['class_mask'] = samp
 
         masters = []
         masks = []
+        first = True
         for subset in data:
             master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
-            masters.append(master)
-            masks.append(mask)
+            if first:
+                shape = master.shape
+                first = False
+            if master.shape == shape:
+                masters.append(master[0, :, :, :])
+                masks.append(mask[0, :, :, :])
 
-        if train:
-            augmented_masters = []
-            augmented_masks = []
-            for master, mask in zip(masters, masks):
-                ms, msk = augment_data(master, mask)
-                augmented_masters.append(ms)
-                augmented_masks.append(msk)
 
-            masters += augmented_masters
-            masks += augmented_masks
-
-        # Shuffle order of data here?
-        for ms, msk in zip(masters, masks):
-            yield ms, msk
+        yield np.asarray(masters, dtype=np.float32), np.asarray(masks, dtype=np.int32)
+        # for ms, msk in zip(masters, masks):
+        #     yield ms, msk
 
 
 def rotation(image, angle):
@@ -318,7 +311,8 @@ def preprocess_data(master, mask, max_pools, return_cuts=False):
 
 if __name__ == '__main__':
     shapefile_directory = 'shapefile_data/'
-    image_directory = 'master_rasters/'
+    image_train = 'master_rasters/train/'
+    image_test = 'master_rasters/test/'
     irr1 = 'Huntley'
     irr2 = 'Sun_River'
     fallow = 'Fallow'
@@ -329,12 +323,12 @@ if __name__ == '__main__':
     train_dir = 'training_data/multiclass/train/'
     shp_train = 'shapefile_data/train/'
     count = 0
-    save = False
-    count, pixel_dict = create_training_data(target_dict, shp_train, image_directory, train_dir,
-            count, save=save)
+    save = True
+    count, pixel_dict = extract_training_data(target_dict, shp_train, image_train, train_dir,
+            count, save=save) 
+    # Need to parallelize the extraction of training data.
     print("You have {} instances per training epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))
-
     max_weight = max(pixel_dict.values())
     for key in pixel_dict:
         print(key, max_weight / pixel_dict[key])
@@ -342,7 +336,7 @@ if __name__ == '__main__':
     test_dir = 'training_data/multiclass/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
-    count, pixel_dict = create_training_data(target_dict, shp_test, image_directory, test_dir, 
+    count, pixel_dict = extract_training_data(target_dict, shp_test, image_test, test_dir, 
             count, save=save)
     print("You have {} instances per test epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))

@@ -35,6 +35,7 @@ def landsat_rasters():
              'B7.TIF', 'B8.TIF', 'B9.TIF', 'B10.TIF', 'B11.TIF')}
     return b
 
+
 def climate_rasters(root):
     return [f for f in glob(os.path.join(root, "*.tif")) if 'precip' in f]
 
