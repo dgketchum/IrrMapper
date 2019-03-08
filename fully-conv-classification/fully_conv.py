@@ -2,7 +2,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import keras.backend as K
 import tensorflow as tf
-#tf.enable_eager_execution()
+tf.enable_eager_execution()
 import matplotlib.pyplot as plt
 import numpy as np
 import json
@@ -18,7 +18,7 @@ from shapely.geometry import shape
 from fiona import open as fopen
 from data_generators import generate_training_data, load_raster, preprocess_data
 from data_utils import generate_class_mask
-from models import fcnn_functional, fcnn_model, fcnn_functional_small
+from models import fcnn_functional, fcnn_model, fcnn_functional_small, unet
 
 NO_DATA = -1
 CHUNK_SIZE = 608 # some value that is divisible by 2^MAX_POOLS.
@@ -26,19 +26,28 @@ NUM_CLASSES = 4
 WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
 def custom_objective(y_true, y_pred):
-    '''I want to mask all values that 
-       are not data, given a y_true 
-       that has NODATA values. The boolean mask 
-       operation is failing. It should output
-       a Tensor of shape (M, N_CLASSES), but instead outputs a (M, )
-       tensor.'''
-    y_true = tf.reshape(y_true, (K.shape(y_true)[0], K.shape(y_true)[1]*K.shape(y_true)[2]))
-    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[0], K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
-    y_true = tf.cast(y_true, tf.int32)
-    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y_pred, labels=y_true)
+    y_true_for_loss = y_true
     mask = tf.not_equal(y_true, NO_DATA)
+    y_true_for_loss = tf.where(mask, y_true, tf.zeros_like(y_true))
+    y_pred_n = tf.nn.softmax(y_pred)
+    y_true_for_loss = tf.cast(y_true_for_loss, tf.int32)
+    losses = tf.keras.losses.sparse_categorical_crossentropy(y_true_for_loss, y_pred_n)
+    if np.any(np.isnan(losses.numpy())):
+        print("Nan value in loss.")
     losses = tf.boolean_mask(losses, mask)
-    return tf.reduce_mean(losses)
+    loss = tf.reduce_mean(losses)
+    return loss
+
+
+def masked_acc(y_true, y_pred):
+    y_pred = tf.nn.softmax(y_pred)
+    y_pred = tf.argmax(y_pred, axis=3)
+    mask = tf.not_equal(y_true, NO_DATA)
+    y_true = tf.boolean_mask(y_true, mask)
+    y_pred = tf.boolean_mask(y_pred, mask)
+    y_true = tf.cast(y_true, tf.int64)
+    y_pred = tf.cast(y_pred, tf.int64)
+    return K.mean(tf.math.equal(y_true, y_pred))
 
 
 def evaluate_image(master_raster, model, max_pools, outfile=None, ii=None):
@@ -50,15 +59,28 @@ def evaluate_image(master_raster, model, max_pools, outfile=None, ii=None):
         master, meta = load_raster(master_raster)
         class_mask = np.zeros((2, master.shape[1], master.shape[2])) # Just a placeholder
         out = np.zeros((master.shape[2], master.shape[1], NUM_CLASSES))
-
+        
+        # for i in range(master.shape[0]-2):
+        #     fig, ax = plt.subplots(ncols=2)
+        #     ax[0].imshow(master[i])
+        #     ax[1].imshow(master[i+1])
+        #     plt.show()
+        CHUNK_SIZE = 1248
         for i in range(0, master.shape[1], CHUNK_SIZE):
             for j in range(0, master.shape[2], CHUNK_SIZE):
                 sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask,
                         max_pools, return_cuts=True)
+                print(sub_master.shape)
                 preds = model.predict(sub_master)
-                preds = preds[0, :, :, :]
+                print('pred', preds.shape)
+
+                preds_exp = np.exp(preds)
+                preds_softmaxed = preds_exp / np.sum(preds_exp, axis=3, keepdims=True)
+                if np.any(np.isnan(preds)):
+                    print("Nan prediction.")
+                preds = preds_softmaxed[0, :, :, :]
 
                 if cut_cols == 0 and cut_rows == 0:
                     out[j:j+CHUNK_SIZE, i:i+CHUNK_SIZE, :] = preds
@@ -182,27 +204,35 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
     model = model(NUM_CLASSES)
     if NUM_CLASSES <= 2:
         model.compile(loss=custom_objective_binary,
-                     metrics=['accuracy'],
+                     metrics=[masked_acc],
                      optimizer='adam')
     else:
-        model.compile(loss=custom_objective,
-                 metrics=['accuracy'],
-                 optimizer=tf.keras.optimizers.Adam(lr=1e-6))
+        model.compile(
+                 loss=custom_objective,
+                 optimizer=tf.train.AdamOptimizer(learning_rate=1e-3), 
+                 metrics=[masked_acc]
+                 )
 
-    tb = TensorBoard(log_dir='graphs/30epochssimple/')
+    import time
+    graph_path = os.path.join('graphs/', str(int(time.time())))
+    os.mkdir(graph_path)
+    tb = TensorBoard(log_dir=graph_path, write_images=True, batch_size=4)
     train = os.path.join(training_directory, 'train')
     test = os.path.join(training_directory, 'test')
-    train_generator = generate_training_data(train, max_pools, random_sample=False,
-            train=True, box_size=box_size)
-    test_generator = generate_training_data(test, max_pools, random_sample=False,
-            train=False, box_size=box_size)
+    train_generator = generate_training_data(train, max_pools, sample_random=False,
+            box_size=box_size)
+    test_generator = generate_training_data(test, max_pools, sample_random=False,
+            box_size=box_size)
     model.fit_generator(train_generator, 
+            validation_data=test_generator,
+            validation_steps=valid_steps,
             steps_per_epoch=steps_per_epoch, 
-            max_queue_size=2,
             epochs=epochs,
+            callbacks=[tb, tf.keras.callbacks.TerminateOnNaN()],
             verbose=1,
-            class_weight=[31.0, 1, 2.16, 67.76],
-            use_multiprocessing=False)
+            class_weight=[30.0, 1.0, 2.73, 72.8],
+            use_multiprocessing=True)
+
 
     return model
 
@@ -216,16 +246,20 @@ if __name__ == '__main__':
     model_name = 'tst.h5'
     save_dir = 'models/'
     pth = os.path.join(save_dir, model_name)
-    model_func = fcnn_model 
+    model_func = fcnn_functional
+    steps_per_epoch = 179
+    valid_steps = 2
+    epochs = 3
     if not os.path.isfile(pth):
-        model = train_model(training_directory, model_func, steps_per_epoch=764,
-                valid_steps=246, max_pools=max_pools, epochs=1)
-        model.save(pth)
+        model = train_model(training_directory, model_func, steps_per_epoch=steps_per_epoch,
+                valid_steps=valid_steps, max_pools=max_pools, epochs=epochs)
+    #    model.save(pth)
     else:
         model = tf.keras.models.load_model(pth,
                 custom_objects={'custom_objective':custom_objective})
 
-    raster_name = 'doyouwork_'
-    evaluate_images(image_directory, model,  include_string="37_28", 
+    raster_name = 'noclouds_'
+    pr_to_eval = '37_28'
+    evaluate_images(image_directory, model,  include_string=pr_to_eval, 
              exclude_string="class", max_pools=max_pools, prefix=raster_name, save_dir=save_dir) 
-    clip_rasters(save_dir, "37_28")
+    clip_rasters(save_dir, pr_to_eval)

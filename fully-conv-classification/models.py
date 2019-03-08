@@ -3,7 +3,8 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 import keras.backend as K
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Conv2D, Input, MaxPooling2D, Conv2DTranspose, Concatenate, Dropout, UpSampling2D)
+from tensorflow.keras.layers import (Conv2D, Input, MaxPooling2D, Conv2DTranspose, Concatenate,
+        Dropout, UpSampling2D, BatchNormalization)
 
 def fcnn_model(n_classes):
     model = tf.keras.Sequential()
@@ -15,8 +16,7 @@ def fcnn_model(n_classes):
     model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=2, padding='same', activation='relu'))
     model.add(tf.keras.layers.Dropout(0.5))
     model.add(tf.keras.layers.Conv2D(filters=n_classes, kernel_size=2, padding='same',
-        activation='relu')) # 1x1 convolutions for pixel-wise prediciton.
-    # Take a look at the model summary
+        activation='linear')) 
     #model.summary()
     return model
 
@@ -30,7 +30,7 @@ def fcnn_functional_small(n_classes):
     c2 = Conv2D(filters=64, kernel_size=(3,3), activation='relu', padding='same')(mp1)
     c2 = Conv2D(filters=64, kernel_size=(3,3), activation='relu', padding='same')(c2)
     mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
-    mp2 = Dropout(0.5)(mp2)
+    #mp2 = Dropout(0.5)(mp2)
 
     c3 = Conv2D(filters=128, kernel_size=(3,3), activation='relu', padding='same')(mp2)
     c3 = Conv2D(filters=128, kernel_size=(3,3), activation='relu', padding='same')(c3)
@@ -48,7 +48,7 @@ def fcnn_functional_small(n_classes):
     u2 = UpSampling2D(size=(2, 2))(u2)
     u2 = Conv2D(filters=64, kernel_size=(3, 3), activation='relu', padding='same')(u2)
     u2 = Conv2D(filters=64, kernel_size=(3, 3), activation='relu', padding='same')(u2)
-    u2 = Dropout(0.5)(u2)
+    #u2 = Dropout(0.5)(u2)
 
     u2_c2 = Concatenate()([u2, c2])
     u2_c2 = Dropout(0.5)(u2_c2)
@@ -59,7 +59,7 @@ def fcnn_functional_small(n_classes):
 
     u3_c1 = Concatenate()([u3, c1])
 
-    c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='relu', padding='same')(u3_c1)
+    c5 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='linear', padding='same')(u3_c1)
 
     model = Model(inputs=x, outputs=c5) 
     #model.summary()
@@ -71,7 +71,7 @@ def fcnn_functional(n_classes):
     x = Input((None, None, 36))
     base = 2 
     # exp from 4 to 5.
-    exp = 6
+    exp = 5
     c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(x)
     c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(c1)
     mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c1)
@@ -81,21 +81,20 @@ def fcnn_functional(n_classes):
     c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(mp1)
     c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(c2)
     mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
-   # mp2 = Dropout(0.5)(mp2)
+    #mp2 = Dropout(0.5)(mp2)
 
     exp+=1
 
     c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(mp2)
     c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(c3)
     mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c3)
-   #Jkj mp3 = Dropout(0.5)(mp3)
+    #mp3 = Dropout(0.5)(mp3)
 
     exp+=1
 
     c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(mp3)
     c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(c4)
     mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
-   # mp4 = Dropout(0.5)(mp4)
 
     exp+=1
 
@@ -117,7 +116,7 @@ def fcnn_functional(n_classes):
     u2 = UpSampling2D(size=(2, 2))(u2)
     u2 = Conv2D(filters=base**exp, kernel_size=(3, 3), activation='relu', padding='same')(u2)
     u2 = Conv2D(filters=base**exp, kernel_size=(3, 3), activation='relu', padding='same')(u2)
-   # u2 = Dropout(0.5)(u2)
+    #u2 = Dropout(0.5)(u2)
 
     u2_c4 = Concatenate()([u2, c4])
 
@@ -126,7 +125,7 @@ def fcnn_functional(n_classes):
     u3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u2_c4)
     u3 = UpSampling2D(size=(2, 2))(u3)
     u3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u3)
-   #u3 = Dropout(0.5)(u3)
+    #u3 = Dropout(0.5)(u3)
 
     u3_c3 = Concatenate()([u3, c3])
     
@@ -135,6 +134,7 @@ def fcnn_functional(n_classes):
     u4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u3_c3)
     u4 = UpSampling2D(size=(2, 2))(u4)
     u4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u4)
+    u4 = BatchNormalization(axis=3)(u4)
 
     u4_c2 = Concatenate()([u4, c2])
 
@@ -144,11 +144,65 @@ def fcnn_functional(n_classes):
     u5 = UpSampling2D(size=(2, 2))(u5)
     u5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u5)
     u5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u5)
+    u5 = BatchNormalization(axis=3)(u5)
 
     u5_c1 = Concatenate()([u5, c1])
 
-    u6 = Conv2D(filters=n_classes, kernel_size=(3,3), activation='relu', padding='same')(u5_c1)
+    u6 = Conv2D(filters=n_classes, kernel_size=(1, 1), activation='linear', padding='same')(u5_c1)
+    u6 = BatchNormalization(axis=3)(u6)
 
     model = Model(inputs=x, outputs=u6) 
-    #model.summary()
+    model.summary()
+    return model
+
+
+def unet(n_classes):
+    inputs = Input((None, None, 36))
+    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+    conv2 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
+    conv2 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
+    pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+    conv3 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
+    conv3 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
+    conv4 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool3)
+    conv4 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
+    drop4 = Dropout(0.5)(conv4)
+    pool4 = MaxPooling2D(pool_size=(2, 2))(drop4)
+
+    conv5 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool4)
+    conv5 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv5)
+    drop5 = Dropout(0.5)(conv5)
+
+    up6 = Conv2D(256, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(drop5))
+    merge6 = Concatenate()([drop4,up6])
+    conv6 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge6)
+    conv6 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv6)
+
+    up7 = Conv2D(128, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv6))
+    merge7 = Concatenate()([conv3, up7])
+    conv7 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
+    conv7 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
+
+    up8 = Conv2D(64, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
+    merge8 = Concatenate()([conv2,up8]) 
+    conv8 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
+    conv8 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
+
+    up9 = Conv2D(32, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
+    merge9 = Concatenate()([conv1,up9])
+    conv9 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
+    conv9 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
+    conv9 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
+    conv10 = Conv2D(n_classes, 1, activation='linear')(conv9)
+    bn1 = BatchNormalization(axis=3)(conv10)
+
+    model = Model(inputs=inputs, outputs=bn1)
+
+    #model.compile(optimizer = Adam(lr = 1e-4), loss = 'binary_crossentropy', metrics = ['accuracy'])
+
+    model.summary()
+
     return model

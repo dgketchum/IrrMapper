@@ -1,18 +1,19 @@
 import os
 import glob
 import pickle
+from pprint import pprint
 from multiprocessing import Pool
 from numpy import save as nsave
 from compose_array_single_shapefile import PTASingleShapefile, ShapefileSamplePoints
 from fiona import open as fopen
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from shapely.geometry import shape
 from data_utils import (download_images, get_shapefile_path_row, split_shapefile,
         create_master_raster, filter_shapefile, bandwise_mean)
 from runspec import landsat_rasters, static_rasters
 
 
-def download_images_over_shapefile(shapefile, image_directory, year, master_raster_directory):
+def download_images_over_shapefile(shapefile, image_directory, year):
     '''Downloads p/r corresponding to the location of 
        the shapefile, and creates master raster.
        Image_directory: where to save the raw images.
@@ -55,13 +56,6 @@ def sample_points_from_shapefile(shapefile_path, instances):
     return ssp.outfile 
 
 
-def split_shapefiles_multiproc(f):
-    data_directory = 'split_shapefiles_west/'
-    shp_dir = '/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup'
-    fname = os.path.basename(f) 
-    split_shapefile(shp_dir, fname, data_directory)
-
-
 def download_all_images(image_directory, shapefile_directory, year=2013):
     ''' Downloads all images over each shapefile in
     shapefile directory '''
@@ -74,8 +68,7 @@ def download_all_images(image_directory, shapefile_directory, year=2013):
         t = template.format(p, r, year)
         if t not in done:
             done.add(t)
-            ims = download_images_over_shapefile(f, image_directory, year, master)
-
+            ims = download_images_over_shapefile(f, image_directory, year)
     print("Done downloading images for {}. Make sure there were no 503 codes returned".format(shapefile_directory))
 
 
@@ -95,6 +88,10 @@ def all_rasters(image_directory, satellite=8):
                 for band in band_map:
                     if f.endswith(band):
                         band_map[band].append(os.path.join(dirpath, f))
+
+    for band in band_map:
+        band_map[band] = sorted(band_map[band]) # ensures ordering within bands.
+
     return band_map
 
 def raster_means(image_directory, satellite=8):
@@ -102,7 +99,8 @@ def raster_means(image_directory, satellite=8):
     in image_directory and its subdirectories. 
     Images end with (.tif, .TIF) 
     Image_directory in a typical case would 
-    be image_data/train/ """
+    be image_data/train/ 
+    Does this even need to be calculated?"""
 
     outfile = os.path.join(image_directory, "mean_mapping.pkl")
     if os.path.isfile(outfile):
@@ -113,17 +111,11 @@ def raster_means(image_directory, satellite=8):
     band_map = all_rasters(image_directory, satellite)
     mean_mapping = {}
 
-    paths_for_multiproc = []
-    bands_for_multiproc = []
     for band in band_map:
-        bands_for_multiproc.append(band)
-        paths_for_multiproc.append(band_map[band])
-
-    with Pool() as pool:
-        means = pool.starmap(bandwise_mean, zip(paths_for_multiproc, bands_for_multiproc))
-
-    for mean, band in means:
+        mean, bnd = bandwise_mean(band_map[band], band)
         mean_mapping[band] = mean
+
+    pprint(mean_mapping)
 
     with open(outfile, 'wb') as f:
         pickle.dump(mean_mapping, f)
@@ -144,6 +136,8 @@ def create_all_master_rasters(image_directory, raster_save_directory, mean_mappi
             path = sub_dir[:2]
             row = sub_dir[3:5]
             year = sub_dir[-4:]
+            from pprint import pprint
+            print(paths_map)
             create_master_raster(paths_map, path, row, year, raster_save_directory, mean_mapping)
 
 
@@ -163,13 +157,17 @@ if __name__ == "__main__":
     image_train_directory = 'image_data/train'
     image_test_directory = 'image_data/test'
     image_dirs = [image_train_directory, image_test_directory]
+    shp_train = 'shapefile_data/train/'
+    shp_test = 'shapefile_data/test/'
+    shp_dirs = [shp_train, shp_test]
     shapefile_directory = 'shapefile_data/all_shapefiles'
     master_train = 'master_rasters/train'
     master_test = 'master_rasters/test'
     master_dirs = [master_train, master_test]
     year = 2013
-    #download_all_images(image_directory, shapefile_directory, year)
-    satellite = 8
+
+    for s, i in zip(shp_dirs, image_dirs):
+        download_all_images(i, s, year)
     for im_dir, mas_dir in zip(image_dirs, master_dirs):
         mean_map = raster_means(im_dir)
         create_all_master_rasters(im_dir, mas_dir, mean_map) 

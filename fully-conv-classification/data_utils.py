@@ -68,11 +68,13 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map)
     first = True
     stack = None
     num_rasters = 0
-    for k in paths_map:
-        num_rasters += len(paths_map[k])
+    for key in paths_map:
+        num_rasters += len(paths_map[key])
 
     j = 0
-    for feat in paths_map.keys(): 
+    for feat in sorted(paths_map.keys()): # ensures the stack is in the same order each time.
+        # Ordering within bands is assured by sorting the list that
+        # each band corresponding to, as that's essentially sorting by date.
         feature_rasters = paths_map[feat] # maps bands to their location in filesystem.
         for feature_raster in feature_rasters:
             band_mean = None
@@ -85,8 +87,7 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map)
                 return
 
             with rasopen(feature_raster, mode='r') as src:
-                arr = src.read().astype(type(band_mean))
-                arr -= band_mean
+                arr = src.read()
                 raster_geo = src.meta.copy()
 
             if first:
@@ -156,7 +157,7 @@ def normalize_and_save_image(fname):
 
 def raster_sum(raster):
     with rasopen(raster, 'r') as src:
-        arr_masked = src.read(1, masked=True) # get rid of nodata values,
+        arr_masked = src.read(1, masked=True) # get rid of nodata values
         s = arr_masked.sum()
         count = arr_masked.count()
     return s, count
@@ -175,6 +176,9 @@ def bandwise_mean(paths_list, band_name):
         p_sum, num_pix = raster_sum(filepath)
         pixel_value_sum += p_sum
         n_pixels += num_pix
+    if n_pixels == 0:
+        print("0 non masked pixels.")
+        return 1
     return (pixel_value_sum / n_pixels, band_name)
 
 

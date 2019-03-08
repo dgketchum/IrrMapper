@@ -99,7 +99,7 @@ class ImageStack(object):
         self.paths_map, self.masks = self._order_images()
 
     def build_evaluating(self):
-        self.get_landsat(fmask=False)
+        self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et()
         #self.get_precip()

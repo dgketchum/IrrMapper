@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 from glob import glob
 from random import sample, shuffle
 from sklearn.utils.class_weight import compute_class_weight
+from runspec import mask_rasters
 from data_utils import generate_class_mask, get_shapefile_path_row
 from rasterio import open as rasopen
 from warnings import warn
 from skimage import transform
+from sat_image.warped_vrt import warp_single_image
 
 NO_DATA = -1
 CHUNK_SIZE = 608 # some value that is evenly divisible by 2^MAX_POOLS.
@@ -107,8 +109,36 @@ class DataTile(object):
         self.dict['class_mask'] = class_mask
 
 
-def extract_training_data(target_dict, shapefile_directory, image_directory, training_directory,
-        count, save=True):
+def get_masks(image_directory):
+    ''' Returns all masks in the image directory.'''
+    paths = []
+    for dirpath, dirnames, filenames in os.walk(image_directory):
+        for f in filenames:
+            for suffix in mask_rasters():
+                if f.endswith(suffix):
+                    paths.append(os.path.join(dirpath, f))
+    out = None
+    first_geo = None
+    n_masks = len(paths)
+    first = True
+    for mask_file in paths:
+        mask, meta = load_raster(mask_file)
+        # mask value here is 1.
+        if first:
+            first = False
+            first_geo = meta.copy()
+            out = np.zeros((mask.shape[1], mask.shape[2]))
+        try:
+            out[mask[0] == 1] = 1 # 0 index is for removing the (1, n, m) dimension.
+        except ValueError as e:
+            print(e)
+            mask = warp_single_image(mask_file, first_geo)
+            out[mask[0] == 1] = 1
+    return out
+
+
+def extract_training_data(target_dict, shapefile_directory, image_directory,
+        master_raster_directory, training_directory, count, save=True):
     ''' target_dict: {filename or string in filename : class_code} '''
     done = set()
     pixel_dict = {} # counts number of pixels present in each class.
@@ -125,13 +155,15 @@ def extract_training_data(target_dict, shapefile_directory, image_directory, tra
                 done.add(match)
             p, r = get_shapefile_path_row(f)
             suffix = '{}_{}_{}.tif'.format(p, r, year)
-            master_raster = os.path.join(image_directory, train_raster + suffix)
-            mask_file = os.path.join(image_directory, mask_raster + suffix) # for rasterio.mask.mask
-            masks = []
+            fmask = get_masks(os.path.join(image_directory, suffix[:-4]))
+            master_raster = os.path.join(master_raster_directory, train_raster + suffix)
+            mask_file = os.path.join(master_raster_directory, mask_raster + suffix) # for rasterio.mask.mask
+            masks = [] # these are class masks for the labelling of data.
             all_matches.append(f)
             shp = None
             for match in all_matches:
                 msk = generate_class_mask(match, mask_file)
+                msk[0][fmask == 1] = NO_DATA
                 shp = msk.shape
                 cc = assign_class_code(target_dict, match)
                 if cc is not None:
@@ -145,14 +177,15 @@ def extract_training_data(target_dict, shapefile_directory, image_directory, tra
             for i in range(0, master.shape[1], CHUNK_SIZE):
                 for j in range(0, master.shape[2], CHUNK_SIZE):
                     sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                    for msk in masks:
-                        s = msk.mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                        if not np.all(s == NO_DATA):
-                            pixel_dict[msk.class_code] += len(np.where(s != NO_DATA)[0])
-                            count += 1
-                            if save:
-                                dt = DataTile(sub_master, s, msk.class_code)
-                                dt.to_pickle(training_directory)
+                    if sub_master.shape[1] == CHUNK_SIZE and sub_master.shape[2] == CHUNK_SIZE:
+                        for msk in masks:
+                            s = msk.mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                            if not np.all(s == NO_DATA):
+                                pixel_dict[msk.class_code] += len(np.where(s != NO_DATA)[0])
+                                count += 1
+                                if save:
+                                    dt = DataTile(sub_master, s, msk.class_code)
+                                    dt.to_pickle(training_directory)
     return count, pixel_dict
 
 
@@ -195,7 +228,7 @@ class DataGen:
         return data
 
 
-def generate_training_data(training_directory, max_pools, random_sample=True, train=True, box_size=0):
+def generate_training_data(training_directory, max_pools, sample_random=True, box_size=0):
     ''' Assumes data is stored in training_directory
     in subdirectories labeled class_n_train
     and that n_classes is a global variable.'''
@@ -204,20 +237,19 @@ def generate_training_data(training_directory, max_pools, random_sample=True, tr
     generators = []
     for d in class_dirs:
         generators.append(DataGen(d))
-    q = 0
     while True:
         min_samples = np.inf
         data = []
         for gen in generators:
             out = gen.next().copy()
             data.append(out)
-            if random_sample:
+            if sample_random:
                 n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
                 if n_samples < min_samples:
                     min_samples = n_samples
 
         for subset in data:
-            if random_sample:
+            if sample_random:
                 samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
                         fill_value=subset['class_code'])
             else:
@@ -229,19 +261,23 @@ def generate_training_data(training_directory, max_pools, random_sample=True, tr
         masters = []
         masks = []
         first = True
+        ccs = []
         for subset in data:
             master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
-            if first:
+            master = master[0, :, :, :]
+            mask = mask[0, :, :, 0]
+            if first: 
                 shape = master.shape
                 first = False
-            if master.shape == shape:
-                masters.append(master[0, :, :, :])
-                masks.append(mask[0, :, :, :])
+            if master.shape == shape: # edges of images don't play very well.
+                masters.append(master)
+                masks.append(mask)
+        
+        if len(masters) != 4:
+            print("This should not happen.")
+            continue
 
-
-        yield np.asarray(masters, dtype=np.float32), np.asarray(masks, dtype=np.int32)
-        # for ms, msk in zip(masters, masks):
-        #     yield ms, msk
+        yield np.asarray(masters, dtype=np.float32), np.asarray(masks)
 
 
 def rotation(image, angle):
@@ -311,8 +347,10 @@ def preprocess_data(master, mask, max_pools, return_cuts=False):
 
 if __name__ == '__main__':
     shapefile_directory = 'shapefile_data/'
-    image_train = 'master_rasters/train/'
-    image_test = 'master_rasters/test/'
+    master_train = 'master_rasters/train/'
+    master_test = 'master_rasters/test/'
+    image_train = 'image_data/train/'
+    image_test = 'image_data/test/'
     irr1 = 'Huntley'
     irr2 = 'Sun_River'
     fallow = 'Fallow'
@@ -324,19 +362,19 @@ if __name__ == '__main__':
     shp_train = 'shapefile_data/train/'
     count = 0
     save = True
-    count, pixel_dict = extract_training_data(target_dict, shp_train, image_train, train_dir,
-            count, save=save) 
-    # Need to parallelize the extraction of training data.
-    print("You have {} instances per training epoch.".format(count))
-    print("And {} instances in each class.".format(pixel_dict))
-    max_weight = max(pixel_dict.values())
-    for key in pixel_dict:
-        print(key, max_weight / pixel_dict[key])
+    # count, pixel_dict = extract_training_data(target_dict, shp_train, image_train,
+    #         master_train, train_dir, count, save=save) 
+    # # Need to parallelize the extraction of training data.
+    # print("You have {} instances per training epoch.".format(count))
+    # print("And {} instances in each class.".format(pixel_dict))
+    # max_weight = max(pixel_dict.values())
+    # for key in pixel_dict:
+    #     print(key, max_weight / pixel_dict[key])
     tot = 0
     test_dir = 'training_data/multiclass/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
-    count, pixel_dict = extract_training_data(target_dict, shp_test, image_test, test_dir, 
-            count, save=save)
+    count, pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
+            test_dir, count, save=save)
     print("You have {} instances per test epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))
