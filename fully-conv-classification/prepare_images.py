@@ -1,4 +1,4 @@
-# =============================================================================================
+#  =============================================================================================
 # Copyright 2018 dgketchum
 #
 # Licensed under the Apache License, Version 2 (the "License");
@@ -47,7 +47,9 @@ class ImageStack(object):
     Prepare a stack of images from Landsat, terrain, etc. Save stack in identical geometry.
     """
 
-    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None, max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None):
+    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None,
+            max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None,
+            climate_targets=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -80,6 +82,9 @@ class ImageStack(object):
 
         self.cdl_tif = None
         self.cdl_mask = None
+        self.climate_targets = climate_targets
+        if not self.climate_targets:
+            self.climate_targets = ['pr', 'pet', 'rmin', 'rmax', 'tmmn', 'tmmx', 'bi', 'etr']
 
         self.n = n_landsat
 
@@ -93,16 +98,19 @@ class ImageStack(object):
     def build_training(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
-        self.get_precip()
+        self.get_climate()
         self.get_et()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images()
 
+    def get_climate(self):
+        self.get_precip()
+
     def build_evaluating(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
-        #self.get_et()
-        #self.get_precip()
+        #self.get_et() This doesn't work reliably. 
+        self.get_climate()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
@@ -145,18 +153,18 @@ class ImageStack(object):
         if fmask:
             [self._make_fmask(d) for d in self.image_dirs]
 
-    def get_precip(self):
+    def _get_bounds(self):
         poly_in = self.landsat.get_tile_geometry()
         poly_in = Polygon(poly_in[0]['coordinates'][0])
         project = partial(
                 pytransform, 
                 Proj(self.profile['crs']),
-                Proj(init='epsg:32612'))
+                Proj(self.profile['crs']))
+        # The above is not needed.
         for_bounds = partial(
                 pytransform, 
                 Proj(self.profile['crs']),
                 Proj(init='epsg:4326'))
-        dates = self.scenes['DATE_ACQUIRED'].values
         # Change the coordinate system
         # The issue: the CRSs for the bounding box and for the mask are different.
         # In _project, the incorrect CRS was making it throw an error.
@@ -166,25 +174,32 @@ class ImageStack(object):
         poly_bounds = transform(for_bounds, poly_in)
         poly = Polygon(poly.exterior.coords)
         geometry = [mapping(poly)] 
-        geometry[0]['crs'] = CRS({'init':'epsg:32612'})
+        geometry[0]['crs'] = CRS(self.profile['crs'])
         bounds = poly_bounds.bounds
-        for date in dates:
-            outfile = os.path.join(self.root, 'precip_{}.tif'.format(date))
-            if not os.path.isfile(outfile):
-                print("Get {}".format(outfile))
-                d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
-                bds = GeoBounds(wsen=bounds)
-                gm = GridMet(variable='pr', clip_feature=geometry,
-                        bbox=bds, target_profile=self.profile, date=d)
-                out = gm.get_data_subset()
-                gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
+        return bounds, geometry
+
+
+    def get_precip(self):
+        bounds, geometry = self._get_bounds()
+        dates = self.scenes['DATE_ACQUIRED'].values
+        for target in self.climate_targets:
+            for date in dates:
+                outfile = os.path.join(self.root, '{}_{}.tif'.format(date, target))
+                if not os.path.isfile(outfile):
+                    print("Get {}".format(os.path.basename(outfile)))
+                    d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
+                    bds = GeoBounds(wsen=bounds)
+                    gm = GridMet(variable=target, clip_feature=geometry,
+                            bbox=bds, target_profile=self.profile, date=d)
+                    out = gm.get_data_subset()
+                    gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
 
 
     def get_terrain(self):
         """
         Get digital elevation maps from amazon web services
         save in the project root directory with filenames enumerated
-        in the next three lines.
+        in the next three lines (slope, aspect, elevation_diff).
 
         """
 

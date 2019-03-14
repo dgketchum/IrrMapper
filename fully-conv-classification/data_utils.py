@@ -6,7 +6,7 @@ from fiona import open as fopen
 from lxml import html
 from requests import get
 from copy import deepcopy
-from numpy import zeros, asarray, array, reshape, nan
+from numpy import zeros, asarray, array, reshape, nan, sqrt, std
 from shapely.geometry import shape
 from collections import defaultdict
 from rasterio import float32, open as rasopen
@@ -37,7 +37,7 @@ def generate_class_mask(shapefile, master_raster, no_data=-1):
     return out_image
 
 
-def create_master_raster(paths_map, path, row, year, raster_directory, mean_map):
+def create_master_raster(paths_map, path, row, year, raster_directory, mean_map, stddev_map):
     """ Creates a master raster with depth given by the organization of the
     paths_map. Paths map is a dictionary of lists, with keys the band names 
     (B1, B2...) and values the paths of the images in the filesystem 
@@ -81,6 +81,7 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map)
             for band in mean_map:
                 if feature_raster.endswith(band):
                     band_mean = mean_map[band]
+                    band_std = stddev_map[band]
 
             if band_mean is None:
                 print("Band mean not found in mean_mapping for {}".format(feature_raster))
@@ -89,6 +90,9 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map)
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
                 raster_geo = src.meta.copy()
+
+            #arr = (arr - band_mean) / band_std
+            arr = (arr - arr.mean()) / std(arr)
 
             if first:
                 first_geo = raster_geo.copy()
@@ -158,9 +162,33 @@ def normalize_and_save_image(fname):
 def raster_sum(raster):
     with rasopen(raster, 'r') as src:
         arr_masked = src.read(1, masked=True) # get rid of nodata values
-        s = arr_masked.sum()
-        count = arr_masked.count()
+    s = arr_masked.sum()
+    count = arr_masked.count()
     return s, count
+
+
+def raster_squared_sum(raster, mean):
+    with rasopen(raster, 'r') as src:
+        arr_masked = src.read(1, masked=True) # get rid of nodata values
+    squared_diff = (arr_masked - mean)**2
+    s = squared_diff.sum()
+    count = squared_diff.count()
+    return s, count
+
+
+def bandwise_stddev(paths_list, band_name, band_mean):
+    ''' Calculate the stddev of the pixel
+    values in a given band through time.'''
+    n_pixels = 0
+    pixel_value_squared_sum = 0
+    for filepath in paths_list:
+        p_sum, num_pix = raster_squared_sum(filepath, band_mean)
+        pixel_value_squared_sum += p_sum
+        n_pixels += num_pix
+    if n_pixels == 0:
+        print("0 non masked pixels.")
+        return 1
+    return (sqrt(pixel_value_squared_sum / n_pixels), band_name)
 
 
 def bandwise_mean(paths_list, band_name):

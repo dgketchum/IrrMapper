@@ -1,5 +1,6 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import time
 import keras.backend as K
 import tensorflow as tf
 tf.enable_eager_execution()
@@ -21,22 +22,49 @@ from data_utils import generate_class_mask
 from models import fcnn_functional, fcnn_model, fcnn_functional_small, unet
 
 NO_DATA = -1
-CHUNK_SIZE = 608 # some value that is divisible by 2^MAX_POOLS.
-NUM_CLASSES = 4
+CHUNK_SIZE = 572 # some value that is divisible by 2^MAX_POOLS.
+NUM_CLASSES = 5
 WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
 def custom_objective(y_true, y_pred):
     y_true_for_loss = y_true
     mask = tf.not_equal(y_true, NO_DATA)
     y_true_for_loss = tf.where(mask, y_true, tf.zeros_like(y_true))
-    y_pred_n = tf.nn.softmax(y_pred)
     y_true_for_loss = tf.cast(y_true_for_loss, tf.int32)
-    losses = tf.keras.losses.sparse_categorical_crossentropy(y_true_for_loss, y_pred_n)
-    if np.any(np.isnan(losses.numpy())):
-        print("Nan value in loss.")
-    losses = tf.boolean_mask(losses, mask)
-    loss = tf.reduce_mean(losses)
-    return loss
+    losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y_pred, labels=y_true_for_loss)
+    # the above line works in eager mode, but not otherwise.
+    # losses = tf.keras.losses.sparse_categorical_crossentropy(y_true_for_loss, y_pred)
+    out = tf.boolean_mask(losses, mask)
+    return out
+
+def weighted_loss(weight_map):
+    # All I need to do is multiply the output loss
+    # by the weights that I input. 
+    # Loss is of shape n_classesxwidthxheight
+    # what does weight map have to be in this case?
+    # 
+    def loss(y_true, y_pred):
+        losses = 0
+        pass
+    pass
+
+
+def custom_objective_v2(y_true, y_pred):
+    '''I want to mask all values that 
+       are not data, given a y_true 
+       that has NODATA values. The boolean mask 
+       operation is failing. It should output
+       a Tensor of shape (M, N_CLASSES), but instead outputs a (M, )
+       tensor.'''
+    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
+    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
+    masked = tf.not_equal(y_true, NO_DATA)
+    indices = tf.where(masked)
+    indices = tf.to_int32(indices)
+    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
+    y_true_masked = tf.gather_nd(params=y_true, indices=indices)
+    y_pred_masked = tf.gather_nd(params=y_pred, indices=indices)
+    return tf.keras.losses.categorical_crossentropy(y_true_masked, y_pred_masked)
 
 
 def masked_acc(y_true, y_pred):
@@ -50,6 +78,72 @@ def masked_acc(y_true, y_pred):
     return K.mean(tf.math.equal(y_true, y_pred))
 
 
+def m_acc(y_true, y_pred):
+    ''' Calculate accuracy from masked data.
+    The built-in accuracy metric uses all data (masked & unmasked).'''
+    y_true = tf.reshape(y_true, (K.shape(y_true)[1]*K.shape(y_true)[2], NUM_CLASSES))
+    y_pred = tf.reshape(y_pred, (K.shape(y_pred)[1]*K.shape(y_pred)[2], NUM_CLASSES))
+    masked = tf.not_equal(y_true, NO_DATA)
+    indices = tf.where(masked)
+    indices = tf.to_int32(indices)
+    indices = tf.slice(indices, [0, 0], [K.shape(indices)[0], 1])
+    y_true_masked = tf.gather_nd(params=y_true, indices=indices)
+    y_pred_masked = tf.gather_nd(params=y_pred, indices=indices)
+    return K.cast(K.equal(K.argmax(y_true_masked, axis=-1), K.argmax(y_pred_masked, axis=-1)), K.floatx())
+
+
+def evaluate_image_unet(master_raster, model, max_pools, outfile=None, ii=None):
+
+    if not os.path.isfile(master_raster):
+        print("Master raster not created for {}".format(suffix))
+        # TODO: More extensive handling of this case.
+    else:
+        master, meta = load_raster(master_raster)
+        class_mask = np.zeros((2, master.shape[1], master.shape[2])) # Just a placeholder
+        out = np.zeros((master.shape[2], master.shape[1], NUM_CLASSES))
+
+        CHUNK_SIZE = 572
+        diff = 92
+        stride = 388
+
+        for i in range(0, master.shape[1]-diff, stride):
+            for j in range(0, master.shape[2]-diff, stride):
+                sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
+                sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask,
+                        max_pools, return_cuts=True)
+                if sub_master.shape[1] == 572 and sub_master.shape[2] == 572:
+                    preds = model.predict(sub_master)
+                    preds_exp = np.exp(preds)
+                    preds_softmaxed = preds_exp / np.sum(preds_exp, axis=3, keepdims=True)
+                    if np.any(np.isnan(preds)):
+                        print("Nan prediction.")
+                    preds = preds_softmaxed[0, :, :, :]
+                else:
+                    continue
+
+                if cut_cols == 0 and cut_rows == 0:
+                    out[j+diff:j+CHUNK_SIZE-diff, i+diff:i+CHUNK_SIZE-diff, :] = preds
+                elif cut_cols == 0 and cut_rows != 0:
+                    ofs = master.shape[1]-cut_rows
+                    out[j+diff:j+CHUNK_SIZE-diff, i+diff:ofs-diff, :] = preds
+                elif cut_cols != 0 and cut_rows == 0:
+                    ofs = master.shape[2]-cut_cols
+                    out[j+diff:ofs-diff, i+diff:i+CHUNK_SIZE-diff, :] = preds
+                elif cut_cols != 0 and cut_rows != 0:
+                    ofs_col = master.shape[2]-cut_cols
+                    ofs_row = master.shape[1]-cut_rows
+                    out[j+diff:ofs_col-diff, i+diff:ofs_row-diff, :] = preds
+                else:
+                    print("whatcha got goin on here?")
+
+            sys.stdout.write("N eval: {}. Percent done: {:.4f}\r".format(ii, i / master.shape[1]))
+
+    out = np.swapaxes(out, 0, 2)
+    out = out.astype(np.float32)
+    if outfile:
+        save_raster(out, outfile, meta)
+    return out
 def evaluate_image(master_raster, model, max_pools, outfile=None, ii=None):
 
     if not os.path.isfile(master_raster):
@@ -59,41 +153,37 @@ def evaluate_image(master_raster, model, max_pools, outfile=None, ii=None):
         master, meta = load_raster(master_raster)
         class_mask = np.zeros((2, master.shape[1], master.shape[2])) # Just a placeholder
         out = np.zeros((master.shape[2], master.shape[1], NUM_CLASSES))
-        
-        # for i in range(master.shape[0]-2):
-        #     fig, ax = plt.subplots(ncols=2)
-        #     ax[0].imshow(master[i])
-        #     ax[1].imshow(master[i+1])
-        #     plt.show()
-        CHUNK_SIZE = 1248
+
+        CHUNK_SIZE = 572
+
         for i in range(0, master.shape[1], CHUNK_SIZE):
             for j in range(0, master.shape[2], CHUNK_SIZE):
                 sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask,
                         max_pools, return_cuts=True)
-                print(sub_master.shape)
-                preds = model.predict(sub_master)
-                print('pred', preds.shape)
-
-                preds_exp = np.exp(preds)
-                preds_softmaxed = preds_exp / np.sum(preds_exp, axis=3, keepdims=True)
-                if np.any(np.isnan(preds)):
-                    print("Nan prediction.")
-                preds = preds_softmaxed[0, :, :, :]
-
+                if sub_master.shape[1] == 572 and sub_master.shape[2] == 572:
+                    preds = model.predict(sub_master)
+                    preds_exp = np.exp(preds)
+                    preds_softmaxed = preds_exp / np.sum(preds_exp, axis=3, keepdims=True)
+                    if np.any(np.isnan(preds)):
+                        print("Nan prediction.")
+                    preds = preds_softmaxed[0, :, :, :]
+                else:
+                    continue
+                oss = 92
                 if cut_cols == 0 and cut_rows == 0:
-                    out[j:j+CHUNK_SIZE, i:i+CHUNK_SIZE, :] = preds
+                    out[j+oss:j+CHUNK_SIZE-oss, i+oss:i+CHUNK_SIZE-oss, :] = preds
                 elif cut_cols == 0 and cut_rows != 0:
                     ofs = master.shape[1]-cut_rows
-                    out[j:j+CHUNK_SIZE, i:ofs, :] = preds
+                    out[j+oss:j+CHUNK_SIZE-oss, i+oss:ofs-oss, :] = preds
                 elif cut_cols != 0 and cut_rows == 0:
                     ofs = master.shape[2]-cut_cols
-                    out[j:ofs, i:i+CHUNK_SIZE, :] = preds
+                    out[j+oss:ofs-oss, i+oss:i+CHUNK_SIZE-oss, :] = preds
                 elif cut_cols != 0 and cut_rows != 0:
                     ofs_col = master.shape[2]-cut_cols
                     ofs_row = master.shape[1]-cut_rows
-                    out[j:ofs_col, i:ofs_row, :] = preds
+                    out[j+oss:ofs_col-oss, i+oss:ofs_row-oss, :] = preds
                 else:
                     print("whatcha got goin on here?")
 
@@ -155,7 +245,7 @@ def evaluate_images(image_directory, model, include_string, max_pools, exclude_s
             out = prefix + out + ".tif"
             out = os.path.join(save_dir, out)
             ii += 1
-            evaluate_image(f, model, max_pools=max_pools, outfile=out, ii=ii)
+            evaluate_image_unet(f, model, max_pools=max_pools, outfile=out, ii=ii)
 
 def compute_iou(y_pred, y_true):
      ''' This is slow. '''
@@ -197,31 +287,36 @@ def get_iou():
         y_pred = np.argmax(y_pred, axis=0)
         print(f, compute_iou(y_pred, y_true))
 
-def train_model(training_directory, model, steps_per_epoch, valid_steps, max_pools, box_size=0, epochs=3):
+def train_model(training_directory, model, steps_per_epoch, valid_steps, max_pools, box_size=0,
+        epochs=3, random_sample=False, restore=False, learning_rate=1e-3):
     ''' This function assumes that train/test data are
     subdirectories of training_directory, with
     the names train/test.'''
-    model = model(NUM_CLASSES)
+    if not restore:
+        model = model(NUM_CLASSES)
     if NUM_CLASSES <= 2:
         model.compile(loss=custom_objective_binary,
-                     metrics=[masked_acc],
+                     metrics=[m_acc],
                      optimizer='adam')
     else:
+        # model.compile(
+        #          loss=custom_objective,
+        #          optimizer='adam', 
+        #          metrics=[masked_acc]
+        #          )
         model.compile(
                  loss=custom_objective,
-                 optimizer=tf.train.AdamOptimizer(learning_rate=1e-3), 
+                 optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
                  metrics=[masked_acc]
                  )
-
-    import time
     graph_path = os.path.join('graphs/', str(int(time.time())))
     os.mkdir(graph_path)
     tb = TensorBoard(log_dir=graph_path, write_images=True, batch_size=4)
     train = os.path.join(training_directory, 'train')
     test = os.path.join(training_directory, 'test')
-    train_generator = generate_training_data(train, max_pools, sample_random=False,
+    train_generator = generate_training_data(train, max_pools, sample_random=random_sample,
             box_size=box_size)
-    test_generator = generate_training_data(test, max_pools, sample_random=False,
+    test_generator = generate_training_data(test, max_pools, sample_random=random_sample,
             box_size=box_size)
     model.fit_generator(train_generator, 
             validation_data=test_generator,
@@ -230,36 +325,77 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
             epochs=epochs,
             callbacks=[tb, tf.keras.callbacks.TerminateOnNaN()],
             verbose=1,
-            class_weight=[30.0, 1.0, 2.73, 72.8],
+            class_weight=[25.923, 1.0, 2.79, 61.128, .75],
             use_multiprocessing=True)
 
+    return model, graph_path
 
-    return model
+
+def save_model_info(outfile, args):
+    template = '{}={}|'
+    with open(outfile, 'a') as f:
+        for key in args:
+            f.write(template.format(key, args[key]))
+        f.write("\n-------------------\n")
+    print("wrote run info to {}".format(outfile))
+
 
 if __name__ == '__main__':
 
-    image_directory = 'master_rasters/test/'
     training_directory = 'training_data/multiclass/'
-    m_dir = 'compare_model_outputs/multiclass/' 
+    info_file = 'run_information.txt'
 
-    max_pools = 5
-    model_name = 'tst.h5'
-    save_dir = 'models/'
-    pth = os.path.join(save_dir, model_name)
-    model_func = fcnn_functional
-    steps_per_epoch = 179
-    valid_steps = 2
-    epochs = 3
-    if not os.path.isfile(pth):
-        model = train_model(training_directory, model_func, steps_per_epoch=steps_per_epoch,
-                valid_steps=valid_steps, max_pools=max_pools, epochs=epochs)
-    #    model.save(pth)
+    max_pools = 0
+    model_name = 'unet_{}.h5'.format(int(time.time()))
+    #model_name = 'unet_random_sample100.h5'
+    model_dir = 'models/'
+    info_path = os.path.join(model_dir, info_file)
+    model_save_path = os.path.join(model_dir, model_name)
+
+    model_func = unet
+
+    steps_per_epoch = 157 #628
+    valid_steps = 1 #233
+    epochs = 1
+
+    train_more = False
+    eager = True
+    class_weights = True
+    learning_rate = 1e-4
+    random_sample = False
+    augment = False
+
+    raster_name = '5class'
+    pr_to_eval = '39_27'
+    image_directory = 'master_rasters/train/'
+
+    param_dict = {'model_name':model_name, 'epochs':epochs, 'steps_per_epoch':steps_per_epoch,
+            'raster_name':raster_name, 'learning_rate':learning_rate, 'eager':eager,
+            'class_weights':class_weights, 'augmented':augment, 'random_sample':random_sample, 'graph_path':None}
+
+    evaluating = True
+    if not os.path.isfile(model_save_path):
+        model, graph_path = train_model(training_directory, model_func,
+                steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,
+                max_pools=max_pools, epochs=epochs,
+                random_sample=random_sample, learning_rate=learning_rate)
+        evaluating = False
+        model.save(model_save_path)
     else:
-        model = tf.keras.models.load_model(pth,
+        model = tf.keras.models.load_model(model_save_path,
                 custom_objects={'custom_objective':custom_objective})
+        if train_more:
+            model, graph_path = train_model(training_directory, model, steps_per_epoch=steps_per_epoch,
+                    valid_steps=valid_steps, random_sample=random_sample,
+                    max_pools=max_pools, epochs=epochs, restore=True)
+            model_name = 'unet_random_sample100.h5'
+            model.save(os.path.join(model_dir, model_name))
 
-    raster_name = 'noclouds_'
-    pr_to_eval = '37_28'
-    evaluate_images(image_directory, model,  include_string=pr_to_eval, 
-             exclude_string="class", max_pools=max_pools, prefix=raster_name, save_dir=save_dir) 
-    clip_rasters(save_dir, pr_to_eval)
+    if not evaluating or train_more:
+        param_dict['graph_path'] = graph_path
+        save_model_info(info_path, param_dict)
+    
+    evaluate_images(image_directory, model, include_string=pr_to_eval, 
+             exclude_string="class", max_pools=max_pools, prefix=raster_name,
+             save_dir='compare_model_outputs/blurry/') 
+    #clip_rasters('compare_model_outputs/blurry/', pr_to_eval)

@@ -4,7 +4,7 @@ import keras.backend as K
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (Conv2D, Input, MaxPooling2D, Conv2DTranspose, Concatenate,
-        Dropout, UpSampling2D, BatchNormalization)
+        Dropout, UpSampling2D, BatchNormalization, Cropping2D)
 
 def fcnn_model(n_classes):
     model = tf.keras.Sequential()
@@ -16,7 +16,7 @@ def fcnn_model(n_classes):
     model.add(tf.keras.layers.Conv2D(filters=16, kernel_size=2, padding='same', activation='relu'))
     model.add(tf.keras.layers.Dropout(0.5))
     model.add(tf.keras.layers.Conv2D(filters=n_classes, kernel_size=2, padding='same',
-        activation='linear')) 
+        activation='softmax')) 
     #model.summary()
     return model
 
@@ -64,6 +64,106 @@ def fcnn_functional_small(n_classes):
     model = Model(inputs=x, outputs=c5) 
     #model.summary()
     return model
+
+def unet(n_classes, channel_depth=36):
+    x = Input((None, None, channel_depth))
+    base = 2
+    exp = 6
+
+    # 64 filters
+    c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(x)
+    c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c1)
+    mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
+
+    exp += 1
+    # 128 filters
+    c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp1)
+    c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c3)
+    mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
+    d1 = Dropout(0.5)(mp2)
+
+
+    exp += 1
+    # 256 filters
+    c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(d1)
+    c6 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c5)
+    mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c6)
+
+    exp += 1
+    # 512 filters
+    c7 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp3)
+    c8 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c7)
+    mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c8)
+    d2 = Dropout(0.5)(mp4)
+
+    exp += 1
+    # 1024 filters
+    c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(d2)
+    c10 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c9)
+
+    exp -= 1
+    # 512 filters, making 1024 when concatenated with 
+    # the corresponding layer from the contracting path.
+    u1 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c10)
+
+    c8_cropped = Cropping2D(cropping=4)(c8)
+    concat_u1_c8 = Concatenate()([u1, c8_cropped])
+
+    # 512 filters
+    c11 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u1_c8)
+
+    exp -= 1
+    # 256 filters, making 512 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c12 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c11)
+
+    u2 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c12)
+
+    c6_cropped = Cropping2D(cropping=16)(c6)
+    concat_u2_c6 = Concatenate()([u2, c6_cropped])
+
+    # 256 filters
+    c13 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u2_c6)
+    bn1 = BatchNormalization(axis=3)(c13)
+
+    exp -= 1
+    # 128 filters, making 256 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c14 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn1)
+
+    u3 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c14)
+
+    c4_cropped = Cropping2D(cropping=40)(c4)
+    concat_u3_c4 = Concatenate()([u3, c4_cropped])
+
+    # 128 filters
+    c15 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u3_c4)
+
+    exp -= 1
+    # 64 filters, making 128 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c16 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c15)
+
+    u4 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c16)
+
+    c2_cropped = Cropping2D(cropping=88)(c2)
+    concat_u4_c2 = Concatenate()([u4, c2_cropped])
+
+    c17 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(concat_u4_c2)
+
+    c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(c17)
+
+    last = Conv2D(filters=n_classes, kernel_size=1, activation='linear', padding='valid')(c18)
+    return Model(inputs=x, outputs=last)
 
 
 def fcnn_functional(n_classes):
@@ -116,7 +216,7 @@ def fcnn_functional(n_classes):
     u2 = UpSampling2D(size=(2, 2))(u2)
     u2 = Conv2D(filters=base**exp, kernel_size=(3, 3), activation='relu', padding='same')(u2)
     u2 = Conv2D(filters=base**exp, kernel_size=(3, 3), activation='relu', padding='same')(u2)
-    #u2 = Dropout(0.5)(u2)
+    u2 = Dropout(0.5)(u2)
 
     u2_c4 = Concatenate()([u2, c4])
 
@@ -125,7 +225,7 @@ def fcnn_functional(n_classes):
     u3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u2_c4)
     u3 = UpSampling2D(size=(2, 2))(u3)
     u3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u3)
-    #u3 = Dropout(0.5)(u3)
+    u3 = Dropout(0.5)(u3)
 
     u3_c3 = Concatenate()([u3, c3])
     
@@ -134,7 +234,7 @@ def fcnn_functional(n_classes):
     u4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u3_c3)
     u4 = UpSampling2D(size=(2, 2))(u4)
     u4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u4)
-    u4 = BatchNormalization(axis=3)(u4)
+    #u4 = BatchNormalization(axis=3)(u4)
 
     u4_c2 = Concatenate()([u4, c2])
 
@@ -144,65 +244,12 @@ def fcnn_functional(n_classes):
     u5 = UpSampling2D(size=(2, 2))(u5)
     u5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u5)
     u5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u5)
-    u5 = BatchNormalization(axis=3)(u5)
+    #u5 = BatchNormalization(axis=3)(u5)
 
     u5_c1 = Concatenate()([u5, c1])
 
-    u6 = Conv2D(filters=n_classes, kernel_size=(1, 1), activation='linear', padding='same')(u5_c1)
-    u6 = BatchNormalization(axis=3)(u6)
+    u6 = Conv2D(filters=n_classes, kernel_size=(3, 3), activation='softmax', padding='same')(u5_c1)
 
     model = Model(inputs=x, outputs=u6) 
-    model.summary()
-    return model
-
-
-def unet(n_classes):
-    inputs = Input((None, None, 36))
-    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
-    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
-    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
-    conv2 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
-    conv2 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
-    pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
-    conv3 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
-    conv3 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
-    pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
-    conv4 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool3)
-    conv4 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
-    drop4 = Dropout(0.5)(conv4)
-    pool4 = MaxPooling2D(pool_size=(2, 2))(drop4)
-
-    conv5 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool4)
-    conv5 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv5)
-    drop5 = Dropout(0.5)(conv5)
-
-    up6 = Conv2D(256, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(drop5))
-    merge6 = Concatenate()([drop4,up6])
-    conv6 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge6)
-    conv6 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv6)
-
-    up7 = Conv2D(128, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv6))
-    merge7 = Concatenate()([conv3, up7])
-    conv7 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
-    conv7 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
-
-    up8 = Conv2D(64, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
-    merge8 = Concatenate()([conv2,up8]) 
-    conv8 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
-    conv8 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
-
-    up9 = Conv2D(32, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
-    merge9 = Concatenate()([conv1,up9])
-    conv9 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
-    conv9 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
-    conv9 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
-    conv10 = Conv2D(n_classes, 1, activation='linear')(conv9)
-    bn1 = BatchNormalization(axis=3)(conv10)
-
-    model = Model(inputs=inputs, outputs=bn1)
-
-    #model.compile(optimizer = Adam(lr = 1e-4), loss = 'binary_crossentropy', metrics = ['accuracy'])
-
-    model.summary()
-
+    # model.summary()
     return model

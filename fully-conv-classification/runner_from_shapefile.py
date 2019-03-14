@@ -9,8 +9,8 @@ from fiona import open as fopen
 from collections import defaultdict, OrderedDict
 from shapely.geometry import shape
 from data_utils import (download_images, get_shapefile_path_row, split_shapefile,
-        create_master_raster, filter_shapefile, bandwise_mean)
-from runspec import landsat_rasters, static_rasters
+        create_master_raster, filter_shapefile, bandwise_mean, bandwise_stddev)
+from runspec import landsat_rasters, static_rasters, climate_rasters
 
 
 def download_images_over_shapefile(shapefile, image_directory, year):
@@ -80,6 +80,8 @@ def all_rasters(image_directory, satellite=8):
         band_map[band] = []
     for band in static_rasters():
         band_map[band] = []
+    for band in climate_rasters():
+        band_map[band] = []
 
     extensions = (".tif", ".TIF")
     for dirpath, dirnames, filenames in os.walk(image_directory):
@@ -94,13 +96,16 @@ def all_rasters(image_directory, satellite=8):
 
     return band_map
 
+
 def raster_means(image_directory, satellite=8):
     """ Gets all means of all images stored
     in image_directory and its subdirectories. 
     Images end with (.tif, .TIF) 
     Image_directory in a typical case would 
-    be image_data/train/ 
-    Does this even need to be calculated?"""
+    be project_root/image_data/train/.
+    This returns band_map, which is a dict of lists with
+    keys band names (B1, B2...) and values lists of
+    the locations of the rasters in the filesystem."""
 
     outfile = os.path.join(image_directory, "mean_mapping.pkl")
     if os.path.isfile(outfile):
@@ -115,15 +120,41 @@ def raster_means(image_directory, satellite=8):
         mean, bnd = bandwise_mean(band_map[band], band)
         mean_mapping[band] = mean
 
-    pprint(mean_mapping)
-
     with open(outfile, 'wb') as f:
         pickle.dump(mean_mapping, f)
 
     return mean_mapping
     
 
-def create_all_master_rasters(image_directory, raster_save_directory, mean_mapping):
+def raster_stds(image_directory, mean_map, satellite=8):
+
+    outfile = os.path.join(image_directory, "stddev_mapping.pkl")
+    if os.path.isfile(outfile):
+        with open(outfile, 'rb') as f:
+            stddev_mapping = pickle.load(f)
+        return stddev_mapping
+
+    band_map = all_rasters(image_directory, satellite) # get all rasters 
+    # in the image directory
+    stddev_mapping = {}
+
+    for band in band_map.keys():
+        std, bnd = bandwise_stddev(band_map[band], band, mean_map[band])
+        stddev_mapping[band] = std
+
+    with open(outfile, 'wb') as f:
+        pickle.dump(stddev_mapping, f)
+
+    pprint('STDMAP')
+    pprint(stddev_mapping)
+    print("-------")
+    pprint('MEANMAP')
+    pprint(mean_map)
+
+    return stddev_mapping
+
+
+def create_all_master_rasters(image_directory, raster_save_directory, mean_mapping, stddev_mapping):
     """ Creates a master raster for all images in image_directory. 
     Image directory is assumed to be a top-level directory that contains
     all the path_row directories for test or train (image_data/test/path_row_year*/) 
@@ -136,9 +167,8 @@ def create_all_master_rasters(image_directory, raster_save_directory, mean_mappi
             path = sub_dir[:2]
             row = sub_dir[3:5]
             year = sub_dir[-4:]
-            from pprint import pprint
-            print(paths_map)
-            create_master_raster(paths_map, path, row, year, raster_save_directory, mean_mapping)
+            create_master_raster(paths_map, path, row, year, raster_save_directory, mean_mapping,
+                    stddev_mapping)
 
 
 if __name__ == "__main__":
@@ -147,21 +177,22 @@ if __name__ == "__main__":
     # for f in glob.glob(shp + "*.shp"):
     #     filter_shapefile(f, out_shapefile_directory)
     # This project is becoming more complicated.
-    # Needs a test / train organization!
+    # Needs a test / train organization
     # 1. Filter shapefiles.
     # 2. Download images over shapefiles
-    # 3. Create master rasters
-    # 4. Extract training data
-    # 5. Train network.
+    # 3. Get all means/stddevs
+    # 4. Create master rasters
+    # 5. Extract training data
+    # 6. Train network.
 
-    image_train_directory = 'image_data/train'
+    image_train_directory = 'image_data/train/'
     image_test_directory = 'image_data/test'
     image_dirs = [image_train_directory, image_test_directory]
     shp_train = 'shapefile_data/train/'
     shp_test = 'shapefile_data/test/'
     shp_dirs = [shp_train, shp_test]
     shapefile_directory = 'shapefile_data/all_shapefiles'
-    master_train = 'master_rasters/train'
+    master_train = 'master_rasters/train/'
     master_test = 'master_rasters/test'
     master_dirs = [master_train, master_test]
     year = 2013
@@ -169,5 +200,6 @@ if __name__ == "__main__":
     for s, i in zip(shp_dirs, image_dirs):
         download_all_images(i, s, year)
     for im_dir, mas_dir in zip(image_dirs, master_dirs):
-        mean_map = raster_means(im_dir)
-        create_all_master_rasters(im_dir, mas_dir, mean_map) 
+        mean_map = raster_means(image_train_directory)
+        stddev_map = raster_stds(image_train_directory, mean_map)
+        create_all_master_rasters(im_dir, mas_dir, mean_map, stddev_map) 
