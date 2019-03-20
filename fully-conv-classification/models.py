@@ -3,8 +3,7 @@ os.environ['KERAS_BACKEND'] = 'tensorflow'
 import keras.backend as K
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import (Conv2D, Input, MaxPooling2D, Conv2DTranspose, Concatenate,
-        Dropout, UpSampling2D, BatchNormalization, Cropping2D)
+from tensorflow.keras.layers import (multiply, Conv2D, Input, MaxPooling2D, Conv2DTranspose, Concatenate, Dropout, UpSampling2D, BatchNormalization, Cropping2D, Lambda)
 
 def fcnn_model(n_classes):
     model = tf.keras.Sequential()
@@ -65,13 +64,19 @@ def fcnn_functional_small(n_classes):
     #model.summary()
     return model
 
-def unet(n_classes, channel_depth=36):
-    x = Input((None, None, channel_depth))
+_epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
+
+def weighted_unet_no_transpose_conv(input_shape, n_classes):
+    ''' This model does not use any Conv2DTranspose layers. 
+    Instead a Upsampling2D layer with a Conv layer after 
+    with same padding. '''
+    inp1 = Input(input_shape)
+    weighted_input = Input(shape=(388, 388, 5))
     base = 2
     exp = 6
 
     # 64 filters
-    c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(x)
+    c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(inp1)
     c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c1)
     mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
 
@@ -80,12 +85,11 @@ def unet(n_classes, channel_depth=36):
     c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp1)
     c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c3)
     mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
-    d1 = Dropout(0.5)(mp2)
 
 
     exp += 1
     # 256 filters
-    c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(d1)
+    c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp2)
     c6 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c5)
     mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c6)
 
@@ -94,11 +98,125 @@ def unet(n_classes, channel_depth=36):
     c7 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp3)
     c8 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c7)
     mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c8)
-    d2 = Dropout(0.5)(mp4)
 
     exp += 1
     # 1024 filters
-    c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(d2)
+    c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp4)
+    c10 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c9)
+
+    exp -= 1
+    # 512 filters, making 1024 when concatenated with 
+    # the corresponding layer from the contracting path.
+    # u1 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+    #         activation='relu')(c10)
+    u1 = UpSampling2D(size=(2, 2))(c10)
+    u1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u1)
+
+    c8_cropped = Cropping2D(cropping=4)(c8)
+    concat_u1_c8 = Concatenate()([u1, c8_cropped])
+
+    # 512 filters
+    c11 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u1_c8)
+
+    exp -= 1
+    # 256 filters, making 512 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c12 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c11)
+
+    # u2 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+    #         activation='relu')(c12)
+    u2 = UpSampling2D(size=(2, 2))(c12)
+    u2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u2)
+
+    c6_cropped = Cropping2D(cropping=16)(c6)
+    concat_u2_c6 = Concatenate()([u2, c6_cropped])
+
+    # 256 filters
+    c13 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u2_c6)
+    bn1 = BatchNormalization(axis=3)(c13)
+
+    exp -= 1
+    # 128 filters, making 256 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c14 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn1)
+
+    # u3 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+    #         activation='relu')(c14)
+    u3 = UpSampling2D(size=(2, 2))(c14)
+    u3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u3)
+
+    c4_cropped = Cropping2D(cropping=40)(c4)
+    concat_u3_c4 = Concatenate()([u3, c4_cropped])
+
+    # 128 filters
+    c15 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u3_c4)
+    bn2 = BatchNormalization(axis=3)(c15)
+
+    exp -= 1
+    # 64 filters, making 128 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c16 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn2)
+
+    #u4 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+    #        activation='relu')(c16)
+    u4 = UpSampling2D(size=(2, 2))(c16)
+    u4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='same')(u4)
+
+    c2_cropped = Cropping2D(cropping=88)(c2)
+    concat_u4_c2 = Concatenate()([u4, c2_cropped])
+
+    c17 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(concat_u4_c2)
+    bn3 = BatchNormalization(axis=3)(c17)
+
+    c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(bn3)
+
+    last_conv = Conv2D(filters=n_classes, kernel_size=1, activation='softmax', padding='valid')(c18)
+
+    last = Lambda(lambda x: x / tf.reduce_sum(x, len(x.get_shape()) - 1, True))(last_conv)
+    last = Lambda(lambda x: tf.clip_by_value(x, _epsilon, 1. - _epsilon))(last)
+    last = Lambda(lambda x: K.log(x))(last)
+    weighted_sum = multiply([last, weighted_input])
+    return Model(inputs=[inp1, weighted_input], outputs=[weighted_sum])
+
+
+def unet_weighted(input_shape, n_classes):
+    inp1 = Input(input_shape)
+    weighted_input = Input(shape=(388, 388, 5))
+    base = 2
+    exp = 6
+
+    # 64 filters
+    c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(inp1)
+    c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c1)
+    mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
+
+    exp += 1
+    # 128 filters
+    c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp1)
+    c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c3)
+    mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
+
+
+    exp += 1
+    # 256 filters
+    c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp2)
+    c6 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c5)
+    mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c6)
+
+    exp += 1
+    # 512 filters
+    c7 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp3)
+    c8 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c7)
+    mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c8)
+
+    exp += 1
+    # 1024 filters
+    c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp4)
     c10 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c9)
 
     exp -= 1
@@ -144,11 +262,12 @@ def unet(n_classes, channel_depth=36):
     # 128 filters
     c15 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
             padding='valid')(concat_u3_c4)
+    bn2 = BatchNormalization(axis=3)(c15)
 
     exp -= 1
     # 64 filters, making 128 when concatenated with the 
     # corresponding layer from the contracting path.
-    c16 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c15)
+    c16 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn2)
 
     u4 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
             activation='relu')(c16)
@@ -158,9 +277,116 @@ def unet(n_classes, channel_depth=36):
 
     c17 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
             padding='valid')(concat_u4_c2)
+    bn3 = BatchNormalization(axis=3)(c17)
 
     c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
-            padding='valid')(c17)
+            padding='valid')(bn3)
+
+    last_conv = Conv2D(filters=n_classes, kernel_size=1, activation='softmax', padding='valid')(c18)
+
+    last = Lambda(lambda x: x / tf.reduce_sum(x, len(x.get_shape()) - 1, True))(last_conv)
+    last = Lambda(lambda x: tf.clip_by_value(x, _epsilon, 1. - _epsilon))(last)
+    last = Lambda(lambda x: K.log(x))(last)
+    weighted_sum = multiply([last, weighted_input])
+    return Model(inputs=[inp1, weighted_input], outputs=[weighted_sum])
+
+
+def unet(n_classes, channel_depth=36):
+    x = Input((None, None, channel_depth))
+    base = 2
+    exp = 5
+
+    # 64 filters
+    c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(x)
+    c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c1)
+    mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
+
+    exp += 1
+    # 128 filters
+    c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp1)
+    c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c3)
+    mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
+
+
+    exp += 1
+    # 256 filters
+    c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp2)
+    c6 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c5)
+    mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c6)
+
+    exp += 1
+    # 512 filters
+    c7 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp3)
+    c8 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c7)
+    mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c8)
+
+    exp += 1
+    # 1024 filters
+    c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp4)
+    c10 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c9)
+
+    exp -= 1
+    # 512 filters, making 1024 when concatenated with 
+    # the corresponding layer from the contracting path.
+    u1 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c10)
+
+    c8_cropped = Cropping2D(cropping=4)(c8)
+    concat_u1_c8 = Concatenate()([u1, c8_cropped])
+
+    # 512 filters
+    c11 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u1_c8)
+
+    exp -= 1
+    # 256 filters, making 512 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c12 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c11)
+
+    u2 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c12)
+
+    c6_cropped = Cropping2D(cropping=16)(c6)
+    concat_u2_c6 = Concatenate()([u2, c6_cropped])
+
+    # 256 filters
+    c13 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u2_c6)
+    bn1 = BatchNormalization(axis=3)(c13)
+
+    exp -= 1
+    # 128 filters, making 256 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c14 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn1)
+
+    u3 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c14)
+
+    c4_cropped = Cropping2D(cropping=40)(c4)
+    concat_u3_c4 = Concatenate()([u3, c4_cropped])
+
+    # 128 filters
+    c15 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
+            padding='valid')(concat_u3_c4)
+    bn2 = BatchNormalization(axis=3)(c15)
+
+    exp -= 1
+    # 64 filters, making 128 when concatenated with the 
+    # corresponding layer from the contracting path.
+    c16 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(bn2)
+
+    u4 = Conv2DTranspose(filters=base**exp, strides=(2, 2), kernel_size=(2, 2),
+            activation='relu')(c16)
+
+    c2_cropped = Cropping2D(cropping=88)(c2)
+    concat_u4_c2 = Concatenate()([u4, c2_cropped])
+
+    c17 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(concat_u4_c2)
+    bn3 = BatchNormalization(axis=3)(c17)
+
+    c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
+            padding='valid')(bn3)
 
     last = Conv2D(filters=n_classes, kernel_size=1, activation='linear', padding='valid')(c18)
     return Model(inputs=x, outputs=last)

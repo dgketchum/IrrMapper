@@ -20,9 +20,9 @@ import sys
 
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
-from numpy import datetime64
+from numpy import datetime64, arange, zeros
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
@@ -84,7 +84,7 @@ class ImageStack(object):
         self.cdl_mask = None
         self.climate_targets = climate_targets
         if not self.climate_targets:
-            self.climate_targets = ['pr', 'pet', 'rmin', 'rmax', 'tmmn', 'tmmx', 'bi', 'etr']
+            self.climate_targets = ['pr', 'pet', 'tmmn', 'tmmx', 'etr']
 
         self.n = n_landsat
 
@@ -98,19 +98,17 @@ class ImageStack(object):
     def build_training(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
-        self.get_climate()
+        self.get_climate_timeseries()
         self.get_et()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images()
 
-    def get_climate(self):
-        self.get_precip()
 
     def build_evaluating(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
         #self.get_et() This doesn't work reliably. 
-        self.get_climate()
+        self.get_climate_timeseries()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
@@ -179,20 +177,31 @@ class ImageStack(object):
         return bounds, geometry
 
 
-    def get_precip(self):
+    def get_climate_timeseries(self):
         bounds, geometry = self._get_bounds()
         dates = self.scenes['DATE_ACQUIRED'].values
+        all_dates = arange(datetime(self.year, 3, 1), max(dates)+1,
+                timedelta(days=1)).astype(datetime64)
         for target in self.climate_targets:
-            for date in dates:
-                outfile = os.path.join(self.root, '{}_{}.tif'.format(date, target))
-                if not os.path.isfile(outfile):
-                    print("Get {}".format(os.path.basename(outfile)))
+            out_arr = None
+            first = True
+            check = [os.path.isfile(os.path.join(self.root, '{}_{}.tif'.format(q, target))) for q in dates]
+            if False in check:
+                for date in all_dates:
                     d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
                     bds = GeoBounds(wsen=bounds)
                     gm = GridMet(variable=target, clip_feature=geometry,
                             bbox=bds, target_profile=self.profile, date=d)
-                    out = gm.get_data_subset()
-                    gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
+                    out = gm.get_data_subset_nonconform()
+                    if first:
+                        out_arr = zeros(out.shape)
+                        first = False
+                    out_arr += out
+                    if date in dates:
+                        outfile = os.path.join(self.root, '{}_{}.tif'.format(dd, target))
+                        print("Saving {}".format(outfile))
+                        out_final = gm.conform(out_arr)
+                        gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)
 
 
     def get_terrain(self):

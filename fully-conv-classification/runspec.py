@@ -37,8 +37,7 @@ def landsat_rasters():
 
 
 def climate_rasters():
-    a = ('pr.tif', 'pet.tif', 'tmmn.tif', 'tmmx.tif', 'bi.tif',
-            'etr.tif')
+    a = ('pr.tif', 'pet.tif', 'tmmn.tif', 'tmmx.tif', 'etr.tif')
     return a
 
 

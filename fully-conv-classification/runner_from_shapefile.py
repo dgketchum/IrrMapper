@@ -1,23 +1,22 @@
 import os
-import glob
 import pickle
+from glob import glob
 from pprint import pprint
-from multiprocessing import Pool
 from numpy import save as nsave
-from compose_array_single_shapefile import PTASingleShapefile, ShapefileSamplePoints
 from fiona import open as fopen
 from collections import defaultdict, OrderedDict
 from shapely.geometry import shape
-from data_utils import (download_images, get_shapefile_path_row, split_shapefile,
-        create_master_raster, filter_shapefile, bandwise_mean, bandwise_stddev)
+from data_utils import download_images, create_master_raster, bandwise_mean, bandwise_stddev
+from shapefile_utils import get_shapefile_path_row, split_shapefile, filter_shapefile
 from runspec import landsat_rasters, static_rasters, climate_rasters
+from data_generators import extract_training_data_unet
+
 
 
 def download_images_over_shapefile(shapefile, image_directory, year):
     '''Downloads p/r corresponding to the location of 
-       the shapefile, and creates master raster.
-       Image_directory: where to save the raw images.
-       mr_directory: "                    " master_rasters.'''
+       the shapefile. Image_directory: where to save the raw images.
+       '''
     p, r = get_shapefile_path_row(shapefile) 
     suff = str(p) + '_' + str(r) + "_" + str(year)
     landsat_dir = os.path.join(image_directory, suff)
@@ -50,20 +49,14 @@ def download_from_pr(p, r, image_directory, year, master_raster_directory):
     return ims
 
 
-def sample_points_from_shapefile(shapefile_path, instances):
-    ssp = ShapefileSamplePoints(shapefile_path, m_instances=instances)
-    ssp.create_sample_points(save_points=True)
-    return ssp.outfile 
-
-
 def download_all_images(image_directory, shapefile_directory, year=2013):
     ''' Downloads all images over each shapefile in
-    shapefile directory '''
+    shapefile directory, and places them in image_directory.'''
     template = "{}_{}_{}"
     done = set()
     satellite = 8
     all_paths = []
-    for f in glob.glob(os.path.join(shapefile_directory, "*.shp")):
+    for f in glob(os.path.join(shapefile_directory, "*.shp")):
         p, r = get_shapefile_path_row(f)
         t = template.format(p, r, year)
         if t not in done:
@@ -92,7 +85,7 @@ def all_rasters(image_directory, satellite=8):
                         band_map[band].append(os.path.join(dirpath, f))
 
     for band in band_map:
-        band_map[band] = sorted(band_map[band]) # ensures ordering within bands.
+        band_map[band] = sorted(band_map[band]) # ensures ordering within bands - sort by time.
 
     return band_map
 
@@ -164,6 +157,16 @@ def create_all_master_rasters(image_directory, raster_save_directory, mean_mappi
         out = os.path.join(image_directory, sub_dir)
         if os.path.isdir(out):
             paths_map = all_rasters(out)
+            i = 0
+            # for key in sorted(paths_map.keys()):
+            #     if key in ('aspect.tif', 'elevation_diff.tif', 'slope.tif'):
+            #         print("'{}':np.array([{}]),".format(key, i))
+            #         i += 1
+            #     else:
+            #         print("'{}':np.arange({}, {}+1), ".format(key, i, i+2))
+            #         i += 3
+
+            # break
             path = sub_dir[:2]
             row = sub_dir[3:5]
             year = sub_dir[-4:]
@@ -174,8 +177,6 @@ def create_all_master_rasters(image_directory, raster_save_directory, mean_mappi
 if __name__ == "__main__":
     # out_shapefile_directory = 'shapefile_data'
     # shp = "/home/thomas/IrrigationGIS/western_states_irrgis/MT/MT_Main/" 
-    # for f in glob.glob(shp + "*.shp"):
-    #     filter_shapefile(f, out_shapefile_directory)
     # This project is becoming more complicated.
     # Needs a test / train organization
     # 1. Filter shapefiles.
@@ -203,3 +204,36 @@ if __name__ == "__main__":
         mean_map = raster_means(image_train_directory)
         stddev_map = raster_stds(image_train_directory, mean_map)
         create_all_master_rasters(im_dir, mas_dir, mean_map, stddev_map) 
+
+    master_train = 'master_rasters/train/'
+    master_test = 'master_rasters/test/'
+    image_train = 'image_data/train/' # for fmasks.
+    image_test = 'image_data/test/' # for fmasks.
+    irr1 = 'Huntley'
+    irr2 = 'Sun_River'
+    fallow = 'Fallow'
+    forest = 'Forrest'
+    other = 'other'
+    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
+    train_dir = 'training_data/multiclass/train/'
+    shp_train = 'shapefile_data/train/'
+    count = 0
+    save = True
+    count, pixel_dict = extract_training_data_unet(target_dict, shp_train, image_train,
+            master_train, train_dir, count, save=save) 
+    # Need to parallelize the extraction of training data.
+    # Or maybe not. It seems like parallelizing the opening/closing
+    # of rasters can stomp on the data.
+    print("You have {} instances per training epoch.".format(count))
+    print("And {} instances in each class.".format(pixel_dict))
+    max_weight = max(pixel_dict.values())
+    for key in pixel_dict:
+        print(key, max_weight / pixel_dict[key])
+    tot = 0
+    test_dir = 'training_data/multiclass/test/'
+    shp_test = 'shapefile_data/test/'
+    count = 0
+    count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
+            test_dir, count, save=save)
+    print("You have {} instances per test epoch.".format(count))
+    print("And {} instances in each class.".format(pixel_dict))

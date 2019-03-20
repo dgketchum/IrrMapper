@@ -33,7 +33,7 @@ from pyproj import Proj, transform
 from rasterio import open as rasopen
 from shapely.geometry import shape, Point, mapping
 from shapely.ops import unary_union
-from data_utils import get_shapefile_path_row
+from shapefile_utils import get_shapefile_path_row
 loc = os.path.dirname(__file__)
 WRS_2 = loc.replace('pixel_classification',
         os.path.join('spatial_data', 'wrs2_usa_descending.shp'))
