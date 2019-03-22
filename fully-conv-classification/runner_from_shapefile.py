@@ -197,19 +197,17 @@ if __name__ == "__main__":
     master_train = 'master_rasters/train/'
     master_test = 'master_rasters/test'
     master_dirs = [master_train, master_test]
-    year = 2018
-    download_from_pr(41, 27, image_train_directory, year, master_train)
-    paths_map = all_rasters(image_train_directory + "41_27_2018")
-    mean_map = raster_means(image_train_directory)
-    stddev_map = raster_stds(image_train_directory, mean_map)
-    create_master_raster(paths_map, 41, 27, 2018, master_train, mean_map, stddev_map)
-    '''
-
-    # for s, i in zip(shp_dirs, image_dirs):
-    #     download_all_images(i, s, year)
+    #year = 2018
+    #download_from_pr(41, 27, image_train_directory, year, master_train)
+    #paths_map = all_rasters(image_train_directory + "41_27_2018")
+    #mean_map = raster_means(image_train_directory)
+    #stddev_map = raster_stds(image_train_directory, mean_map)
+    #create_master_raster(paths_map, 41, 27, 2018, master_train, mean_map, stddev_map)
+    for s, i in zip(shp_dirs, image_dirs):
+        download_all_images(i, s, year)
     for im_dir, mas_dir in zip(image_dirs, master_dirs):
-        mean_map = raster_means(image_train_directory)
-        stddev_map = raster_stds(image_train_directory, mean_map)
+        #mean_map = raster_means(image_train_directory)
+        #stddev_map = raster_stds(image_train_directory, mean_map)
         create_all_master_rasters(im_dir, mas_dir, mean_map, stddev_map) 
 
     master_train = 'master_rasters/train/'
@@ -241,4 +239,3 @@ if __name__ == "__main__":
             test_dir, count, save=save)
     print("You have {} instances per test epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))
-    '''
