@@ -185,6 +185,7 @@ class ImageStack(object):
         for target in self.climate_targets:
             out_arr = None
             first = True
+            last = None
             check = [os.path.isfile(os.path.join(self.root, '{}_{}.tif'.format(q, target))) for q in dates]
             if False in check:
                 for date in all_dates:
@@ -198,7 +199,7 @@ class ImageStack(object):
                         first = False
                     out_arr += out
                     if date in dates:
-                        outfile = os.path.join(self.root, '{}_{}.tif'.format(dd, target))
+                        outfile = os.path.join(self.root, '{}_{}.tif'.format(date, target))
                         print("Saving {}".format(outfile))
                         out_final = gm.conform(out_arr)
                         gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)

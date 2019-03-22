@@ -136,8 +136,7 @@ def get_masks(image_directory):
             out = np.zeros((mask.shape[1], mask.shape[2]))
         try:
             out[mask[0] == 1] = 1 # 0 index is for removing the (1, n, m) dimension.
-        except ValueError as e:
-            print(e)
+        except (ValueError, IndexError) as e:
             mask = warp_single_image(mask_file, first_geo)
             out[mask[0] == 1] = 1
     return out
@@ -165,15 +164,25 @@ def extract_training_data_unet(target_dict, shapefile_directory, image_directory
                 done.add(match)
             p, r = get_shapefile_path_row(f)
             suffix = '{}_{}_{}.tif'.format(p, r, year)
+            if "37_27" in suffix:
+                continue
             fmask = get_masks(os.path.join(image_directory, suffix[:-4]))
             master_raster = os.path.join(master_raster_directory, train_raster + suffix)
             mask_file = os.path.join(master_raster_directory, mask_raster + suffix) # for rasterio.mask.mask
-            masks = [] # these are class masks for the labelling of data.
+            masks = [] 
             all_matches.append(f)
             shp = None
             for match in all_matches:
                 msk = generate_class_mask(match, mask_file)
-                msk[0][fmask == 1] = NO_DATA
+                # try:
+                #     msk[0][fmask == 1] = NO_DATA
+                # except IndexError:
+                #     print(match, msk.shape, fmask.shape)
+                #     # What's going on here?
+                #     # Fmasks and masks have different shapes...
+                #     # Probably need to warp_vrt?
+                #     #msk[:, :][fmask == 1] = NO_DATA
+
                 shp = msk.shape
                 cc = assign_class_code(target_dict, match)
                 if cc is not None:
@@ -184,6 +193,7 @@ def extract_training_data_unet(target_dict, shapefile_directory, image_directory
             else:
                 master = np.zeros(shp)
             
+            # 92 is unet offset.
             for i in range(92, master.shape[1], unet_output_size):
                 for j in range(92, master.shape[2], unet_output_size):
                     sub_master = master[:, i-92:i+unet_output_size+92, j-92:j+unet_output_size+92]
@@ -295,8 +305,7 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
         batch_size=8, class_weights={}, threshold=0.9, w0=40, sigma=10, channels='all', 
         train=True):
     ''' Assumes data is stored in training_directory
-    in subdirectories labeled class_n_train
-    and that n_classes is a global variable.'''
+    in subdirectories labeled class_n_train with n the class code '''
     class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
     generators = []
     border_class = len(class_weights.keys())
@@ -306,58 +315,57 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
         masters = []
         masks = []
         weightings = []
-        for _ in range(batch_size // len(class_weights.keys())):
-            min_samples = np.inf
-            data = []
-            for gen in generators:
-                out = gen.next().copy()
-                data.append(out)
-                if sample_random:
-                    n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
-                    if n_samples < min_samples:
-                        min_samples = n_samples
+        min_samples = np.inf
+        data = []
+        for gen in generators:
+            out = gen.next().copy()
+            data.append(out)
+            if sample_random:
+                n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+                if n_samples < min_samples:
+                    min_samples = n_samples
 
-            first = False
-            one_hot = None
-            for subset in data:
-                if sample_random:
-                    samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
-                            fill_value=subset['class_code'])
-                else:
-                    samp = subset['class_mask']
-                    samp[samp != NO_DATA] = subset['class_code']
+        first = False
+        one_hot = None
+        for subset in data:
+            if sample_random:
+                samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
+                        fill_value=subset['class_code'])
+            else:
+                samp = subset['class_mask']
+                samp[samp != NO_DATA] = subset['class_code']
 
-                subset['class_mask'] = samp
-            # The above lines correspond to a sparse encoding.
-            shape = None
-            first = True
-            for subset in data:
-                master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
-                if channels == 'all':
-                    master = np.squeeze(master)
-                else:
-                    master = master[:, :, :, channels]
-                    master = np.squeeze(master)
-                mask = mask[0, :, :, 0] 
-                mask[mask != -1] = 1 # make the mask binary.
-                mask[mask == -1] = 0
-                weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map - 
-                labels = weights.copy()
-                labels[labels >= threshold] = border_class
-                labels[mask == 1] = subset['class_code']
-                weights[weights < threshold] = 0 # threshold the weight values arbitrarily
-                weights[mask == 1] = class_weights[subset['class_code']] 
-                multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class+1))
-                one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class+1))
-                one_hot[:, :, border_class][labels == border_class] = 1
-                one_hot[:, :, subset['class_code']][labels == subset['class_code']] = 1
-                for i in range(border_class + 1):
-                    multidim_weights[:, :, i] = weights
-                if not train:
-                    multidim_weights[multidim_weights != 0] = 1 
-                masters.append(master)
-                masks.append(one_hot)
-                weightings.append(multidim_weights)
+            subset['class_mask'] = samp
+
+        for subset in data:
+            master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
+            if channels == 'all':
+                master = np.squeeze(master)
+            else:
+                master = master[:, :, :, channels]
+                master = np.squeeze(master)
+            mask = mask[0, :, :, 0] 
+            mask[mask != -1] = 1 # make the mask binary.
+            mask[mask == -1] = 0 # -1 is NO_DATA.
+            weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map
+            labels = weights.copy()
+            labels[labels >= threshold] = border_class 
+            labels[mask == 1] = subset['class_code']
+            weights[weights < threshold] = 0 # threshold the weight values arbitrarily
+            weights[weights != 0] = 1#class_weights[4]
+            weights[mask == 1] = class_weights[subset['class_code']] 
+            multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class+1)) #
+            one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class+1))
+            one_hot[:, :, border_class][labels == border_class] = 1
+            one_hot[:, :, subset['class_code']][labels == subset['class_code']] = 1
+            # above is circular but will allow for changing to a sparse encoding easily
+            for i in range(border_class + 1):
+                multidim_weights[:, :, i] = weights
+            if not train:
+                multidim_weights[multidim_weights != 0] = 1 
+            masters.append(master)
+            masks.append(one_hot)
+            weightings.append(multidim_weights)
 
         yield [np.asarray(masters, dtype=np.float32), np.asarray(weightings)], np.asarray(masks)
 

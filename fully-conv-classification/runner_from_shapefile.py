@@ -188,6 +188,7 @@ if __name__ == "__main__":
 
     image_train_directory = 'image_data/train/'
     image_test_directory = 'image_data/test'
+
     image_dirs = [image_train_directory, image_test_directory]
     shp_train = 'shapefile_data/train/'
     shp_test = 'shapefile_data/test/'
@@ -196,10 +197,16 @@ if __name__ == "__main__":
     master_train = 'master_rasters/train/'
     master_test = 'master_rasters/test'
     master_dirs = [master_train, master_test]
-    year = 2013
+    year = 2018
+    download_from_pr(41, 27, image_train_directory, year, master_train)
+    paths_map = all_rasters(image_train_directory + "41_27_2018")
+    mean_map = raster_means(image_train_directory)
+    stddev_map = raster_stds(image_train_directory, mean_map)
+    create_master_raster(paths_map, 41, 27, 2018, master_train, mean_map, stddev_map)
+    '''
 
-    for s, i in zip(shp_dirs, image_dirs):
-        download_all_images(i, s, year)
+    # for s, i in zip(shp_dirs, image_dirs):
+    #     download_all_images(i, s, year)
     for im_dir, mas_dir in zip(image_dirs, master_dirs):
         mean_map = raster_means(image_train_directory)
         stddev_map = raster_stds(image_train_directory, mean_map)
@@ -215,25 +222,23 @@ if __name__ == "__main__":
     forest = 'Forrest'
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
-    train_dir = 'training_data/multiclass/train/'
+    train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'
     count = 0
     save = True
     count, pixel_dict = extract_training_data_unet(target_dict, shp_train, image_train,
             master_train, train_dir, count, save=save) 
-    # Need to parallelize the extraction of training data.
-    # Or maybe not. It seems like parallelizing the opening/closing
-    # of rasters can stomp on the data.
     print("You have {} instances per training epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))
     max_weight = max(pixel_dict.values())
     for key in pixel_dict:
         print(key, max_weight / pixel_dict[key])
     tot = 0
-    test_dir = 'training_data/multiclass/test/'
+    test_dir = 'training_data/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
     count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
             test_dir, count, save=save)
     print("You have {} instances per test epoch.".format(count))
     print("And {} instances in each class.".format(pixel_dict))
+    '''

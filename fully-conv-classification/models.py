@@ -73,17 +73,19 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     inp1 = Input(input_shape)
     weighted_input = Input(shape=(388, 388, 5))
     base = 2
-    exp = 6
+    exp = 5
 
     # 64 filters
     c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(inp1)
     c2 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c1)
+    c2 = BatchNormalization()(c2)
     mp1 = MaxPooling2D(pool_size=2, strides=(2, 2))(c2)
 
     exp += 1
     # 128 filters
     c3 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp1)
     c4 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c3)
+    c4 = BatchNormalization()(c4)
     mp2 = MaxPooling2D(pool_size=2, strides=(2, 2))(c4)
 
 
@@ -91,12 +93,15 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     # 256 filters
     c5 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp2)
     c6 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c5)
+    c6 = BatchNormalization()(c6)
     mp3 = MaxPooling2D(pool_size=2, strides=(2, 2))(c6)
 
     exp += 1
     # 512 filters
     c7 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp3)
     c8 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c7)
+    c8 = BatchNormalization()(c8)
+
     mp4 = MaxPooling2D(pool_size=2, strides=(2, 2))(c8)
 
     exp += 1
@@ -135,7 +140,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     # 256 filters
     c13 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
             padding='valid')(concat_u2_c6)
-    bn1 = BatchNormalization(axis=3)(c13)
+    bn1 = BatchNormalization()(c13)
 
     exp -= 1
     # 128 filters, making 256 when concatenated with the 
@@ -153,7 +158,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     # 128 filters
     c15 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', 
             padding='valid')(concat_u3_c4)
-    bn2 = BatchNormalization(axis=3)(c15)
+    bn2 = BatchNormalization()(c15)
 
     exp -= 1
     # 64 filters, making 128 when concatenated with the 
@@ -170,7 +175,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
 
     c17 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
             padding='valid')(concat_u4_c2)
-    bn3 = BatchNormalization(axis=3)(c17)
+    bn3 = BatchNormalization()(c17)
 
     c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
             padding='valid')(bn3)

@@ -1,8 +1,8 @@
-import glob
 import os
 import geopandas as gpd
 import json
 from fiona import open as fopen
+from glob import glob
 from lxml import html
 from requests import get
 from copy import deepcopy
@@ -11,6 +11,7 @@ from shapely.geometry import shape
 from collections import defaultdict
 from rasterio import float32, open as rasopen
 from rasterio.mask import mask
+from pickle import load
 from prepare_images import ImageStack
 from sat_image.warped_vrt import warp_single_image
 
@@ -56,6 +57,7 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map,
         feature_rasters = paths_map[feat] # maps bands to their location in filesystem.
         for feature_raster in feature_rasters:
             band_mean = None
+            band_std = None
             for band in mean_map:
                 if feature_raster.endswith(band):
                     band_mean = mean_map[band]
@@ -65,11 +67,15 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map,
                 print("Band mean not found in mean_mapping for {}".format(feature_raster))
                 return
 
+            if band_std is None:
+                print("Band std not found in std_mapping for {}".format(feature_raster))
+                return
+
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
                 raster_geo = src.meta.copy()
 
-            arr = (arr - band_mean) / band_std
+            #arr = (arr - band_mean) / band_std
 
             if first:
                 first_geo = raster_geo.copy()
@@ -83,10 +89,6 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map,
                     stack[j, :, :] = arr
                     j += 1
                 except ValueError: 
-                    # error can be thrown here if source raster doesn't have crs
-                    # OR ! Because rasterio version.
-                    # However, deepcopy becomes an issue with the latest
-                    # version of rasterio.
                     arr = warp_single_image(feature_raster, first_geo)
                     stack[j, :, :] = arr
                     j += 1
@@ -159,12 +161,6 @@ def bandwise_stddev(paths_list, band_name, band_mean):
 
 
 def bandwise_mean(paths_list, band_name):
-    ''' Need to center the data to have 
-    a zero mean. This means iterating over all images, 
-    and taking the "band-wise" mean, then subtracting
-    that mean from the band. This mean should
-    also only be computed for the test set, but applied
-    to the training set. ''' 
     n_pixels = 0
     pixel_value_sum = 0
     for filepath in paths_list:
@@ -224,6 +220,36 @@ def load_raster(master_raster):
         arr = src.read()
         meta = src.meta.copy()
     return arr, meta
+
+
+def get_class_weighting(training_directory, w0=15, sigma=2, threshold=0.7*15, n_classes=4):
+    ''' This function should return the correct number of pixels per class
+        to be used in weighting the classes. '''
+    pixel_dict = {}
+    border_class = n_classes
+    for i in range(n_classes+1):
+        pixel_dict[i] = 0
+    for f in os.listdir(training_directory):
+        if os.path.isdir(os.path.join(training_directory, f)):
+            for data in glob(os.path.join(training_directory, f, "*.pkl")):
+                with open(data, 'rb') as f:
+                    d = load(f)
+                mask = d['class_mask'][0, :, :] 
+                mask[mask != -1] = 1 # make the mask binary.
+                mask[mask == -1] = 0 # -1 is NO_DATA.
+                weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map
+                labels = weights.copy()
+                labels[labels >= threshold] = border_class 
+                labels[mask == 1] = d['class_code']
+                pixel_dict[d['class_code']] += labels[labels == d['class_code']].size
+                pixel_dict[border_class] += labels[labels == border_class].size
+
+    pd = count_all_pixels(training_directory)
+    out = {}
+    mx = max(pd.values())
+    for key in pd:
+        out[key] = mx / pd[key]
+    return out
 
 
 if __name__ == "__main__":
