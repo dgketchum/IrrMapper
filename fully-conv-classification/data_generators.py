@@ -315,59 +315,63 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
         masters = []
         masks = []
         weightings = []
-        min_samples = np.inf
-        data = []
-        for gen in generators:
-            out = gen.next().copy()
-            data.append(out)
-            if sample_random:
-                n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
-                if n_samples < min_samples:
-                    min_samples = n_samples
+        for _ in range(2):
+            min_samples = np.inf
+            data = []
+            for gen in generators:
+                out = gen.next().copy()
+                data.append(out)
+                if sample_random:
+                    n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+                    if n_samples < min_samples:
+                        min_samples = n_samples
 
-        first = False
-        one_hot = None
-        for subset in data:
-            if sample_random:
-                samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
-                        fill_value=subset['class_code'])
-            else:
-                samp = subset['class_mask']
-                samp[samp != NO_DATA] = subset['class_code']
+            first = False
+            one_hot = None
+            for subset in data:
+                if sample_random:
+                    samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
+                            fill_value=subset['class_code'])
+                else:
+                    samp = subset['class_mask']
+                    samp[samp != NO_DATA] = subset['class_code']
 
-            subset['class_mask'] = samp
+                subset['class_mask'] = samp
 
-        for subset in data:
-            master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
-            if channels == 'all':
-                master = np.squeeze(master)
-            else:
-                master = master[:, :, :, channels]
-                master = np.squeeze(master)
-            mask = mask[0, :, :, 0] 
-            mask[mask != -1] = 1 # make the mask binary.
-            mask[mask == -1] = 0 # -1 is NO_DATA.
-            weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map
-            labels = weights.copy()
-            labels[labels >= threshold] = border_class 
-            labels[mask == 1] = subset['class_code']
-            weights[weights < threshold] = 0 # threshold the weight values arbitrarily
-            weights[weights != 0] = 1#class_weights[4]
-            weights[mask == 1] = class_weights[subset['class_code']] 
-            multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class+1)) #
-            one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class+1))
-            one_hot[:, :, border_class][labels == border_class] = 1
-            one_hot[:, :, subset['class_code']][labels == subset['class_code']] = 1
-            # above is circular but will allow for changing to a sparse encoding easily
-            for i in range(border_class + 1):
-                multidim_weights[:, :, i] = weights
-            if not train:
-                multidim_weights[multidim_weights != 0] = 1 
-            masters.append(master)
-            masks.append(one_hot)
-            weightings.append(multidim_weights)
+            for subset in data:
+                master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
+                if channels == 'all':
+                    master = np.squeeze(master)
+                else:
+                    master = master[:, :, :, channels]
+                    master = np.squeeze(master)
+                mask = mask[0, :, :, 0] 
+                mask[mask != -1] = 1 # make the mask binary.
+                mask[mask == -1] = 0 # -1 is NO_DATA.
+                weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map
+                labels = weights.copy()
+                labels[labels >= threshold] = border_class 
+                labels[mask == 1] = subset['class_code']
+                weights[weights < threshold] = 0 # threshold the weight values arbitrarily
+                weights[weights != 0] = 0 #remove the border weights
+                weights[mask == 1] = class_weights[subset['class_code']] 
+                multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class)) #
+                one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class))
+                #one_hot[:, :, border_class][labels == border_class] = 1
+                one_hot[:, :, subset['class_code']][labels == subset['class_code']] = 1
+                # above is circular but will allow for changing to a sparse encoding easily
+                for i in range(border_class):
+                    multidim_weights[:, :, i] = weights
+                if not train:
+                    multidim_weights[multidim_weights != 0] = 1 
+                masters.append(master)
+                masks.append(one_hot)
+                weightings.append(multidim_weights)
 
         yield [np.asarray(masters, dtype=np.float32), np.asarray(weightings)], np.asarray(masks)
+
+
+
 
 
 def rotation(image, angle):

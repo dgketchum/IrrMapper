@@ -147,7 +147,8 @@ def raster_stds(image_directory, mean_map, satellite=8):
     return stddev_mapping
 
 
-def create_all_master_rasters(image_directory, raster_save_directory, mean_mapping, stddev_mapping):
+def create_all_master_rasters(image_directory, raster_save_directory, mean_mapping=None, 
+        stddev_mapping=None):
     """ Creates a master raster for all images in image_directory. 
     Image directory is assumed to be a top-level directory that contains
     all the path_row directories for test or train (image_data/test/path_row_year*/) 
@@ -186,34 +187,26 @@ if __name__ == "__main__":
     # 5. Extract training data
     # 6. Train network.
 
-    image_train_directory = 'image_data/train/'
-    image_test_directory = 'image_data/test'
+    image_train_directory = '/home/thomas/share/image_data/train/'
+    image_test_directory = '/home/thomas/share/image_data/test'
 
     image_dirs = [image_train_directory, image_test_directory]
     shp_train = 'shapefile_data/train/'
     shp_test = 'shapefile_data/test/'
     shp_dirs = [shp_train, shp_test]
     shapefile_directory = 'shapefile_data/all_shapefiles'
-    master_train = 'master_rasters/train/'
-    master_test = 'master_rasters/test'
+    master_train = '/home/thomas/share/master_rasters/train/'
+    master_test = '/home/thomas/share/master_rasters/test'
     master_dirs = [master_train, master_test]
-    #year = 2018
-    #download_from_pr(41, 27, image_train_directory, year, master_train)
-    #paths_map = all_rasters(image_train_directory + "41_27_2018")
-    #mean_map = raster_means(image_train_directory)
-    #stddev_map = raster_stds(image_train_directory, mean_map)
-    #create_master_raster(paths_map, 41, 27, 2018, master_train, mean_map, stddev_map)
+    year = 2013
     for s, i in zip(shp_dirs, image_dirs):
         download_all_images(i, s, year)
     for im_dir, mas_dir in zip(image_dirs, master_dirs):
-        #mean_map = raster_means(image_train_directory)
-        #stddev_map = raster_stds(image_train_directory, mean_map)
-        create_all_master_rasters(im_dir, mas_dir, mean_map, stddev_map) 
-
-    master_train = 'master_rasters/train/'
-    master_test = 'master_rasters/test/'
-    image_train = 'image_data/train/' # for fmasks.
-    image_test = 'image_data/test/' # for fmasks.
+        create_all_master_rasters(im_dir, mas_dir) 
+    master_train = '/home/thomas/share/master_rasters/train/'
+    master_test = '/home/thomas/share/master_rasters/test/'
+    image_train = '/home/thomas/share/image_data/train/'
+    image_test = '/home/thomas/share/image_data/test/' 
     irr1 = 'Huntley'
     irr2 = 'Sun_River'
     fallow = 'Fallow'

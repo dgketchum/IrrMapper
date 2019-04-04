@@ -46,7 +46,19 @@ def weighted_loss(target, output):
     # Raster of shape widthxheightx1, with weights
     # of zero where there is no data and weights of whatever the
     # correct weights are for all the other classes.
-    return -tf.reduce_sum(target*output, len(output.get_shape())-1)
+    out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
+    mask = tf.not_equal(out, 0)
+    return tf.boolean_mask(out, mask)
+
+
+def c_acc(y_true, y_pred):
+    y_pred_sum = tf.reduce_sum(y_pred, axis=3) 
+    mask = tf.not_equal(y_pred_sum, 0)
+    y_arg = tf.argmax(y_pred, axis=-1)
+    y_t_arg = tf.argmax(y_true, axis=-1)
+    y_arg_mask = tf.boolean_mask(y_arg, mask)
+    y_t_arg_mask = tf.boolean_mask(y_t_arg, mask)
+    return K.mean(K.equal(y_t_arg_mask, y_arg_mask))
 
 
 def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_classes=4,
@@ -58,7 +70,7 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
     else:
         master, meta = load_raster(master_raster)
         class_mask = np.zeros((2, master.shape[1], master.shape[2])) # Just a placeholder
-        out = np.zeros((master.shape[2], master.shape[1], num_classes+1))
+        out = np.zeros((master.shape[2], master.shape[1], num_classes))
 
         # All U-Net specific.
         CHUNK_SIZE = 572
@@ -73,7 +85,7 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
                         max_pools, return_cuts=True)
                 if channels != 'all':
                     sub_master = sub_master[:, :, :, channels]
-                sub_msk = np.ones((1, 388, 388, 5)) # a placeholder
+                sub_msk = np.ones((1, 388, 388, 4)) # a placeholder
                 if sub_master.shape[1] == 572 and sub_master.shape[2] == 572:
                     preds = model.predict([sub_master, sub_msk])
                     preds_exp = np.exp(preds)
@@ -168,7 +180,7 @@ def get_iou():
 
 def train_model(training_directory, model, steps_per_epoch, valid_steps, max_pools, box_size=0,
         epochs=3, random_sample=False, threshold=0.9, w0=50, sigma=10, channels='all', 
-        restore=False, learning_rate=1e-3, num_classes=4):
+        train_more=False, learning_rate=1e-3, num_classes=4):
     ''' This function assumes that train/test data are
     subdirectories of training_directory, with
     the names train/test.'''
@@ -177,28 +189,28 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
     else:
         channel_depth = channels.shape[0]
     shp = (572, 572, channel_depth)
-    if restore:
-        model = model(shp, num_classes+1) # + 1 for border class
-    # model.compile(
-    #          loss=weighted_loss,
-    #          optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
-    #          metrics=['accuracy']
-    #          )
+    if not train_more:
+        model = model(shp, 4) # + 1 for border class
+        model.compile(
+                 loss=weighted_loss,
+                 optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+                 metrics=[c_acc]
+                 )
     graph_path = os.path.join('graphs/', str(int(time.time())))
     os.mkdir(graph_path)
     tb = TensorBoard(log_dir=graph_path)
     ckpt_path = os.path.join(graph_path, "chkpt{epoch:02d}-{val_loss:.2f}.hdf5")
-    mdlcheck = ModelCheckpoint(ckpt_path, monitor='val_acc', save_best_only=True,
+    mdlcheck = ModelCheckpoint(ckpt_path, monitor='val_c_acc', save_best_only=True,
             mode='max', verbose=1)
     train = os.path.join(training_directory, 'train')
     test = os.path.join(training_directory, 'test')
-    class_weight = {0:30.089, 1:1.0, 2:2.738, 3:72.958}
-    class_weight = {0:1.0, 1:1.0, 2:1.0, 3:1.0}
+    class_weight = {0:30.756, 1:1.0, 2:2.1659, 3:67.517}
+    #class_weight = {0:1.0, 1:1.0, 2:1.0, 3:1.0}
     train_generator = generate_training_data(train, max_pools, sample_random=random_sample,
             box_size=box_size, threshold=threshold, batch_size=4, w0=w0, sigma=sigma,
             class_weights=class_weight, channels=channels)
     test_generator = generate_training_data(test, max_pools, sample_random=random_sample,
-            train=False, box_size=box_size, batch_size=4, 
+            train=True, box_size=box_size, batch_size=4, 
             class_weights=class_weight, channels=channels)
     model.fit_generator(train_generator, 
             steps_per_epoch=steps_per_epoch, 
@@ -265,19 +277,17 @@ if __name__ == '__main__':
     info_file = 'run_information.txt'
     max_pools = 0
     model_name = 'unet_border_weights{}.h5'.format(int(time.time()))
-    model_name ='unet_gradientwrtinputs.h5'
+    model_name = 'no_border_class.h5'
     model_dir = 'models/'
     info_path = os.path.join(model_dir, info_file)
     model_save_path = os.path.join(model_dir, model_name)
-
     model_func = weighted_unet_no_transpose_conv
-
-    steps_per_epoch = 2000 # 334 the number in the max class.
-    valid_steps = 30 #233
-    epochs = 1
-    w0 = 15
+    steps_per_epoch = 10
+    valid_steps = 7
+    epochs = 1000
+    w0 = 5
     sigma = 2
-    threshold = 0.8*w0
+    threshold = 0.9*w0
     train_more = True
     eager = False
     class_weights = True
@@ -285,14 +295,13 @@ if __name__ == '__main__':
     random_sample = False
     augment = False
     exclude = ['etr.tif', 'pet.tif', 'slope.tif', 'tmmn.tif', 'tmmx.tif', 'pr.tif']
-    model_name = 'sblessfilters1000.h5'
     model_save_path = os.path.join(model_dir, model_name)
-    channels = [band_dict[x] for x in band_dict] #if 'B' in x]# if x not in exclude]
+    channels = [band_dict[x] for x in band_dict]
     channels = np.hstack(channels)
-    channels = channels[0:36]
-    raster_name = 'sblessfilters2000'
-    pr_to_eval = '41_27'
-    image_directory = 'master_rasters/train/'
+    channels = 'all' #channels[0:39]
+    raster_name = '20000steps'
+    pr_to_eval = '37_28'
+    image_directory = '/home/thomas/share/master_rasters/test/'
     param_dict = {'model_name':model_name, 'epochs':epochs, 'steps_per_epoch':steps_per_epoch,
             'raster_name':raster_name, 'learning_rate':learning_rate, 'eager':eager,
             'class_weights':class_weights, 'augmented':augment, 'random_sample':random_sample,
@@ -310,18 +319,18 @@ if __name__ == '__main__':
         model.save(model_save_path)
     else:
         model = tf.keras.models.load_model(model_save_path,
-                custom_objects={'weighted_loss':weighted_loss})
+                custom_objects={'weighted_loss':weighted_loss, 'c_acc':c_acc})
         model.compile(
                  loss=weighted_loss,
-                 metrics=['accuracy'],
-                 optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate),
+                 metrics=[c_acc],
+                 optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate)
                  )
         if train_more:
             train_model(training_directory, model,
                 steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,
                 max_pools=max_pools, epochs=epochs, random_sample=random_sample,
                 learning_rate=learning_rate, channels=channels, w0=w0, sigma=sigma,
-                threshold=threshold)
+                threshold=threshold, train_more=train_more)
 
             model_name = 'sblessfilters4000.h5'
             model.save(os.path.join(model_dir, model_name))

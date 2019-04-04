@@ -186,7 +186,7 @@ class ImageStack(object):
             out_arr = None
             first = True
             last = None
-            check = [os.path.isfile(os.path.join(self.root, '{}_{}.tif'.format(q, target))) for q in dates]
+            check = [os.path.isfile(os.path.join(self.root, 'climate_rasters', '{}_{}.tif'.format(q, target))) for q in dates]
             if False in check:
                 for date in all_dates:
                     d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
@@ -199,7 +199,11 @@ class ImageStack(object):
                         first = False
                     out_arr += out
                     if date in dates:
-                        outfile = os.path.join(self.root, '{}_{}.tif'.format(date, target))
+                        out_dir = 'climate_rasters'
+                        out_dir = os.path.join(self.root, out_dir)
+                        if not os.path.isdir(out_dir):
+                            os.mkdir(out_dir)
+                        outfile = os.path.join(out_dir, '{}_{}.tif'.format(date, target))
                         print("Saving {}".format(outfile))
                         out_final = gm.conform(out_arr)
                         gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)

@@ -211,7 +211,7 @@ def clip_raster(evaluated, path, row, outfile=None):
 
 
 def save_raster(arr, outfile, meta, count=4):
-    meta.update(count=count+1)
+    meta.update(count=count)
     with rasopen(outfile, 'w', **meta) as dst:
         dst.write(arr)
 

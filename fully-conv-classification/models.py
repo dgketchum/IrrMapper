@@ -71,7 +71,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     Instead a Upsampling2D layer with a Conv layer after 
     with same padding. '''
     inp1 = Input(input_shape)
-    weighted_input = Input(shape=(388, 388, 5))
+    weighted_input = Input(shape=(388, 388, 4))
     base = 2
     exp = 5
 
