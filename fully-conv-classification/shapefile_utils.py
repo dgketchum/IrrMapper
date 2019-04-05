@@ -29,7 +29,8 @@ def generate_class_mask(shapefile, master_raster, no_data=-1):
         shp = shp.to_crs(src.crs)
         features = get_features(shp)
         out_image, out_transform = mask(src, shapes=features, nodata=no_data)
-    return out_image
+        meta = src.meta
+    return out_image, meta
 
 
 def get_shapefile_lat_lon(shapefile):

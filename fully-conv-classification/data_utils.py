@@ -57,27 +57,9 @@ def create_master_raster(paths_map, path, row, year, raster_directory, mean_map=
         # each band corresponding to, as that's sorting by date.
         feature_rasters = paths_map[feat] # maps bands to their location in filesystem.
         for feature_raster in feature_rasters:
-            # band_mean = None
-            # band_std = None
-            # for band in mean_map:
-            #     if feature_raster.endswith(band):
-            #         band_mean = mean_map[band]
-            #         band_std = stddev_map[band]
-
-            # if band_mean is None:
-            #     print("Band mean not found in mean_mapping for {}".format(feature_raster))
-            #     return
-
-            # if band_std is None:
-            #     print("Band std not found in std_mapping for {}".format(feature_raster))
-            #     return
-
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
                 raster_geo = src.meta.copy()
-
-            #arr = (arr - band_mean) / band_std
-
             if first:
                 first_geo = raster_geo.copy()
                 empty = zeros((num_rasters, arr.shape[1], arr.shape[2]), float32)

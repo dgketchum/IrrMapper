@@ -115,31 +115,31 @@ class DataTile(object):
         self.dict['class_mask'] = class_mask
 
 
-def get_masks(image_directory):
-    ''' Returns all raster masks in the image directory.'''
+def concatenate_fmasks(image_directory, class_mask, class_mask_geo):
     paths = []
     for dirpath, dirnames, filenames in os.walk(image_directory):
         for f in filenames:
             for suffix in mask_rasters():
                 if f.endswith(suffix):
                     paths.append(os.path.join(dirpath, f))
-    out = None
-    first_geo = None
-    n_masks = len(paths)
-    first = True
-    for mask_file in paths:
-        mask, meta = load_raster(mask_file)
-        # mask value here is 1.
-        if first:
-            first = False
-            first_geo = meta.copy()
-            out = np.zeros((mask.shape[1], mask.shape[2]))
+    init = np.zeros(class_mask.shape) # no fmasks, just data
+    init[0] = class_mask[0].copy()
+    j_fmasks = np.zeros(class_mask.shape)
+    for fmask_file in paths:
+        fmask, fmeta = load_raster(fmask_file)
         try:
-            out[mask[0] == 1] = 1 # 0 index is for removing the (1, n, m) dimension.
+            class_mask[fmask == 1] = NO_DATA # 0 index is for removing the (1, n, m) dimension.
+            j_fmasks[fmask == 1] = 1
         except (ValueError, IndexError) as e:
-            mask = warp_single_image(mask_file, first_geo)
-            out[mask[0] == 1] = 1
-    return out
+            fmask = warp_single_image(fmask_file, class_mask_geo)
+            class_mask[fmask == 1] = NO_DATA
+    
+    # fig, ax = plt.subplots(ncols=3)
+    # ax[0].imshow(class_mask[0])
+    # ax[1].imshow(j_fmasks[0])
+    # ax[2].imshow(init[0])
+    # plt.show()
+    return class_mask
 
 
 def extract_training_data_unet(target_dict, shapefile_directory, image_directory,
@@ -158,31 +158,24 @@ def extract_training_data_unet(target_dict, shapefile_directory, image_directory
     mask_raster = 'class_mask_'
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
         if f not in done:
-            all_matches = all_matching_shapefiles(f, shapefile_directory)
+            all_matches = all_matching_shapefiles(f, shapefile_directory) # get all
+            # shapefiles in the same path / row
+            all_matches.append(f)
             done.add(f)
             for match in all_matches:
                 done.add(match)
             p, r = get_shapefile_path_row(f)
-            suffix = '{}_{}_{}.tif'.format(p, r, year)
-            if "37_27" in suffix:
-                continue
-            fmask = get_masks(os.path.join(image_directory, suffix[:-4]))
+            suffix = '{}_{}_{}.tif'.format(p, r, year) #image directory
             master_raster = os.path.join(master_raster_directory, train_raster + suffix)
             mask_file = os.path.join(master_raster_directory, mask_raster + suffix) # for rasterio.mask.mask
             masks = [] 
-            all_matches.append(f)
             shp = None
             for match in all_matches:
-                msk = generate_class_mask(match, mask_file)
-                # try:
-                #     msk[0][fmask == 1] = NO_DATA
-                # except IndexError:
-                #     print(match, msk.shape, fmask.shape)
-                #     # What's going on here?
-                #     # Fmasks and masks have different shapes...
-                #     # Probably need to warp_vrt?
-                #     #msk[:, :][fmask == 1] = NO_DATA
-
+                msk, mask_meta = generate_class_mask(match, mask_file) # mask file is
+                # a blank raster - expedites loading and makes troubleshooting easier..
+                # This should be removed in a finished product.
+                print(match)
+                msk = concatenate_fmasks(os.path.join(image_directory, suffix[:-4]), msk, mask_meta)
                 shp = msk.shape
                 cc = assign_class_code(target_dict, match)
                 if cc is not None:
@@ -192,7 +185,7 @@ def extract_training_data_unet(target_dict, shapefile_directory, image_directory
                 master, meta = load_raster(master_raster)
             else:
                 master = np.zeros(shp)
-            
+
             # 92 is unet offset.
             for i in range(92, master.shape[1], unet_output_size):
                 for j in range(92, master.shape[2], unet_output_size):
