@@ -122,23 +122,14 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo):
             for suffix in mask_rasters():
                 if f.endswith(suffix):
                     paths.append(os.path.join(dirpath, f))
-    init = np.zeros(class_mask.shape) # no fmasks, just data
-    init[0] = class_mask[0].copy()
-    j_fmasks = np.zeros(class_mask.shape)
     for fmask_file in paths:
         fmask, fmeta = load_raster(fmask_file)
         try:
             class_mask[fmask == 1] = NO_DATA # 0 index is for removing the (1, n, m) dimension.
-            j_fmasks[fmask == 1] = 1
         except (ValueError, IndexError) as e:
             fmask = warp_single_image(fmask_file, class_mask_geo)
             class_mask[fmask == 1] = NO_DATA
     
-    # fig, ax = plt.subplots(ncols=3)
-    # ax[0].imshow(class_mask[0])
-    # ax[1].imshow(j_fmasks[0])
-    # ax[2].imshow(init[0])
-    # plt.show()
     return class_mask
 
 
@@ -276,6 +267,7 @@ class DataGen:
     def _get_files(self):
         self.file_list = [x[2] for x in os.walk(self.class_filename)][0]
         self.file_list = [os.path.join(self.class_filename, x) for x in self.file_list]
+        self.file_list = self.file_list[:4]
 
     def next(self):
         if self.idx == self.n_files or self.idx == 0:
@@ -321,6 +313,7 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
 
             first = False
             one_hot = None
+            weighting_dict = {}
             for subset in data:
                 if sample_random:
                     samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
@@ -330,6 +323,7 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
                     samp[samp != NO_DATA] = subset['class_code']
 
                 subset['class_mask'] = samp
+                weighting_dict[subset['class_code']] = len(np.where(samp != NO_DATA)[0])
 
             for subset in data:
                 master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)

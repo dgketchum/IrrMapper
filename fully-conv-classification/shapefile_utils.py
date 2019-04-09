@@ -6,7 +6,7 @@ from copy import deepcopy
 from fiona import open as fopen
 from rasterio.mask import mask
 from rasterio import open as rasopen
-from shapely.geometry import shape
+from shapely.geometry import shape, mapping
 from sklearn.neighbors import KDTree
 from collections import defaultdict
 
@@ -25,6 +25,7 @@ def generate_class_mask(shapefile, master_raster, no_data=-1):
     else the masking won't work.
     '''
     shp = gpd.read_file(shapefile)
+    shp = shp[shp.geometry.notnull()]
     with rasopen(master_raster, 'r') as src:
         shp = shp.to_crs(src.crs)
         features = get_features(shp)
@@ -241,5 +242,22 @@ def required_points(shapefile, total_area, total_instances):
     frac = area / total_area
     return int(total_instances * frac)
 
+
+def buffer_shapefile(shp):
+
+    buf = -0.00050
+    with fopen(shp, 'r') as polys:
+        out = []
+        meta = polys.meta
+        with fopen(shp, 'w', **meta) as dst:
+            for feat in polys:
+                feat['geometry'] = mapping(shape(feat['geometry']).buffer(buf))
+                dst.write(feat)
+
 if __name__ == '__main__':
-    pass
+
+    pth = 'shapefile_data/all_shapefiles/MT_Sun_River_2013_392739_27.shp'
+    path = 'shapefile_data/buffered/test/'
+    from glob import glob
+    for f in glob(path + '*.shp'):
+        buffer_shapefile(f)

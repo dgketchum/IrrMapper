@@ -10,7 +10,8 @@ from sys import stdout
 from glob import glob
 from skimage import transform, util
 from sklearn.metrics import confusion_matrix
-from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, LearningRateScheduler
+from tensorflow.keras.callbacks import (TensorBoard, ModelCheckpoint, LearningRateScheduler,
+        ReduceLROnPlateau)
 from rasterio import open as rasopen
 from rasterio.mask import mask
 from shapely.geometry import shape
@@ -136,59 +137,14 @@ def evaluate_images(image_directory, model, include_string, max_pools, exclude_s
                     outfile=out, ii=ii)
 
 
-def compute_iou(y_pred, y_true):
-     ''' This is slow. '''
-     y_pred = y_pred.flatten()
-     y_true = y_true.flatten()
-     current = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3])
-     print(current)
-     # compute mean iou
-     intersection = np.diag(current)
-     ground_truth_set = current.sum(axis=1)
-     predicted_set = current.sum(axis=0)
-     union = ground_truth_set + predicted_set - intersection
-     IoU = intersection / union.astype(np.float32)
-     return np.mean(IoU)
-
-
-def get_iou():
-    shpfiles = [
-    'shapefile_data/test/MT_Huntley_Main_2013_372837_28.shp',
-    'shapefile_data/test/MT_FLU_2017_Fallow_372837_28.shp',
-    'shapefile_data/test/MT_FLU_2017_Forrest_372837_28.shp',
-    'shapefile_data/test/MT_other_372837_28.shp']
-
-    m_dir = 'eval_test/all_ims/'
-    ls = []
-    mask = image_directory + 'class_mask_37_28_2013.tif'
-    for f in shpfiles:
-        msk = generate_class_mask(f, mask)
-        msk[msk != NO_DATA] = 1 
-        ls.append(msk)
-    y_true = np.vstack(ls)
-    indices = np.where(y_true != NO_DATA)
-    y_true = y_true[:, indices[1], indices[2]]
-    y_true = np.argmax(y_true, axis=0)
-    for f in glob(m_dir + "*.tif"):
-        y_pred, meta = load_raster(f)
-        y_pred = y_pred[:, indices[1], indices[2]]
-        y_pred = np.round(y_pred)
-        y_pred.astype(np.int32)
-        y_pred = np.argmax(y_pred, axis=0)
-        print(f, compute_iou(y_pred, y_true))
-
-
 def lr_schedule(epoch, lr):
-    if epoch == 0:
-        lr = 1e-3
-    else:
-        lr = 1e-3*np.exp(-(epoch / 500))
+    lr = lr*np.exp(-(epoch / 1000))
     return lr
 
 
 def train_model(training_directory, model, steps_per_epoch, valid_steps, max_pools, box_size=0,
         epochs=3, random_sample=False, threshold=0.9, w0=50, sigma=10, channels='all', 
-        train_more=False, beta_1=0.9999, beta_2=0.999999, learning_rate=1e-3, num_classes=4):
+        train_more=False, raster_name=None,beta_1=0.9999, beta_2=0.999999, learning_rate=1e-3, num_classes=4):
     ''' This function assumes that train/test data are
     subdirectories of training_directory, with
     the names train/test.'''
@@ -201,20 +157,21 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
         model = model(shp, 4) # + 1 for border class
         model.compile(
                  loss=weighted_loss,
-                 optimizer=tf.keras.optimizers.Adam(lr=learning_rate, beta_1=beta_1, beta_2=beta_2),
+                 optimizer=tf.keras.optimizers.SGD(lr=learning_rate, momentum=0.99),
                  metrics=[acc]
                  )
     graph_path = os.path.join('graphs/', str(int(time.time())))
     os.mkdir(graph_path)
     tb = TensorBoard(log_dir=graph_path)
-    ckpt_path = os.path.join(graph_path, "chkpt{epoch:02d}-{val_loss:.2f}.hdf5")
+    ckpt_path = os.path.join('models', raster_name+"_{epoch:02d}-{val_acc:.2f}.hdf5")
     scheduler = LearningRateScheduler(lr_schedule, verbose=1)
     mdlcheck = ModelCheckpoint(ckpt_path, monitor='val_acc', save_best_only=True,
             mode='max', verbose=1)
+    reduce_on_plateau = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=30)
     train = os.path.join(training_directory, 'train')
-    test = os.path.join(training_directory, 'test')
-    class_weight = {0:28.101, 1:1.0, 2:2.9614, 3:103.8927}
-    #class_weight = {0:1.0, 1:1.0, 2:1.0, 3:1.0}
+    test = os.path.join('training_data', 'test')
+    #class_weight = {0:28.101, 1:1.0, 2:2.9614, 3:103.8927} for no buffer
+    class_weight = {0:36.807, 1:1.0, 2:2.8765, 3:93.984}
     train_generator = generate_training_data(train, max_pools, sample_random=random_sample,
             box_size=box_size, threshold=threshold, batch_size=4, w0=w0, sigma=sigma,
             class_weights=class_weight, channels=channels)
@@ -227,7 +184,8 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
             verbose=1,
             validation_data=test_generator,
             validation_steps=valid_steps,
-            callbacks=[tb, scheduler, mdlcheck, tf.keras.callbacks.TerminateOnNaN()],
+            callbacks=[tb, scheduler, mdlcheck, tf.keras.callbacks.TerminateOnNaN(),
+                reduce_on_plateau],
             use_multiprocessing=True)
 
     return model, graph_path
@@ -282,7 +240,7 @@ if __name__ == '__main__':
     'tmmn.tif':np.arange(45, 47+1), 
     'tmmx.tif':np.arange(48, 50+1)}
 
-    training_directory = 'training_data/'
+    training_directory = 'training_data/buffered/'
     info_file = 'run_information.txt'
     max_pools = 0
     model_dir = 'models/'
@@ -290,22 +248,24 @@ if __name__ == '__main__':
     model_func = weighted_unet_no_transpose_conv
     steps_per_epoch = 10
     valid_steps = 7
-    epochs = 30000
+    epochs = 1250
     w0 = 5
     sigma = 2
     threshold = 0.9*w0
     train_more = False
     eager = False
     class_weights = True
-    learning_rate = 1e-3
+    learning_rate = 5e-2
     random_sample = False
     augment = False
     channels = 'all' 
-    raster_name = 'lrschedule'
-    model_name = 'lrschedule.h5'
+    raster_name = 'nobuffer'
+    model_name = 'doesitdiverge.h5'
     model_save_path = os.path.join(model_dir, model_name)
-    pr_to_eval = '37_28'
-    image_directory = '/home/thomas/share/master_rasters/test/'
+    #model_save_path = 'graphs/1554563634/chkpt1826-7.36.hdf5' #83% acc, no buffering
+    #model_save_path = 'graphs/1554764803/chkpt640-4.93.hdf5' #83% acc, buffering
+    pr_to_eval = '39_27'
+    image_directory = '/home/thomas/share/master_rasters/train/'
     param_dict = {'model_name':model_name, 'epochs':epochs, 'steps_per_epoch':steps_per_epoch,
             'raster_name':raster_name, 'learning_rate':learning_rate, 'eager':eager,
             'class_weights':class_weights, 'augmented':augment, 'random_sample':random_sample,
@@ -318,12 +278,12 @@ if __name__ == '__main__':
                 steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,
                 max_pools=max_pools, epochs=epochs, random_sample=random_sample,
                 learning_rate=learning_rate, channels=channels, w0=w0, sigma=sigma,
-                threshold=threshold)
+                threshold=threshold, raster_name=raster_name)
         evaluating = False
         model.save(model_save_path)
     else:
         model = tf.keras.models.load_model(model_save_path,
-                custom_objects={'weighted_loss':weighted_loss, 'c_acc':c_acc})
+                custom_objects={'weighted_loss':weighted_loss, 'acc':acc})
         if train_more:
             train_model(training_directory, model,
                 steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,

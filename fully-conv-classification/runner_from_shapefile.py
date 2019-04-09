@@ -191,10 +191,9 @@ if __name__ == "__main__":
     image_test_directory = '/home/thomas/share/image_data/test'
 
     image_dirs = [image_train_directory, image_test_directory]
-    shp_train = 'shapefile_data/train/'
-    shp_test = 'shapefile_data/test/'
+    shp_train = 'shapefile_data/buffered/train/'
+    shp_test = 'shapefile_data/buffered/test/'
     shp_dirs = [shp_train, shp_test]
-    shapefile_directory = 'shapefile_data/all_shapefiles'
     master_train = '/home/thomas/share/master_rasters/train/'
     master_test = '/home/thomas/share/master_rasters/test'
     master_dirs = [master_train, master_test]
@@ -213,8 +212,8 @@ if __name__ == "__main__":
     forest = 'Forrest'
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
-    train_dir = 'training_data/train/'
-    shp_train = 'shapefile_data/train/'
+    train_dir = 'training_data/buffered/train/'
+    shp_train = 'shapefile_data/buffered//train/'
     count = 0
     save = True
     count, pixel_dict = extract_training_data_unet(target_dict, shp_train, image_train,
@@ -225,7 +224,7 @@ if __name__ == "__main__":
     for key in pixel_dict:
         print(key, max_weight / pixel_dict[key])
     tot = 0
-    test_dir = 'training_data/test/'
+    test_dir = 'training_data/buffered/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
     # count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
