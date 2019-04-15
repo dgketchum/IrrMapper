@@ -66,14 +66,16 @@ def fcnn_functional_small(n_classes):
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
 
-def weighted_unet_no_transpose_conv(input_shape, n_classes):
-    ''' This model does not use any Conv2DTranspose layers. 
+def weighted_unet_no_transpose_conv(input_shape, weighted_input_shape, n_classes, base_exp=5):
+    ''' 
+    This model does not use any Conv2DTranspose layers. 
     Instead a Upsampling2D layer with a Conv layer after 
-    with same padding. '''
+    with same padding. 
+    '''
     inp1 = Input(input_shape)
-    weighted_input = Input(shape=(388, 388, 4))
+    weighted_input = Input(shape=weighted_input_shape)
     base = 2
-    exp = 5
+    exp = base_exp
 
     # 64 filters
     c1 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(inp1)
@@ -108,6 +110,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
     # 1024 filters
     c9 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(mp4)
     c10 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu', padding='valid')(c9)
+    c10 = BatchNormalization()(c10)
 
     exp -= 1
     # 512 filters, making 1024 when concatenated with 
@@ -179,6 +182,7 @@ def weighted_unet_no_transpose_conv(input_shape, n_classes):
 
     c18 = Conv2D(filters=base**exp, kernel_size=(3,3), activation='relu',
             padding='valid')(bn3)
+    c18 = BatchNormalization()(c18)
 
     last_conv = Conv2D(filters=n_classes, kernel_size=1, activation='softmax', padding='valid')(c18)
 

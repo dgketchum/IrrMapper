@@ -40,17 +40,20 @@ def custom_objective(y_true, y_pred):
 
 
 def weighted_loss(target, output):
-    # All I need to do is multiply the output loss
-    # by the weights that I input. 
-    # Loss is of shape n_classesxwidthxheight
     # Weight map:
-    # Raster of shape widthxheightx1, with weights
-    # of zero where there is no data and weights of whatever the
-    # correct weights are for all the other classes.
+    out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
+    #mask = tf.not_equal(out, 0)#tf.boolean_mask(out, mask)
+    return out
+
+def weighted_focal_loss(target, output, gamma=1.3):
+    exp = tf.exp(output)
+    pt = tf.pow(1-exp, gamma)
     out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
     mask = tf.not_equal(out, 0)
+    pt_ce = tf.multiply([pt, output])
+    out = -tf.reduce_sum(pt_ce*target, len(output.get_shape()) -1)
     return tf.boolean_mask(out, mask)
-
+    
 
 def acc(y_true, y_pred):
     y_pred_sum = tf.reduce_sum(y_pred, axis=3) 
@@ -71,7 +74,7 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
     else:
         master, meta = load_raster(master_raster)
         class_mask = np.zeros((2, master.shape[1], master.shape[2])) # Just a placeholder
-        out = np.zeros((master.shape[2], master.shape[1], num_classes))
+        out = np.zeros((master.shape[2], master.shape[1], num_classes+1))
 
         # All U-Net specific.
         CHUNK_SIZE = 572
@@ -86,7 +89,7 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
                         max_pools, return_cuts=True)
                 if channels != 'all':
                     sub_master = sub_master[:, :, :, channels]
-                sub_msk = np.ones((1, 388, 388, 4)) # a placeholder
+                sub_msk = np.ones((1, 388, 388, 5)) # a placeholder
                 if sub_master.shape[1] == 572 and sub_master.shape[2] == 572:
                     preds = model.predict([sub_master, sub_msk])
                     preds_exp = np.exp(preds)
@@ -111,12 +114,12 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
                 else:
                     print("whatcha got goin on here?")
 
-            stdout.write("N eval: {}. Percent done: {:.4f}\r".format(ii, i / master.shape[1]))
+            stdout.write("N eval: {}. Percent done: {:.2f}\r".format(ii, i / master.shape[1]))
 
     out = np.swapaxes(out, 0, 2)
     out = out.astype(np.float32)
     if outfile:
-        save_raster(out, outfile, meta)
+        save_raster(out, outfile, meta, count=5)
     return out
 
 
@@ -138,13 +141,11 @@ def evaluate_images(image_directory, model, include_string, max_pools, exclude_s
 
 
 def lr_schedule(epoch, lr):
-    lr = lr*np.exp(-(epoch / 1000))
-    return lr
+    return 0.01*np.exp(-epoch/1000)
 
 
 def train_model(training_directory, model, steps_per_epoch, valid_steps, max_pools, box_size=0,
-        epochs=3, random_sample=False, threshold=0.9, w0=50, sigma=10, channels='all', 
-        train_more=False, raster_name=None,beta_1=0.9999, beta_2=0.999999, learning_rate=1e-3, num_classes=4):
+        epochs=3, random_sample=False, threshold=None, sigma=None, w0=None, channels='all', train_more=False, raster_name=None, learning_rate=1e-3, num_classes=5):
     ''' This function assumes that train/test data are
     subdirectories of training_directory, with
     the names train/test.'''
@@ -153,39 +154,41 @@ def train_model(training_directory, model, steps_per_epoch, valid_steps, max_poo
     else:
         channel_depth = channels.shape[0]
     shp = (572, 572, channel_depth)
+    weight_shape = (388, 388, num_classes)
     if not train_more:
-        model = model(shp, 4) # + 1 for border class
+        model = model(shp, weight_shape, num_classes, base_exp=5) 
         model.compile(
-                 loss=weighted_loss,
-                 optimizer=tf.keras.optimizers.SGD(lr=learning_rate, momentum=0.99),
+                 loss=weighted_focal_loss,
+                 optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
                  metrics=[acc]
                  )
+        model.summary()
     graph_path = os.path.join('graphs/', str(int(time.time())))
     os.mkdir(graph_path)
     tb = TensorBoard(log_dir=graph_path)
-    ckpt_path = os.path.join('models', raster_name+"_{epoch:02d}-{val_acc:.2f}.hdf5")
+    ckpt_path = os.path.join(graph_path, raster_name+"_{epoch:02d}-{val_acc:.2f}.hdf5")
     scheduler = LearningRateScheduler(lr_schedule, verbose=1)
     mdlcheck = ModelCheckpoint(ckpt_path, monitor='val_acc', save_best_only=True,
             mode='max', verbose=1)
-    reduce_on_plateau = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=30)
     train = os.path.join(training_directory, 'train')
-    test = os.path.join('training_data', 'test')
-    #class_weight = {0:28.101, 1:1.0, 2:2.9614, 3:103.8927} for no buffer
-    class_weight = {0:36.807, 1:1.0, 2:2.8765, 3:93.984}
+    test = os.path.join(training_directory, 'test')
+    class_weight = {0:28.101, 1:1.0, 2:2.9614, 3:103.8927} #for no buffer
+    #class_weight = {0:1, 1:1.0, 2:1, 3:1} #for no buffer
+
     train_generator = generate_training_data(train, max_pools, sample_random=random_sample,
-            box_size=box_size, threshold=threshold, batch_size=4, w0=w0, sigma=sigma,
-            class_weights=class_weight, channels=channels)
-    test_generator = generate_training_data(test, max_pools, sample_random=random_sample,
-            train=True, box_size=box_size, batch_size=4, 
-            class_weights=class_weight, channels=channels)
+            box_size=box_size, class_weights=class_weight, channels=channels, threshold=threshold,
+            sigma=sigma, w0=w0)
+    test_generator = generate_training_data(test, max_pools, sample_random=False,
+            box_size=box_size, batch_size=4, w0=w0, threshold=threshold,
+            sigma=sigma, class_weights=class_weight, channels=channels)
+
     model.fit_generator(train_generator, 
             steps_per_epoch=steps_per_epoch, 
             epochs=epochs,
             verbose=1,
             validation_data=test_generator,
             validation_steps=valid_steps,
-            callbacks=[tb, scheduler, mdlcheck, tf.keras.callbacks.TerminateOnNaN(),
-                reduce_on_plateau],
+            callbacks=[tb, scheduler, mdlcheck, tf.keras.callbacks.TerminateOnNaN()],
             use_multiprocessing=True)
 
     return model, graph_path
@@ -240,61 +243,87 @@ if __name__ == '__main__':
     'tmmn.tif':np.arange(45, 47+1), 
     'tmmx.tif':np.arange(48, 50+1)}
 
-    training_directory = 'training_data/buffered/'
+    training_directory = 'training_data/'
     info_file = 'run_information.txt'
     max_pools = 0
     model_dir = 'models/'
     info_path = os.path.join(model_dir, info_file)
     model_func = weighted_unet_no_transpose_conv
-    steps_per_epoch = 10
-    valid_steps = 7
-    epochs = 1250
-    w0 = 5
-    sigma = 2
-    threshold = 0.9*w0
+    steps_per_epoch = 100
+    valid_steps = 20
+    epochs = 320
+    w0 = 10
+    sigma = 5 
+    threshold = 0.7*w0
+    train_iter = 1
     train_more = False
     eager = False
     class_weights = True
-    learning_rate = 5e-2
+    learning_rate = 1e-3
     random_sample = False
     augment = False
     channels = 'all' 
-    raster_name = 'nobuffer'
-    model_name = 'doesitdiverge.h5'
+    raster_name = 'w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    model_name = 'w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
     model_save_path = os.path.join(model_dir, model_name)
-    #model_save_path = 'graphs/1554563634/chkpt1826-7.36.hdf5' #83% acc, no buffering
-    #model_save_path = 'graphs/1554764803/chkpt640-4.93.hdf5' #83% acc, buffering
-    pr_to_eval = '39_27'
-    image_directory = '/home/thomas/share/master_rasters/train/'
+    pr_to_eval = '37_28'
+    if pr_to_eval == '39_27':
+        image_directory = '/home/thomas/share/master_rasters/train/'
+    else:
+        image_directory = '/home/thomas/share/master_rasters/test/'
+
     param_dict = {'model_name':model_name, 'epochs':epochs, 'steps_per_epoch':steps_per_epoch,
             'raster_name':raster_name, 'learning_rate':learning_rate, 'eager':eager,
             'class_weights':class_weights, 'augmented':augment, 'random_sample':random_sample,
             'graph_path':None, 'bands':channels, 'w0':w0, 'sigma':sigma}
 
     evaluating = True
+    num_classes = 5
     if not os.path.isfile(model_save_path):
         print("Training new model")
-        model, graph_path = train_model(training_directory, model_func,
-                steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,
-                max_pools=max_pools, epochs=epochs, random_sample=random_sample,
-                learning_rate=learning_rate, channels=channels, w0=w0, sigma=sigma,
-                threshold=threshold, raster_name=raster_name)
-        evaluating = False
-        model.save(model_save_path)
-    else:
-        model = tf.keras.models.load_model(model_save_path,
-                custom_objects={'weighted_loss':weighted_loss, 'acc':acc})
-        if train_more:
-            train_model(training_directory, model,
-                steps_per_epoch=steps_per_epoch, valid_steps=valid_steps,
-                max_pools=max_pools, epochs=epochs, random_sample=random_sample,
-                learning_rate=learning_rate, channels=channels, w0=w0, sigma=sigma,
-                threshold=threshold, train_more=train_more)
-            model_name = '240eptest.h5'
-            model.save(os.path.join(model_dir, model_name))
+        shp = (572, 572, 51)
+        weight_shape = (388, 388, num_classes)
+        model = weighted_unet_no_transpose_conv(shp, weight_shape, num_classes, base_exp=5) 
+        model.compile(
+                 loss=weighted_loss,
+                 optimizer=tf.keras.optimizers.Adam(lr=learning_rate),
+                 metrics=[acc]
+                 )
+        graph_path = os.path.join('graphs/', str(int(time.time())))
+        os.mkdir(graph_path)
+        tb = TensorBoard(log_dir=graph_path)
+        ckpt_path = os.path.join(graph_path, raster_name+"_{epoch:02d}-{val_acc:.2f}.hdf5")
+        scheduler = LearningRateScheduler(lr_schedule, verbose=1)
+        mdlcheck = ModelCheckpoint(ckpt_path, monitor='val_acc', save_best_only=True,
+                mode='max', verbose=1)
+        train = os.path.join(training_directory, 'train')
+        test = os.path.join(training_directory, 'test')
+        class_weight = {0:28.101, 1:1.0, 2:2.9614, 3:103.8927} #for no buffer
+        #class_weight = {0:1, 1:1.0, 2:1, 3:1} #for no buffer
 
-    if not evaluating or train_more:
-        save_model_info(info_path, param_dict)
-    evaluate_images(image_directory, model, include_string=pr_to_eval, 
-         exclude_string="class", channels=channels, max_pools=max_pools, prefix=raster_name,
-         save_dir='compare_model_outputs/systematic/') 
+        train_generator = generate_training_data(train, max_pools, sample_random=False,
+                class_weights=class_weight, channels=channels, threshold=threshold,
+                sigma=sigma, w0=w0)
+        test_generator = generate_training_data(test, max_pools, sample_random=False,
+                batch_size=4, w0=w0, threshold=threshold,
+                sigma=sigma, class_weights=class_weight, channels=channels)
+
+        i = 0
+        k = 0
+        train_iter = 150
+        for data, labels in train_generator:
+            out = model.train_on_batch(x=data,
+                    y=labels)
+            # Loss, accuracy?
+            print(out)
+            if i > train_iter:
+                evaluate_images(image_directory, model, include_string=pr_to_eval,
+                        exclude_string="class", channels=channels, max_pools=max_pools,
+                        prefix=raster_name+'step_{}'.format((k+1)*train_iter),
+                        save_dir='compare_model_outputs/during-the-day/') 
+                k+=1
+                i = 0
+            i += 1
+        
+    raster_name+='train_iter_final'.format(i)
+    evaluate_images(image_directory, model, include_string=pr_to_eval, exclude_string="class", channels=channels, max_pools=max_pools, prefix=raster_name, save_dir='compare_model_outputs/systematic/') 

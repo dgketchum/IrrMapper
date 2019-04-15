@@ -191,17 +191,17 @@ if __name__ == "__main__":
     image_test_directory = '/home/thomas/share/image_data/test'
 
     image_dirs = [image_train_directory, image_test_directory]
-    shp_train = 'shapefile_data/buffered/train/'
-    shp_test = 'shapefile_data/buffered/test/'
+    shp_train = 'shapefile_data/train/'
+    shp_test = 'shapefile_data//test/'
     shp_dirs = [shp_train, shp_test]
     master_train = '/home/thomas/share/master_rasters/train/'
     master_test = '/home/thomas/share/master_rasters/test'
     master_dirs = [master_train, master_test]
     year = 2013
-    # for s, i in zip(shp_dirs, image_dirs):
-    #     download_all_images(i, s, year)
-    # for im_dir, mas_dir in zip(image_dirs, master_dirs):
-    #     create_all_master_rasters(im_dir, mas_dir) 
+    for s, i in zip(shp_dirs, image_dirs):
+        download_all_images(i, s, year)
+    for im_dir, mas_dir in zip(image_dirs, master_dirs):
+        create_all_master_rasters(im_dir, mas_dir) 
     master_train = '/home/thomas/share/master_rasters/train/'
     master_test = '/home/thomas/share/master_rasters/test/'
     image_train = '/home/thomas/share/image_data/train/'
@@ -212,22 +212,20 @@ if __name__ == "__main__":
     forest = 'Forrest'
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
-    train_dir = 'training_data/buffered/train/'
-    shp_train = 'shapefile_data/buffered//train/'
+    train_dir = 'training_data/train/'
+    shp_train = 'shapefile_data/train/'
     count = 0
     save = True
     count, pixel_dict = extract_training_data_unet(target_dict, shp_train, image_train,
             master_train, train_dir, count, save=save) 
-    print("You have {} instances per training epoch.".format(count))
-    print("And {} instances in each class.".format(pixel_dict))
+    print("{} instances in each class.".format(pixel_dict))
     max_weight = max(pixel_dict.values())
     for key in pixel_dict:
         print(key, max_weight / pixel_dict[key])
     tot = 0
-    test_dir = 'training_data/buffered/test/'
+    test_dir = 'training_data/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
-    # count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
-    #         test_dir, count, save=save)
-    # print("You have {} instances per test epoch.".format(count))
-    # print("And {} instances in each class.".format(pixel_dict))
+    count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
+            test_dir, count, save=save)
+    print("And {} instances in each class.".format(pixel_dict))

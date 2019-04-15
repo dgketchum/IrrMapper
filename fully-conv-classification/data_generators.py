@@ -20,6 +20,16 @@ NO_DATA = -1
 NUM_CLASSES = 4
 
 
+def distance_map(mask):
+    mask = mask.copy().astype(bool)
+    mask = ~mask # make the non-masked areas masked
+    distances = distance_transform_edt(mask) # ask where the closest masked pixel is
+    # distances are always positive, so 1-distances can be very negative.
+    # We're setting the e-folding time with sigma, and the
+    # border pixel value (y-intercept) with w0.
+    return distances
+
+
 def weight_map(mask, w0=10, sigma=10):
     mask = mask.copy().astype(bool)
     mask = ~mask # make the non-masked areas masked
@@ -256,21 +266,23 @@ def all_matching_shapefiles(to_match, shapefile_directory):
 
 
 class DataGen:
+    ''' Infinite data generator. Pulls files from 
+        a directory named "class_dir".'''
 
-    def __init__(self, class_filename):
+    def __init__(self, class_dir, augment=False, random_augment=False):
         self.file_list = None
-        self.class_filename = class_filename
+        self.class_dir = class_dir
         self._get_files()
         self.n_files = len(self.file_list)
         self.idx = 0
-    
+        self.shuffled = sample(self.file_list, self.n_files)
+
     def _get_files(self):
-        self.file_list = [x[2] for x in os.walk(self.class_filename)][0]
-        self.file_list = [os.path.join(self.class_filename, x) for x in self.file_list]
-        self.file_list = self.file_list[:4]
+        self.file_list = [x[2] for x in os.walk(self.class_dir)][0]
+        self.file_list = [os.path.join(self.class_dir, x) for x in self.file_list]
 
     def next(self):
-        if self.idx == self.n_files or self.idx == 0:
+        if self.idx == self.n_files:
             self.idx = 0
             self.shuffled = sample(self.file_list, self.n_files)
             out = self.shuffled[self.idx]
@@ -287,15 +299,18 @@ class DataGen:
 
 
 def generate_training_data(training_directory, max_pools, sample_random=True, box_size=0, 
-        batch_size=8, class_weights={}, threshold=0.9, w0=40, sigma=10, channels='all', 
-        train=True):
+        batch_size=8, threshold=None, sigma=None, w0=None, class_weights={}, channels='all', train=True):
     ''' Assumes data is stored in training_directory
     in subdirectories labeled class_n_train with n the class code '''
     class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
+    if not len(class_dirs):
+        class_dirs = [training_directory]
     generators = []
     border_class = len(class_weights.keys())
+    i = 0
     for d in class_dirs:
         generators.append(DataGen(d))
+
     while True:
         masters = []
         masks = []
@@ -303,17 +318,25 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
         for _ in range(2):
             min_samples = np.inf
             data = []
+            weighting_dict = {}
+            count_dict = {}
             for gen in generators:
                 out = gen.next().copy()
                 data.append(out)
+                n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+                weighting_dict[out['class_code']] = n_samples
+                count_dict[out['class_code']] = n_samples
                 if sample_random:
                     n_samples = len(np.where(out['class_mask'] != NO_DATA)[0])
+                    print(n_samples)
                     if n_samples < min_samples:
                         min_samples = n_samples
 
-            first = False
-            one_hot = None
-            weighting_dict = {}
+            maxx = max(weighting_dict.values())
+            for key in weighting_dict:
+                weighting_dict[key] = np.log((1.1*(maxx / weighting_dict[key])))
+            # print(weighting_dict)
+            # print(count_dict)
             for subset in data:
                 if sample_random:
                     samp = random_sample(subset['class_mask'], min_samples, box_size=box_size,
@@ -323,7 +346,6 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
                     samp[samp != NO_DATA] = subset['class_code']
 
                 subset['class_mask'] = samp
-                weighting_dict[subset['class_code']] = len(np.where(samp != NO_DATA)[0])
 
             for subset in data:
                 master, mask = preprocess_data(subset['data'], subset['class_mask'], max_pools)
@@ -337,28 +359,25 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
                 mask[mask == -1] = 0 # -1 is NO_DATA.
                 weights = weight_map(mask, w0=w0, sigma=sigma) # create weight map
                 labels = weights.copy()
+                labels[labels < threshold] = 0
                 labels[labels >= threshold] = border_class 
                 labels[mask == 1] = subset['class_code']
                 weights[weights < threshold] = 0 # threshold the weight values arbitrarily
-                weights[weights != 0] = 0 #remove the border weights
-                weights[mask == 1] = class_weights[subset['class_code']] 
-                multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class)) #
-                one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class))
-                #one_hot[:, :, border_class][labels == border_class] = 1
+                #weights[mask == 1] = class_weights[subset['class_code']] 
+                weights[weights != 0] = abs(np.log((1.1*(maxx / len(np.where(weights != 0)[0])))))
+                #weights[weights != 0] = (1.1*(maxx / len(np.where(weights != 0)[0])))
+                weights[mask == 1] = weighting_dict[subset['class_code']] 
+                multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class+1)) #
+                one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class+1))
+                one_hot[:, :, border_class][labels == border_class] = 1
                 one_hot[:, :, subset['class_code']][labels == subset['class_code']] = 1
-                # above is circular but will allow for changing to a sparse encoding easily
-                for i in range(border_class):
+                for i in range(border_class+1):
                     multidim_weights[:, :, i] = weights
-                if not train:
-                    multidim_weights[multidim_weights != 0] = 1 
                 masters.append(master)
                 masks.append(one_hot)
                 weightings.append(multidim_weights)
 
-        yield [np.asarray(masters, dtype=np.float32), np.asarray(weightings)], np.asarray(masks)
-
-
-
+        yield [np.asarray(masters), np.asarray(weightings)], np.asarray(masks)
 
 
 def rotation(image, angle):
