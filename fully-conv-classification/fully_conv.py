@@ -45,12 +45,12 @@ def weighted_loss(target, output):
     #mask = tf.not_equal(out, 0)#tf.boolean_mask(out, mask)
     return out
 
-def weighted_focal_loss(target, output, gamma=1.3):
+def weighted_focal_loss(target, output, gamma=1):
     exp = tf.exp(output)
     pt = tf.pow(1-exp, gamma)
     out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
     mask = tf.not_equal(out, 0)
-    pt_ce = tf.multiply([pt, output])
+    pt_ce = tf.multiply(pt, output)
     out = -tf.reduce_sum(pt_ce*target, len(output.get_shape()) -1)
     return tf.boolean_mask(out, mask)
     
@@ -263,8 +263,11 @@ if __name__ == '__main__':
     random_sample = False
     augment = False
     channels = 'all' 
-    raster_name = 'w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
-    model_name = 'w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    raster_name = '2_w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    model_name = '2_w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    raster_name = 'unit_irr_weights_normal_loss_w0:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    model_name = 'unit_1border_weights_irr_weights_normal_loss_w0_weight:{}-th:{}-sigma:{}-lr:{}'.format(w0, threshold, sigma, learning_rate)
+    # Next try raw weights from weight map.
     model_save_path = os.path.join(model_dir, model_name)
     pr_to_eval = '37_28'
     if pr_to_eval == '39_27':
@@ -279,6 +282,7 @@ if __name__ == '__main__':
 
     evaluating = True
     num_classes = 5
+    model_save_path = 'models/modelsunit_1border_weights_irr_weights_normal_loss_w0_weight:10-th:7.0-sigma:5-lr:0.001step_2850'
     if not os.path.isfile(model_save_path):
         print("Training new model")
         shp = (572, 572, 51)
@@ -304,10 +308,6 @@ if __name__ == '__main__':
         train_generator = generate_training_data(train, max_pools, sample_random=False,
                 class_weights=class_weight, channels=channels, threshold=threshold,
                 sigma=sigma, w0=w0)
-        test_generator = generate_training_data(test, max_pools, sample_random=False,
-                batch_size=4, w0=w0, threshold=threshold,
-                sigma=sigma, class_weights=class_weight, channels=channels)
-
         i = 0
         k = 0
         train_iter = 150
@@ -317,6 +317,7 @@ if __name__ == '__main__':
             # Loss, accuracy?
             print(out)
             if i > train_iter:
+                model.save('models'+model_name+'step_{}'.format((k+1)*train_iter))
                 evaluate_images(image_directory, model, include_string=pr_to_eval,
                         exclude_string="class", channels=channels, max_pools=max_pools,
                         prefix=raster_name+'step_{}'.format((k+1)*train_iter),
@@ -325,5 +326,7 @@ if __name__ == '__main__':
                 i = 0
             i += 1
         
-    raster_name+='train_iter_final'.format(i)
+    raster_name='final_eval'
+    model = tf.keras.models.load_model(model_save_path,
+            custom_objects={'weighted_loss':weighted_loss})
     evaluate_images(image_directory, model, include_string=pr_to_eval, exclude_string="class", channels=channels, max_pools=max_pools, prefix=raster_name, save_dir='compare_model_outputs/systematic/') 

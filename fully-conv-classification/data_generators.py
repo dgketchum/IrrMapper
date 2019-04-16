@@ -334,7 +334,8 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
 
             maxx = max(weighting_dict.values())
             for key in weighting_dict:
-                weighting_dict[key] = np.log((1.1*(maxx / weighting_dict[key])))
+                #weighting_dict[key] = np.log((1.1*(maxx / weighting_dict[key])))
+                weighting_dict[key] = maxx / weighting_dict[key]
             # print(weighting_dict)
             # print(count_dict)
             for subset in data:
@@ -363,10 +364,12 @@ def generate_training_data(training_directory, max_pools, sample_random=True, bo
                 labels[labels >= threshold] = border_class 
                 labels[mask == 1] = subset['class_code']
                 weights[weights < threshold] = 0 # threshold the weight values arbitrarily
-                #weights[mask == 1] = class_weights[subset['class_code']] 
-                weights[weights != 0] = abs(np.log((1.1*(maxx / len(np.where(weights != 0)[0])))))
-                #weights[weights != 0] = (1.1*(maxx / len(np.where(weights != 0)[0])))
-                weights[mask == 1] = weighting_dict[subset['class_code']] 
+                weights[weights != 0] = 1#maxx / len(np.where(weights != 0)[0])
+                #weights[mask == 1] = weighting_dict[subset['class_code']] 
+                weights[mask == 1] = 1#class_weights[subset['class_code']] 
+                if subset['class_code'] != 0:
+                    weights[mask != 1] = 0
+                    labels[mask != 1] = 0
                 multidim_weights = np.zeros((weights.shape[0], weights.shape[1], border_class+1)) #
                 one_hot = np.zeros((labels.shape[0], labels.shape[1], border_class+1))
                 one_hot[:, :, border_class][labels == border_class] = 1

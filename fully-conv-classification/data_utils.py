@@ -13,8 +13,10 @@ from rasterio import float32, open as rasopen
 from rasterio.mask import mask
 from pickle import load
 from prepare_images import ImageStack
+from shapefile_utils import get_features
 from sat_image.warped_vrt import warp_single_image
 
+WRS2 = '../spatial_data/wrs2_descending_usa.shp'
 
 def create_master_raster(paths_map, path, row, year, raster_directory, mean_map=None, 
         stddev_map=None):
@@ -177,22 +179,35 @@ def clip_rasters(evaluated_tif_dir, include_string):
             row = out[3:5]
             clip_raster(f, int(path), int(row), outfile=f)
 
+def get_wrs2_features(path, row):
+
+    with fopen(WRS2) as src:
+        for feat in src:
+            poly = shape(feat['geometry'])
+            propr = feat['properties']
+            if propr['PATH'] == path and propr['ROW'] == row:
+                return [feat]
+    return None
+
 
 def clip_raster(evaluated, path, row, outfile=None):
 
     shp = gpd.read_file(WRS2)
+    out = shp[shp['PATH'] == path]
+    out = out[out['ROW'] == row]
+
 
     with rasopen(evaluated, 'r') as src:
-        shp = shp.to_crs(src.crs)
+        out = out.to_crs(src.crs)
         meta = src.meta.copy()
-        features = get_features(shp, path, row)
-        out_image, out_transform = mask(src, shapes=features, nodata=np.nan)
+        features = get_features(out)
+        out_image, out_transform = mask(src, shapes=features, crop=True, nodata=nan)
 
-    if outfile:
-        save_raster(out_image, outfile, meta)
+    outfile = evaluated
+    save_raster(out_image, outfile, meta)
 
 
-def save_raster(arr, outfile, meta, count=4):
+def save_raster(arr, outfile, meta, count=5):
     meta.update(count=count)
     with rasopen(outfile, 'w', **meta) as dst:
         dst.write(arr)
