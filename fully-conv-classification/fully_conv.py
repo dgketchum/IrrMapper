@@ -17,7 +17,7 @@ from rasterio.mask import mask
 from shapely.geometry import shape
 from pickle import load as pload
 from fiona import open as fopen
-from data_generators import generate_training_data, load_raster, preprocess_data
+from data_generators import generate_training_data, load_raster
 from data_utils import clip_rasters, save_raster
 from shapefile_utils import get_features, generate_class_mask
 from models import (fcnn_functional, fcnn_model, fcnn_functional_small, unet, unet_weighted,
@@ -65,7 +65,7 @@ def acc(y_true, y_pred):
     return K.mean(K.equal(y_t_arg_mask, y_arg_mask))
 
 
-def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_classes=4,
+def evaluate_image(master_raster, model, max_pools, channels='all', num_classes=4,
         outfile=None, ii=None):
 
     if not os.path.isfile(master_raster):
@@ -85,8 +85,6 @@ def evaluate_image_unet(master_raster, model, max_pools, channels='all', num_cla
             for j in range(0, master.shape[2]-diff, stride):
                 sub_master = master[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
                 sub_mask = class_mask[:, i:i+CHUNK_SIZE, j:j+CHUNK_SIZE]
-                sub_master, sub_mask, cut_rows, cut_cols = preprocess_data(sub_master, sub_mask,
-                        max_pools, return_cuts=True)
                 if channels != 'all':
                     sub_master = sub_master[:, :, :, channels]
                 sub_msk = np.ones((1, 388, 388, 5)) # a placeholder

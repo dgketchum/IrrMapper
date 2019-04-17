@@ -17,7 +17,7 @@ def get_features(gdf):
     return features
 
 
-def generate_class_mask(shapefile, master_raster, no_data=-1):
+def generate_class_mask(shapefile, master_raster, nodata=-1):
     ''' Generates a mask with 1 everywhere 
     shapefile data is present and a no_data value everywhere else.
     no_data is -1 in this case, as it is never a valid class label.
@@ -29,7 +29,9 @@ def generate_class_mask(shapefile, master_raster, no_data=-1):
     with rasopen(master_raster, 'r') as src:
         shp = shp.to_crs(src.crs)
         features = get_features(shp)
-        out_image, out_transform = mask(src, shapes=features, nodata=no_data)
+        out_image, out_transform = mask(src, shapes=features, nodata=-1)
+        out_image[out_image != -1] = 1 
+        out_image[out_image == -1] = 0
         meta = src.meta
     return out_image, meta
 
@@ -255,9 +257,4 @@ def buffer_shapefile(shp):
                 dst.write(feat)
 
 if __name__ == '__main__':
-
-    pth = 'shapefile_data/all_shapefiles/MT_Sun_River_2013_392739_27.shp'
-    path = 'shapefile_data/buffered/test/'
-    from glob import glob
-    for f in glob(path + '*.shp'):
-        buffer_shapefile(f)
+    pass

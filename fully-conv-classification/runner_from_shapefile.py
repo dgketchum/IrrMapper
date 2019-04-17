@@ -9,8 +9,7 @@ from shapely.geometry import shape
 from data_utils import download_images, create_master_raster, bandwise_mean, bandwise_stddev
 from shapefile_utils import get_shapefile_path_row, split_shapefile, filter_shapefile
 from runspec import landsat_rasters, static_rasters, climate_rasters
-from data_generators import extract_training_data_unet
-
+from data_generators import extract_training_data
 
 
 def download_images_over_shapefile(shapefile, image_directory, year):
@@ -159,15 +158,6 @@ def create_all_master_rasters(image_directory, raster_save_directory, mean_mappi
         if os.path.isdir(out):
             paths_map = all_rasters(out)
             i = 0
-            # for key in sorted(paths_map.keys()):
-            #     if key in ('aspect.tif', 'elevation_diff.tif', 'slope.tif'):
-            #         print("'{}':np.array([{}]),".format(key, i))
-            #         i += 1
-            #     else:
-            #         print("'{}':np.arange({}, {}+1), ".format(key, i, i+2))
-            #         i += 3
-
-            # break
             path = sub_dir[:2]
             row = sub_dir[3:5]
             year = sub_dir[-4:]
@@ -198,10 +188,10 @@ if __name__ == "__main__":
     master_test = '/home/thomas/share/master_rasters/test'
     master_dirs = [master_train, master_test]
     year = 2013
-    for s, i in zip(shp_dirs, image_dirs):
-        download_all_images(i, s, year)
-    for im_dir, mas_dir in zip(image_dirs, master_dirs):
-        create_all_master_rasters(im_dir, mas_dir) 
+    # for s, i in zip(shp_dirs, image_dirs):
+    #     download_all_images(i, s, year)
+    # for im_dir, mas_dir in zip(image_dirs, master_dirs):
+    #     create_all_master_rasters(im_dir, mas_dir) 
     master_train = '/home/thomas/share/master_rasters/train/'
     master_test = '/home/thomas/share/master_rasters/test/'
     image_train = '/home/thomas/share/image_data/train/'
@@ -212,12 +202,13 @@ if __name__ == "__main__":
     forest = 'Forrest'
     other = 'other'
     target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
+    augment_dict = {0:True, 1:False, 2:False, 3:True}
     train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'
     count = 0
     save = True
-    count, pixel_dict = extract_training_data_unet(target_dict, shp_train, image_train,
-            master_train, train_dir, count, save=save) 
+    count, pixel_dict = extract_training_data(target_dict, shp_train, image_train,
+            master_train, train_dir, save=save, augment_dict=augment_dict) 
     print("{} instances in each class.".format(pixel_dict))
     max_weight = max(pixel_dict.values())
     for key in pixel_dict:
@@ -226,6 +217,6 @@ if __name__ == "__main__":
     test_dir = 'training_data/test/'
     shp_test = 'shapefile_data/test/'
     count = 0
-    count, pixel_dict = extract_training_data_unet(target_dict, shp_test, image_test, master_test, 
-            test_dir, count, save=save)
+    count, pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
+            test_dir, save=save)
     print("And {} instances in each class.".format(pixel_dict))
