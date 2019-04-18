@@ -191,19 +191,21 @@ def extract_training_data(target_dict, shapefile_directory, image_directory,
             for datamask in masks:
                 if augment_dict[datamask.class_code]:
                     pixel_dict = _iterate_over_raster(master, datamask, pixel_dict, 
-                            tile_size, save=save, augment=True)
+                            tile_size, save=save, augment=True, 
+                            training_directory=training_directory)
                 else:
                     pixel_dict = _iterate_over_raster(master, datamask, pixel_dict,
-                            tile_size, save=save)
+                            tile_size, save=save, training_directory=training_directory)
 
     return pixel_dict
 
 
 def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=False,
-        save=True):
+        save=True, training_directory=None):
     step = tile_size
     if augment:
-        step = np.random.randint(tile_size // 3, tile_size // 2)
+        step = np.random.randint(tile_size // 4, tile_size // 2)
+        print("Augmenting w/ step:", step)
     for i in range(0, raster.shape[1]-tile_size, step):
         for j in range(0, raster.shape[2]-tile_size, step):
             sub_raster = raster[:, i:i+tile_size, j:j+tile_size]
@@ -211,7 +213,7 @@ def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=Fa
             if _check_dimensions_and_content(sub_raster, sub_mask, tile_size):
                 pixel_dict[datamask.class_code] += len(np.where(sub_mask != 0)[0])
                 if save:
-                    dt = DataTile(sub_master, sub_mask, datamask.class_code)
+                    dt = DataTile(sub_raster, sub_mask, datamask.class_code)
                     dt.to_pickle(training_directory)
     return pixel_dict
 
@@ -252,9 +254,8 @@ class DataGen:
 
     def _get_files(self):
         self.file_list = [x for x in iglob(self.class_dir + "**", recursive=True)]
-        print(self.file_list)
-        self.file_list = [os.path.join(self.class_dir, x) for x in self.file_list if
-                os.path.isfile(os.path.join(self.class_dir, x))]
+        self.file_list = [x for x in self.file_list if
+                os.path.isfile(x)]
 
     def next(self):
         if self.idx == self.n_files:
@@ -272,17 +273,18 @@ class DataGen:
             data = pickle.load(f)
         return data
 
+
 def make_border_labels(mask, border_width):
     ''' Border width: Pixel width. '''
-    distance_map = distance_map(mask)
-    distance_map[distance > border_width] = 0
-    return distance_map
+    dm = distance_map(mask)
+    dm[dm > border_width] = 0
+    return dm
 
 
-def generate_unbalanced_data(training_directory, max_pools, threshold=None, sigma=None,
-        w0=None, batch_size=8, class_weights={}, channels='all', nodata=0, n_classes=5):
+def generate_unbalanced_data(training_directory, border_width=2,
+        batch_size=2, class_weights={}, channels='all', nodata=0, n_classes=5):
     ''' Assumes data is stored in training_directory '''
-    border_class = len(class_weights.keys())
+    border_class = len(class_weights.keys()) - 1
     gen = DataGen(training_directory)
     while True:
         masters = []
@@ -290,39 +292,29 @@ def generate_unbalanced_data(training_directory, max_pools, threshold=None, sigm
         weightings = []
         tile_shape = None
         for _ in range(batch_size):
-            data_tiles = []
-            weighting_dict = {}
-            count_dict = {}
-            out = gen.next().copy()
+            tile = gen.next().copy()
             if tile_shape is None:
-                tile_shape = out['class_mask'].shape
-            data_tiles.append(out)
-            n_samples = len(np.where(out['class_mask'] != nodata)[0])
-            weighting_dict[out['class_code']] = n_samples
-            count_dict[out['class_code']] = n_samples
+                tile_shape = tile['class_mask'].shape
+            one_hot = np.zeros((tile_shape[1], tile_shape[2], n_classes))
+            weights = np.zeros((tile_shape[1], tile_shape[2]))
+            labels = tile['class_mask'][0]
+            one_hot[:, :, tile['class_code']] = labels
+            weights[labels == 1] = class_weights[tile['class_code']]
+            if tile['class_code'] == 0:
+                border_labels = make_border_labels(tile['class_mask'],
+                        border_width=border_width)
+                one_hot[:, :, border_class] = border_labels
+                weights[border_labels[0] == 1] = class_weights[border_class]
+            m = np.squeeze(tile['data'])
+            m = np.swapaxes(m, 0, 2)
+            masters.append(m)
+            one_hots.append(one_hot)
+            weightings.append(weights)
 
-            maxx = max(weighting_dict.values())
-            for key in weighting_dict:
-                weighting_dict[key] = maxx / weighting_dict[key]
-            
-            for tile in data_tiles:
-                one_hot = np.zeros((tile_shape[1], tile_shape[2], n_classes))
-                weights = np.zeros((tile_shape[1], tile_shape[2]))
-                labels = tile['class_mask']
-                one_hot[:, :, tile['class_code']] = labels
-                weights[labels == 1] = class_weights[tile['class_code']]
-                if tile['class_code'] == 0:
-                    border_labels = make_border_labels(tile['class_mask'], border_width=2)
-                    one_hot[:, :, border_class] = border_labels
-                    weights[border_labels == 1] = class_weights[border_class]
-                masters.append(np.squeeze(tile['data']))
-                one_hots.append(one_hot)
-                weightings.append(weights)
-
-        yield np.asarray(masters), np.asarray(masks), np.asarray(weightings)
+        yield np.asarray(masters), np.asarray(one_hots), np.asarray(weightings)
 
 
-def generate_training_data(training_directory, max_pools, threshold=None, sigma=None,
+def generate_training_data(training_directory, threshold=None, sigma=None,
         w0=None, class_weights={}, channels='all', nodata=0, n_classes=5):
     ''' Assumes data is stored in training_directory
     in subdirectories labeled class_n_train with n the class code '''
@@ -365,7 +357,10 @@ def generate_training_data(training_directory, max_pools, threshold=None, sigma=
                     border_labels = make_border_labels(tile['class_mask'], border_width=2)
                     one_hot[:, :, border_class] = border_labels
                     weights[border_labels == 1] = class_weights[border_class]
-                masters.append(np.squeeze(tile['data']))
+
+                m = np.squeeze(tile['data'])
+                m = np.swapaxes(m, 0, 2)
+                masters.append(m)
                 one_hots.append(one_hot)
                 weightings.append(weights)
 

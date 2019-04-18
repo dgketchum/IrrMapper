@@ -205,9 +205,8 @@ if __name__ == "__main__":
     augment_dict = {0:True, 1:False, 2:False, 3:True}
     train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'
-    count = 0
     save = True
-    count, pixel_dict = extract_training_data(target_dict, shp_train, image_train,
+    pixel_dict = extract_training_data(target_dict, shp_train, image_train,
             master_train, train_dir, save=save, augment_dict=augment_dict) 
     print("{} instances in each class.".format(pixel_dict))
     max_weight = max(pixel_dict.values())
@@ -216,7 +215,6 @@ if __name__ == "__main__":
     tot = 0
     test_dir = 'training_data/test/'
     shp_test = 'shapefile_data/test/'
-    count = 0
-    count, pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
-            test_dir, save=save)
+    pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
+            test_dir, save=save, augment_dict=augment_dict)
     print("And {} instances in each class.".format(pixel_dict))
