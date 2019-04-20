@@ -201,7 +201,7 @@ if __name__ == "__main__":
     fallow = 'Fallow'
     forest = 'Forrest'
     other = 'other'
-    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:3}
+    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:2}
     augment_dict = {0:True, 1:False, 2:False, 3:True}
     train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'

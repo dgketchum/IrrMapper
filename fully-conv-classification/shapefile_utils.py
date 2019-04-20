@@ -91,12 +91,13 @@ def get_pr_subset(poly, tiles):
 
 
 def filter_shapefile(shapefile, out_directory): 
-    """ Shapefiles may span multiple path/rows.
+    """ Shapefiles may span multiple path/rows/years.
     For training, we want all of the data available.
     This function filters the polygons contained in
-    the shapefile into separate files for each path/row
+    the shapefile into separate files for each path/row/year
     contained in the shapefile. """
-    path_row_map = defaultdict(list)
+    # Problem: Not every polygon has a year attribute.
+    path_row_year_map = defaultdict(list)
     wrs2 = fopen('../spatial_data/wrs2_descending_usa.shp', 'r')
     tree, path_rows, features = construct_kdtree(wrs2)
     wrs2.close()
@@ -112,18 +113,19 @@ def filter_shapefile(shapefile, out_directory):
             centroid = cent_arr.reshape(1, -1)
             dist, ind = tree.query(centroid, k=10)
             tiles = features[ind[0]]
-            prs = get_pr_subset(poly, tiles)
+            prs = get_pr_subset(poly, tiles) # gets the matching path/rows
+
             for p in prs:
-                path_row_map[p].append(feat)
+                path_row_year_map[p].append(feat)
 
     outfile = os.path.basename(shapefile)
     outfile = os.path.splitext(outfile)[0]
 
-    for path_row in path_row_map:
-        out = outfile + path_row + ".shp"
+    for path_row_year in path_row_year_map:
+        out = outfile + path_row_year + ".shp"
         with fopen(os.path.join(out_directory, out), 'w', **meta) as dst:
             print("Saving {}".format(out))
-            for feat in path_row_map[path_row]:
+            for feat in path_row_year_map[path_row_year]:
                 dst.write(feat)
 
 
@@ -257,4 +259,11 @@ def buffer_shapefile(shp):
                 dst.write(feat)
 
 if __name__ == '__main__':
-    pass
+
+    from glob import glob
+    out_dir = 'shapefile_data/all_shapefiles/test'
+    for f in glob("shapefile_data/all_shapefiles/" + '*.shp'):
+        print(f)
+        filter_shapefile(f, out_dir)
+        break
+

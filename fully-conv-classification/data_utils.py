@@ -250,5 +250,13 @@ def get_class_weighting(training_directory, w0=15, sigma=2, threshold=0.7*15, n_
     return out
 
 
+def save_model_info(outfile, args):
+    template = '{}={}|'
+    with open(outfile, 'a') as f:
+        for key in args:
+            f.write(template.format(key, args[key]))
+        f.write("\n-------------------\n")
+    print("wrote run info to {}".format(outfile))
+
 if __name__ == "__main__":
     pass

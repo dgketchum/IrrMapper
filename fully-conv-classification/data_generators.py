@@ -5,8 +5,6 @@ import pickle
 import matplotlib.pyplot as plt
 from glob import glob, iglob
 from random import sample, shuffle
-from skimage.segmentation import find_boundaries
-from skimage.measure import label
 from scipy.ndimage.morphology import distance_transform_edt
 from runspec import mask_rasters
 from data_utils import load_raster
@@ -15,6 +13,7 @@ from rasterio import open as rasopen
 from warnings import warn
 from skimage import transform
 from sat_image.warped_vrt import warp_single_image
+from tensorflow.keras.utils import Sequence
 
 
 def distance_map(mask):
@@ -133,7 +132,7 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
 
 def extract_training_data(target_dict, shapefile_directory, image_directory,
         master_raster_directory, training_directory, save=True, tile_size=608,
-        year=2013, fmask=True, nodata=0, augment_dict={}):
+        year=2013, min_pixels=2000, fmask=True, nodata=0, augment_dict={}):
     '''
     target_dict: {filename or string in filename : class_code}
     This function extracts training data from master_rasters in master_raster_directory. Master
@@ -191,26 +190,28 @@ def extract_training_data(target_dict, shapefile_directory, image_directory,
             for datamask in masks:
                 if augment_dict[datamask.class_code]:
                     pixel_dict = _iterate_over_raster(master, datamask, pixel_dict, 
-                            tile_size, save=save, augment=True, 
+                            tile_size=tile_size, save=save, augment=True, min_pixels=min_pixels,
                             training_directory=training_directory)
                 else:
-                    pixel_dict = _iterate_over_raster(master, datamask, pixel_dict,
-                            tile_size, save=save, training_directory=training_directory)
+                    pixel_dict = _iterate_over_raster(master, datamask,
+                            pixel_dict, min_pixels=min_pixels,
+                            tile_size=tile_size, save=save,
+                            training_directory=training_directory)
 
     return pixel_dict
 
 
 def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=False,
-        save=True, training_directory=None):
+        save=True, training_directory=None, min_pixels=None):
     step = tile_size
     if augment:
-        step = np.random.randint(tile_size // 4, tile_size // 2)
+        step = np.random.randint(50, tile_size // 2)
         print("Augmenting w/ step:", step)
     for i in range(0, raster.shape[1]-tile_size, step):
         for j in range(0, raster.shape[2]-tile_size, step):
             sub_raster = raster[:, i:i+tile_size, j:j+tile_size]
             sub_mask = datamask.mask[:, i:i+tile_size, j:j+tile_size]
-            if _check_dimensions_and_content(sub_raster, sub_mask, tile_size):
+            if _check_dimensions_and_content(sub_raster, sub_mask, tile_size, min_pixels):
                 pixel_dict[datamask.class_code] += len(np.where(sub_mask != 0)[0])
                 if save:
                     dt = DataTile(sub_raster, sub_mask, datamask.class_code)
@@ -218,8 +219,8 @@ def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=Fa
     return pixel_dict
 
 
-def _check_dimensions_and_content(sub_raster, sub_mask, tile_size):
-    if np.all(sub_mask == 0):
+def _check_dimensions_and_content(sub_raster, sub_mask, tile_size, min_pixels):
+    if len(np.where(sub_mask != 0)[0]) < min_pixels:
         return False
     if sub_mask.shape[1] != tile_size or sub_mask.shape[2] != tile_size:
         return False
@@ -254,8 +255,7 @@ class DataGen:
 
     def _get_files(self):
         self.file_list = [x for x in iglob(self.class_dir + "**", recursive=True)]
-        self.file_list = [x for x in self.file_list if
-                os.path.isfile(x)]
+        self.file_list = [x for x in self.file_list if os.path.isfile(x)]
 
     def next(self):
         if self.idx == self.n_files:
@@ -281,8 +281,80 @@ def make_border_labels(mask, border_width):
     return dm
 
 
-def generate_unbalanced_data(training_directory, border_width=2,
-        batch_size=2, class_weights={}, channels='all', nodata=0, n_classes=5):
+class SatDataSequence(Sequence):
+
+    def __init__(self, data_directory, batch_size, class_weights={},
+            border_width=1):
+        self.data_directory = data_directory
+        self.class_weights = class_weights
+        self.batch_size = batch_size
+        self.border_width = border_width
+        self._get_files()
+        self.n_files = len(self.file_list)
+        self.idx = 0
+        self.shuffled = sample(self.file_list, self.n_files)
+
+    def _get_files(self):
+        self.file_list = [x for x in iglob(self.data_directory + "**", recursive=True)]
+        self.file_list = [x for x in self.file_list if os.path.isfile(x)]
+
+    def __len__(self):
+
+        return int(np.ceil(self.n_files / self.batch_size))
+
+    def on_epoch_end(self):
+
+        self.shuffled = sample(self.file_list, self.n_files)
+
+    def __getitem__(self, idx):
+
+        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
+        data_tiles = [self._from_pickle(x) for x in batch]
+        processed = self._make_weights_labels_and_features(data_tiles)
+        batch_x = processed[0]
+        batch_y = processed[1]
+        return batch_x, batch_y
+    
+    def _from_pickle(self, filename):
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
+        return data
+
+    def _make_weights_labels_and_features(self, data_tiles):
+        return _preprocess_input_data(data_tiles, self.class_weights, self.border_width)
+
+
+
+def _preprocess_input_data(data_tiles, class_weights, border_width=1):
+    features = []
+    one_hots = []
+    weightings = []
+    border_class = len(class_weights) - 1
+    n_classes = len(class_weights)
+    for tile in data_tiles:
+        tile_shape = tile['data'].shape
+        one_hot = np.zeros((tile_shape[1], tile_shape[2], n_classes))
+        weights = np.zeros((tile_shape[1], tile_shape[2], n_classes))
+        labels = tile['class_mask'][0]
+        one_hot[:, :, tile['class_code']] = labels
+        weights[:][labels == 1] = class_weights[tile['class_code']]
+        if tile['class_code'] == 0:
+            border_labels = make_border_labels(tile['class_mask'],
+                    border_width=border_width)
+            one_hot[:, :, border_class] = border_labels
+            weights[:][border_labels[0] == 1] = class_weights[border_class]
+        m = np.squeeze(tile['data'])
+        m = np.swapaxes(m, 0, 2)
+        m = np.swapaxes(m, 0, 1)
+        features.append(m)
+        one_hots.append(one_hot)
+        weightings.append(weights)
+    return [np.asarray(features), np.asarray(weightings)], [np.asarray(one_hots)]
+
+
+def generate_unbalanced_data(training_directory='training_data/train/', border_width=2,
+        batch_size=2, class_weights = {0:4.5, 1:1.0, 2:2.96, 3:14.972, 4:10}, 
+        channels='all', nodata=0, n_classes=5):
     ''' Assumes data is stored in training_directory '''
     border_class = len(class_weights.keys()) - 1
     gen = DataGen(training_directory)
@@ -307,6 +379,7 @@ def generate_unbalanced_data(training_directory, border_width=2,
                 weights[border_labels[0] == 1] = class_weights[border_class]
             m = np.squeeze(tile['data'])
             m = np.swapaxes(m, 0, 2)
+            m = np.swapaxes(m, 0, 1)
             masters.append(m)
             one_hots.append(one_hot)
             weightings.append(weights)
