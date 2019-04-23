@@ -178,7 +178,7 @@ if __name__ == "__main__":
     # 6. Train network.
 
     image_train_directory = '/home/thomas/share/image_data/train/'
-    image_test_directory = '/home/thomas/share/image_data/test'
+    image_test_directory = '/home/thomas/share/image_data/test/'
 
     image_dirs = [image_train_directory, image_test_directory]
     shp_train = 'shapefile_data/train/'
@@ -206,7 +206,6 @@ if __name__ == "__main__":
     train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'
     save = True
-    '''
     pixel_dict = extract_training_data(target_dict, shp_train, image_train,
             master_train, train_dir, save=save, augment_dict=augment_dict) 
     print("{} instances in each class.".format(pixel_dict))
@@ -219,4 +218,3 @@ if __name__ == "__main__":
     pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
             test_dir, save=save, augment_dict=augment_dict)
     print("And {} instances in each class.".format(pixel_dict))
-    '''

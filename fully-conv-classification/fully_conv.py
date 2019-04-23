@@ -34,18 +34,18 @@ def acc(y_true, y_pred):
 
 
 def lr_schedule(epoch):
-    lr = 1e-4
+    lr = 1e-3
     if epoch > 100:
         lr /= 64
     if epoch > 45:
         lr /= 32.
     elif epoch > 30:
         lr /= 16.
-    elif epoch > 15:
+    elif epoch > 20:
         lr /= 8.
-    elif epoch > 10:
+    elif epoch > 15:
         lr /= 4.
-    elif epoch > 5:
+    elif epoch > 10:
         lr /= 2.
     print('Learning rate: ', lr)
     return lr
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     n_classes = 4
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/normal_loss_20_irr_weight.h5'
+    filepath = './models/augment_20_irr_weight_more_filters.h5'
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
@@ -63,19 +63,19 @@ if __name__ == '__main__':
                                  save_best_only=True)
     tensorboard = TensorBoard(log_dir='graphs/{}'.format(time.time()))
     lr_scheduler = LearningRateScheduler(lr_schedule)
-    model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=5)
-    #model.summary()
-    opt = tf.keras.optimizers.Adam(1e-4)
+    model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=6)
+    opt = tf.keras.optimizers.Adam()
     model.compile(opt, loss=weighted_loss, metrics=[acc])
-    class_weights = {0:20, 1:1.0, 2:2.96, 3:50} 
+    class_weights = {0:50, 1:1.0, 2:2.5, 3:50} 
     class_weights_valid = {0:1.0, 1:1.0, 2:1.0, 3:1.0} 
-    batch_size = 4
+    classes_to_augment = {0:True, 1:False, 2:False, 3:False}
+    batch_size = 2
     generator = SatDataSequence('training_data/train/', batch_size=batch_size,
-            class_weights=class_weights)
+            class_weights=class_weights, classes_to_augment=classes_to_augment)
     valid_generator = SatDataSequence('training_data/test/', batch_size=batch_size,
             class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=50,
+            epochs=100,
             validation_data=valid_generator,
             callbacks=[checkpoint, lr_scheduler, tensorboard],
             verbose=1)

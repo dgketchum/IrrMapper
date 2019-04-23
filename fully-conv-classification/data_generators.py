@@ -4,7 +4,7 @@ import time
 import pickle
 import matplotlib.pyplot as plt
 from glob import glob, iglob
-from random import sample, shuffle
+from random import sample, shuffle, choice
 from scipy.ndimage.morphology import distance_transform_edt
 from runspec import mask_rasters
 from data_utils import load_raster
@@ -284,50 +284,76 @@ def make_border_labels(mask, border_width):
 class SatDataSequence(Sequence):
 
     def __init__(self, data_directory, batch_size, class_weights={},
-            border_width=1):
+            border_width=1, classes_to_augment=None):
         self.data_directory = data_directory
         self.class_weights = class_weights
         self.batch_size = batch_size
+        self.classes_to_augment = classes_to_augment
         self.border_width = border_width
         self._get_files()
         self.n_files = len(self.file_list)
         self.idx = 0
         self.shuffled = sample(self.file_list, self.n_files)
 
+
     def _get_files(self):
-        self.file_list = [x for x in iglob(self.data_directory + "**", recursive=True)]
-        self.file_list = [x for x in self.file_list if os.path.isfile(x)]
+        # Now, get n lists where n is the number of classes (excluding border class).
+        # Then, sample from the minority lists until we have 
+        # the same number of data tiles from each class, then concatenate
+        # all the lists and shuffle. on epoch end, do this process again.
+        self.file_dict = {}
+        i = 0
+        for (dirpath, dirnames, filenames) in os.walk(self.data_directory):
+            if dirpath != self.data_directory:
+                self.file_dict[i] = [os.path.join(dirpath, x) for x in filenames]
+                i += 1
+        self.lengths = [len(self.file_dict[k]) for k in self.file_dict]
+        self._create_file_list()
+
+
+    def _create_file_list(self):
+        max_instances = max(self.lengths)
+        self.file_list = []
+        for class_dir in self.file_dict:
+            files = self.file_dict[class_dir]
+            self.file_list.extend(files)
+            if len(files) != max_instances:
+                if len(files) < (max_instances - len(files)):
+                    files *= (max_instances // len(files))
+                additional_files = sample(files, max_instances - len(files))
+                self.file_list.extend(additional_files)
+
 
     def __len__(self):
-
         return int(np.ceil(self.n_files / self.batch_size))
 
+
     def on_epoch_end(self):
+        self._create_file_list()
         self.shuffled = sample(self.file_list, self.n_files)
 
+
     def __getitem__(self, idx):
-        # TODO: 
-        # How to feed examples into the network?
-        # Balanced in each batch is good, but when 
-        # n classes exceeds batch size, we can't balance
-        # classes in each batch.
         batch = self.shuffled[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
-        processed = self._make_weights_labels_and_features(data_tiles)
+        processed = self._make_weights_labels_and_features(data_tiles, self.classes_to_augment)
         batch_x = processed[0]
         batch_y = processed[1]
         return batch_x, batch_y
     
+
     def _from_pickle(self, filename):
         with open(filename, 'rb') as f:
             data = pickle.load(f)
         return data
 
-    def _make_weights_labels_and_features(self, data_tiles):
-        return _preprocess_input_data(data_tiles, self.class_weights, self.border_width)
+
+    def _make_weights_labels_and_features(self, data_tiles, classes_to_augment):
+        return _preprocess_input_data(data_tiles, self.class_weights, 
+                border_width=self.border_width, classes_to_augment=classes_to_augment)
 
 
-def _preprocess_input_data(data_tiles, class_weights, border_width=1):
+def _preprocess_input_data(data_tiles, class_weights, classes_to_augment=None, border_width=1):
     features = []
     one_hots = []
     weightings = []
@@ -345,13 +371,49 @@ def _preprocess_input_data(data_tiles, class_weights, border_width=1):
                     border_width=border_width)
             one_hot[:, :, border_class] = border_labels
             weights[:][border_labels[0] == 1] = class_weights[border_class]
-        m = np.squeeze(tile['data'])
-        m = np.swapaxes(m, 0, 2)
-        m = np.swapaxes(m, 0, 1)
-        features.append(m)
+        feature_tile = np.squeeze(tile['data'])
+        feature_tile = np.swapaxes(feature_tile, 0, 2) # This is necessary b/c tf expected columns_last (GeoTiffs are columns first).
+        feature_tile = np.swapaxes(feature_tile, 0, 1)
+        if classes_to_augment is not None:
+            if classes_to_augment[tile['class_code']]:
+                # fig, ax = plt.subplots(ncols=2, nrows=2)
+                # ax[0, 0].imshow(feature_tile[:, :, 18])
+                # ax[0, 1].imshow(weights[:, :, tile['class_code']])
+                feature_tile, one_hot, weights = _augment_data(feature_tile, one_hot, weights)
+                # ax[1, 0].imshow(feature_tile[:, :, 18])
+                # ax[1, 1].imshow(weights[:, :, tile['class_code']])
+                # plt.show()
+
+        features.append(feature_tile)
         one_hots.append(one_hot)
         weightings.append(weights)
     return [np.asarray(features), np.asarray(weightings)], [np.asarray(one_hots)]
+
+
+def _yes_or_no():
+    return choice([True, False])
+
+
+def _augment_data(feature_tile, one_hot, weights):
+    ''' Applies mirroring and flipping, or doesn't. '''
+    if _yes_or_no():
+        # Flip the data l-r.
+        for i in range(feature_tile.shape[2]):
+            feature_tile[:, :, i] = np.fliplr(feature_tile[:, :, i])
+        for i in range(one_hot.shape[2]):
+            one_hot[:, :, i] = np.fliplr(one_hot[:, :, i])
+            weights[:, :, i] = np.fliplr(weights[:, :, i])
+        return feature_tile, one_hot, weights
+    if _yes_or_no():
+        # Flip the data u-d.
+        for i in range(feature_tile.shape[2]):
+            feature_tile[:, :, i] = np.flipud(feature_tile[:, :, i])
+        for i in range(one_hot.shape[2]):
+            one_hot[:, :, i] = np.flipud(one_hot[:, :, i])
+            weights[:, :, i] = np.flipud(weights[:, :, i])
+        return feature_tile, one_hot, weights
+    return feature_tile, one_hot, weights
+    
 
 
 def generate_unbalanced_data(training_directory='training_data/train/', border_width=2,
