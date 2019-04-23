@@ -188,10 +188,10 @@ if __name__ == "__main__":
     master_test = '/home/thomas/share/master_rasters/test'
     master_dirs = [master_train, master_test]
     year = 2013
-    # for s, i in zip(shp_dirs, image_dirs):
-    #     download_all_images(i, s, year)
-    # for im_dir, mas_dir in zip(image_dirs, master_dirs):
-    #     create_all_master_rasters(im_dir, mas_dir) 
+    for s, i in zip(shp_dirs, image_dirs):
+        download_all_images(i, s, year)
+    for im_dir, mas_dir in zip(image_dirs, master_dirs):
+        create_all_master_rasters(im_dir, mas_dir) 
     master_train = '/home/thomas/share/master_rasters/train/'
     master_test = '/home/thomas/share/master_rasters/test/'
     image_train = '/home/thomas/share/image_data/train/'
@@ -206,6 +206,7 @@ if __name__ == "__main__":
     train_dir = 'training_data/train/'
     shp_train = 'shapefile_data/train/'
     save = True
+    '''
     pixel_dict = extract_training_data(target_dict, shp_train, image_train,
             master_train, train_dir, save=save, augment_dict=augment_dict) 
     print("{} instances in each class.".format(pixel_dict))
@@ -218,3 +219,4 @@ if __name__ == "__main__":
     pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
             test_dir, save=save, augment_dict=augment_dict)
     print("And {} instances in each class.".format(pixel_dict))
+    '''

@@ -303,12 +303,15 @@ class SatDataSequence(Sequence):
         return int(np.ceil(self.n_files / self.batch_size))
 
     def on_epoch_end(self):
-
         self.shuffled = sample(self.file_list, self.n_files)
 
     def __getitem__(self, idx):
-
-        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
+        # TODO: 
+        # How to feed examples into the network?
+        # Balanced in each batch is good, but when 
+        # n classes exceeds batch size, we can't balance
+        # classes in each batch.
+        batch = self.shuffled[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
         processed = self._make_weights_labels_and_features(data_tiles)
         batch_x = processed[0]
@@ -322,7 +325,6 @@ class SatDataSequence(Sequence):
 
     def _make_weights_labels_and_features(self, data_tiles):
         return _preprocess_input_data(data_tiles, self.class_weights, self.border_width)
-
 
 
 def _preprocess_input_data(data_tiles, class_weights, border_width=1):
@@ -353,7 +355,7 @@ def _preprocess_input_data(data_tiles, class_weights, border_width=1):
 
 
 def generate_unbalanced_data(training_directory='training_data/train/', border_width=2,
-        batch_size=2, class_weights = {0:4.5, 1:1.0, 2:2.96, 3:14.972, 4:10}, 
+        batch_size=2, class_weights={}, 
         channels='all', nodata=0, n_classes=5):
     ''' Assumes data is stored in training_directory '''
     border_class = len(class_weights.keys()) - 1

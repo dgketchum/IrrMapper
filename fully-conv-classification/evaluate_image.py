@@ -7,7 +7,7 @@ from tensorflow.keras.models import load_model
 from data_generators import load_raster
 import matplotlib.pyplot
 import keras.backend as K
-from fully_conv import weighted_loss
+from fully_conv import weighted_loss, weighted_focal_loss
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
 
@@ -47,9 +47,12 @@ def evaluate_image(master_raster, model, num_classes=4, outfile=None, ii=None):
     return out
 
 if __name__ == '__main__':
-    master_raster = '/home/thomas/share/master_rasters/test/master_raster_37_28_2013.tif'
-    model = 'checkpoints_2.h5'
-    model = load_model(model, custom_objects={'tf':tf, '_epsilon':_epsilon, 
+    master_raster_t = '/home/thomas/share/master_rasters/test/master_raster_37_28_2013.tif'
+    master_raster = '/home/thomas/share/master_rasters/train/master_raster_39_27_2013.tif'
+    model_name = 'normal_loss_50_irr_weight.h5'
+    model = load_model("models/" + model_name, custom_objects={'tf':tf, '_epsilon':_epsilon, 
         'weighted_loss':weighted_loss})
-    outfile = '300ep.tif'
+    outfile = 'compare_model_outputs/new-feed-method/{}_39_27.tif'.format(model_name[:-3])
     evaluate_image(master_raster, model, outfile=outfile, num_classes=4)
+    outfile = 'compare_model_outputs/new-feed-method/{}_37_28.tif'.format(model_name[:-3])
+    evaluate_image(master_raster_t, model, outfile=outfile, num_classes=4)

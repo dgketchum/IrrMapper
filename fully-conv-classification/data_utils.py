@@ -158,10 +158,11 @@ def bandwise_mean(paths_list, band_name):
     return (pixel_value_sum / n_pixels, band_name)
 
 
-def download_images(project_directory, path, row, year, satellite=8, n_landsat=3):
+def download_images(project_directory, path, row, year, satellite=8, n_landsat=3, 
+        max_cloud_pct=40):
 
     image_stack = ImageStack(satellite=satellite, path=path, row=row, root=project_directory,
-            max_cloud_pct=70, n_landsat=n_landsat, year=year)
+            max_cloud_pct=max_cloud_pct, n_landsat=n_landsat, year=year)
 
     image_stack.build_evaluating() # the difference b/t build_training() and build_eval() is
     # a cloud mask.
