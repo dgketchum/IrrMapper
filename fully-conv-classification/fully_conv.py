@@ -13,6 +13,20 @@ def weighted_loss(target, output):
     out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
     return out
 
+def weighted_loss_ce_and_dl(target, output):
+    # Target: One hot encoding of segmentation mask.
+    # Output: Output of network. In this case, log(softmax).
+    soft = tf.nn.softmax(output)
+    numerator = tf.reduce_sum(soft*target, 1)
+    numerator = tf.reduce_sum(numerator, 2)
+    sum_ui_k = tf.reduce_sum(soft, 1)
+    sum_ui_k = tf.reduce_sum(sum_ui_k, 2)
+    sum_vi_k = tf.reduce_sum(target, 1)
+    sum_vi_k = tf.reduce_sum(sum_vi_k, 2)
+
+    final = (-2/4)*tf.reduce_sum(numerator / (sum_ui_k + sum_vi_k), 1)
+    out = -tf.reduce_sum(target*output, len(output.get_shape())-1)
+    return final + out
 
 def weighted_focal_loss(target, output, gamma=1):
     # L = a0 *(1-pt)^gamma * ce
@@ -34,7 +48,7 @@ def acc(y_true, y_pred):
 
 
 def lr_schedule(epoch):
-    lr = 1e-3
+    lr = 1e-4
     if epoch > 100:
         lr /= 64
     if epoch > 45:
@@ -55,7 +69,7 @@ if __name__ == '__main__':
     n_classes = 4
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/augment_20_irr_weight_more_filters.h5'
+    filepath = './models/augment_w_rotation_140_irr_weight_33m_params.h5'
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
@@ -66,16 +80,16 @@ if __name__ == '__main__':
     model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=6)
     opt = tf.keras.optimizers.Adam()
     model.compile(opt, loss=weighted_loss, metrics=[acc])
-    class_weights = {0:50, 1:1.0, 2:2.5, 3:50} 
-    class_weights_valid = {0:1.0, 1:1.0, 2:1.0, 3:1.0} 
+    model.summary() #line_length argument
+    class_weights = {0:140, 1:1.0, 2:1.0, 3:25} 
     classes_to_augment = {0:True, 1:False, 2:False, 3:False}
-    batch_size = 2
+    batch_size = 1
     generator = SatDataSequence('training_data/train/', batch_size=batch_size,
             class_weights=class_weights, classes_to_augment=classes_to_augment)
     valid_generator = SatDataSequence('training_data/test/', batch_size=batch_size,
             class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=100,
+            epochs=50,
             validation_data=valid_generator,
             callbacks=[checkpoint, lr_scheduler, tensorboard],
             verbose=1)

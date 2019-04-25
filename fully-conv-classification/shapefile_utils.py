@@ -261,9 +261,6 @@ def buffer_shapefile(shp):
 if __name__ == '__main__':
 
     from glob import glob
-    out_dir = 'shapefile_data/all_shapefiles/test'
-    for f in glob("shapefile_data/all_shapefiles/" + '*.shp'):
-        print(f)
+    out_dir = 'shapefile_data/western_us/split_shapefiles/'
+    for f in glob("/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup/non-irrigated-reprojected/" + '*.shp'):
         filter_shapefile(f, out_dir)
-        break
-

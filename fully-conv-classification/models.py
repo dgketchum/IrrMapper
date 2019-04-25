@@ -30,17 +30,18 @@ def gradient_wrt_inputs(model, data):
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
 
 
-def ConvBlock(x, filters=64, expanding_path=False):
-
+def ConvBlock(x, filters=64):
     x = Conv2D(filters=filters, kernel_size=3, strides=1, padding='same',
             kernel_regularizer=l2(0.01))(x)
     x = BatchNormalization()(x)
     x = Activation(relu)(x)
-    if expanding_path:
-        x = Conv2D(filters=filters // 2, kernel_size=3, strides=1, padding='same',
-            kernel_regularizer=l2(0.01))(x)
-    else:
-        x = Conv2D(filters=filters, kernel_size=3, strides=1, padding='same',
+    x = Conv2D(filters=filters, kernel_size=3, strides=1, padding='same',
+        kernel_regularizer=l2(0.01))(x)
+    x = BatchNormalization()(x)
+    return Activation(relu)(x)
+
+def ConvBNRelu(x, filters=64):
+    x = Conv2D(filters=filters, kernel_size=3, strides=1, padding='same',
             kernel_regularizer=l2(0.01))(x)
     x = BatchNormalization()(x)
     return Activation(relu)(x)
@@ -77,40 +78,35 @@ def unet_same_padding(input_shape, weight_shape, initial_exp=6, n_classes=5):
     _power += 1
 
     # 1024 filters
-    c5 = Conv2D(filters=exp**_power, kernel_size=3, strides=1, padding='same',
-            kernel_regularizer=l2(0.01))(mp4)
+    c5 = ConvBlock(mp4, exp**_power)
     _power -= 1
-    c5 = Conv2D(filters=exp**_power, kernel_size=3, strides=1, padding='same',
-            kernel_regularizer=l2(0.01))(c5)
 
     u1 = UpSampling2D(size=(2, 2))(c5)
+    c6 = ConvBNRelu(u1, filters=exp**_power)
+    u1_c4 = Concatenate()([c6, c4])
+    c7 = ConvBlock(u1_c4, filters=exp**_power)
 
-    u1_c4 = Concatenate()([u1, c4])
+    _power -= 1
+    
+    u2 = UpSampling2D(size=(2, 2))(c7)
+    c8 = ConvBNRelu(u2, filters=exp**_power)
+    u2_c3 = Concatenate()([c8, c3])
+    c9 = ConvBlock(u2_c3, filters=exp**_power)
 
-    c6 = ConvBlock(u1_c4, filters=exp**_power, expanding_path=True)
+    _power -= 1
+    
+    u3 = UpSampling2D(size=(2, 2))(c9)
+    c10 = ConvBNRelu(u3, filters=exp**_power)
+    u3_c2 = Concatenate()([c10, c2])
+    c11 = ConvBlock(u3_c2, filters=exp**_power)
 
-    u2 = UpSampling2D(size=(2, 2))(c6)
+    _power -= 1
+    u4 = UpSampling2D(size=(2, 2))(c11)
+    c12 = ConvBNRelu(u4, filters=exp**_power)
+    u4_c1 = Concatenate()([c12, c1])
+    c13 = ConvBlock(u4_c1, filters=exp**_power)
 
-    u2_c3 = Concatenate()([u2, c3])
-
-    _power -= 1 
-    c7 = ConvBlock(u2_c3, filters=exp**_power, expanding_path=True)
-
-    u3 = UpSampling2D(size=(2, 2))(c7)
-
-    u3_c2 = Concatenate()([u3, c2])
-
-    _power -= 1 
-    c8 = ConvBlock(u3_c2, filters=exp**_power, expanding_path=True)
-
-    u4 = UpSampling2D(size=(2, 2))(c8)
-
-    u4_c1 = Concatenate()([u4, c1])
-
-    _power -= 1 
-    c9 = ConvBlock(u4_c1, filters=exp**_power)
-    last_conv = Conv2D(filters=n_classes, kernel_size=1, padding='same', activation='softmax')(c9)
-
+    last_conv = Conv2D(filters=n_classes, kernel_size=1, padding='same', activation='softmax')(c13)
     last = Lambda(lambda x: x / tf.reduce_sum(x, len(x.get_shape()) - 1, True))(last_conv)
     last = Lambda(lambda x: tf.clip_by_value(x, _epsilon, 1. - _epsilon))(last)
     last = Lambda(lambda x: K.log(x))(last)

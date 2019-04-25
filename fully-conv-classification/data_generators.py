@@ -395,7 +395,16 @@ def _yes_or_no():
 
 
 def _augment_data(feature_tile, one_hot, weights):
-    ''' Applies mirroring and flipping, or doesn't. '''
+    ''' Applies lr and ud flipping, or doesn't. '''
+    if _yes_or_no():
+        # Rotate the data.
+        rot = np.random.randint(-25, 25)
+        for i in range(feature_tile.shape[2]):
+            feature_tile[:, :, i] = transform.rotate(feature_tile[:, :, i], rot, cval=0)
+        for i in range(one_hot.shape[2]):
+            one_hot[:, :, i] = transform.rotate(one_hot[:, :, i], rot, cval=0)
+            weights[:, :, i] = transform.rotate(weights[:, :, i], rot, cval=0)
+        return feature_tile, one_hot, weights
     if _yes_or_no():
         # Flip the data l-r.
         for i in range(feature_tile.shape[2]):
