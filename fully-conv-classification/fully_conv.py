@@ -1,5 +1,5 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import time
 import keras.backend as K
 import tensorflow as tf
@@ -48,7 +48,7 @@ def acc(y_true, y_pred):
 
 
 def lr_schedule(epoch):
-    lr = 1e-4
+    lr = 1e-3
     if epoch > 100:
         lr /= 64
     if epoch > 45:
@@ -69,7 +69,7 @@ if __name__ == '__main__':
     n_classes = 4
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/augment_w_rotation_140_irr_weight_33m_params.h5'
+    filepath = './models/all_augmented_same_probability_80_irr_weight.h5'
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
@@ -77,19 +77,20 @@ if __name__ == '__main__':
                                  save_best_only=True)
     tensorboard = TensorBoard(log_dir='graphs/{}'.format(time.time()))
     lr_scheduler = LearningRateScheduler(lr_schedule)
-    model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=6)
+    model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=5)
     opt = tf.keras.optimizers.Adam()
     model.compile(opt, loss=weighted_loss, metrics=[acc])
-    model.summary() #line_length argument
-    class_weights = {0:140, 1:1.0, 2:1.0, 3:25} 
-    classes_to_augment = {0:True, 1:False, 2:False, 3:False}
-    batch_size = 1
+    #model.summary() #line_length argument
+    class_weights = {0:80, 1:1.0, 2:1.0, 3:50} 
+    class_weights_valid = {0:1.0, 1:1.0, 2:1.0, 3:1.0} 
+    classes_to_augment = {0:True, 1:True, 2:True, 3:False}
+    batch_size = 3
     generator = SatDataSequence('training_data/train/', batch_size=batch_size,
             class_weights=class_weights, classes_to_augment=classes_to_augment)
     valid_generator = SatDataSequence('training_data/test/', batch_size=batch_size,
             class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=50,
+            epochs=500,
             validation_data=valid_generator,
             callbacks=[checkpoint, lr_scheduler, tensorboard],
             verbose=1)

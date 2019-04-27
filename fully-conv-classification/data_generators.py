@@ -12,6 +12,7 @@ from shapefile_utils import get_shapefile_path_row, generate_class_mask
 from rasterio import open as rasopen
 from warnings import warn
 from skimage import transform
+from scipy.ndimage.interpolation import shift
 from sat_image.warped_vrt import warp_single_image
 from tensorflow.keras.utils import Sequence
 
@@ -113,6 +114,11 @@ class DataTile(object):
 
 
 def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
+    ''' Fmasks are masks of clouds and water. We don't clouds/water in
+    the training set, so this function gets all the fmasks for a landsat
+    scene (contained in image_directory), and merges them into one raster. 
+    They may not all be the same size, so warp_vrt is used to make them align. 
+    '''
     paths = []
     for dirpath, dirnames, filenames in os.walk(image_directory):
         for f in filenames:
@@ -175,7 +181,7 @@ def extract_training_data(target_dict, shapefile_directory, image_directory,
                 msk, mask_meta = generate_class_mask(match, mask_file, nodata=nodata)
                 if fmask:
                     msk = concatenate_fmasks(os.path.join(image_directory, suffix[:-4]), msk,
-                            mask_meta, nodata=nodata) # Need to make sure this is doing what I expect.
+                            mask_meta, nodata=nodata) 
                 shp = msk.shape
                 print(match, cc)
                 if cc is not None:
@@ -205,6 +211,7 @@ def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=Fa
         save=True, training_directory=None, min_pixels=None):
     step = tile_size
     if augment:
+        # This is offline augmentation.
         step = np.random.randint(50, tile_size // 2)
         print("Augmenting w/ step:", step)
     for i in range(0, raster.shape[1]-tile_size, step):
@@ -372,7 +379,7 @@ def _preprocess_input_data(data_tiles, class_weights, classes_to_augment=None, b
             one_hot[:, :, border_class] = border_labels
             weights[:][border_labels[0] == 1] = class_weights[border_class]
         feature_tile = np.squeeze(tile['data'])
-        feature_tile = np.swapaxes(feature_tile, 0, 2) # This is necessary b/c tf expected columns_last (GeoTiffs are columns first).
+        feature_tile = np.swapaxes(feature_tile, 0, 2) # This is necessary b/c tf expects columns_last (GeoTiffs are columns first).
         feature_tile = np.swapaxes(feature_tile, 0, 1)
         if classes_to_augment is not None:
             if classes_to_augment[tile['class_code']]:
@@ -390,39 +397,50 @@ def _preprocess_input_data(data_tiles, class_weights, classes_to_augment=None, b
     return [np.asarray(features), np.asarray(weightings)], [np.asarray(one_hots)]
 
 
-def _yes_or_no():
-    return choice([True, False])
+def _flip_lr(feature_tile, one_hot, weights):
+    for i in range(feature_tile.shape[2]):
+        feature_tile[:, :, i] = np.fliplr(feature_tile[:, :, i])
+    for i in range(one_hot.shape[2]):
+        one_hot[:, :, i] = np.fliplr(one_hot[:, :, i])
+        weights[:, :, i] = np.fliplr(weights[:, :, i])
+    return feature_tile, one_hot, weights
+
+
+def _flip_ud(feature_tile, one_hot, weights):
+    for i in range(feature_tile.shape[2]):
+        feature_tile[:, :, i] = np.flipud(feature_tile[:, :, i])
+    for i in range(one_hot.shape[2]):
+        one_hot[:, :, i] = np.flipud(one_hot[:, :, i])
+        weights[:, :, i] = np.flipud(weights[:, :, i])
+    return feature_tile, one_hot, weights
+
+
+def _rotate(feature_tile, one_hot, weights):
+    # Rotate data.
+    rot = np.random.randint(-25, 25)
+    for i in range(feature_tile.shape[2]):
+        feature_tile[:, :, i] = transform.rotate(feature_tile[:, :, i], rot, cval=0)
+    for i in range(one_hot.shape[2]):
+        one_hot[:, :, i] = transform.rotate(one_hot[:, :, i], rot, cval=0)
+        weights[:, :, i] = transform.rotate(weights[:, :, i], rot, cval=0)
+    return feature_tile, one_hot, weights
+
+
+def _flip_lr_ud(feature_tile, one_hot, weights):
+    feature_tile, one_hot, weights = _flip_lr(feature_tile, one_hot, weights)
+    feature_tile, one_hot, weights = _flip_ud(feature_tile, one_hot, weights)
+    return feature_tile, one_hot, weights
+
+
+def _do_nothing(feature_tile, one_hot, weights):
+    return feature_tile, one_hot, weights
 
 
 def _augment_data(feature_tile, one_hot, weights):
-    ''' Applies lr and ud flipping, or doesn't. '''
-    if _yes_or_no():
-        # Rotate the data.
-        rot = np.random.randint(-25, 25)
-        for i in range(feature_tile.shape[2]):
-            feature_tile[:, :, i] = transform.rotate(feature_tile[:, :, i], rot, cval=0)
-        for i in range(one_hot.shape[2]):
-            one_hot[:, :, i] = transform.rotate(one_hot[:, :, i], rot, cval=0)
-            weights[:, :, i] = transform.rotate(weights[:, :, i], rot, cval=0)
-        return feature_tile, one_hot, weights
-    if _yes_or_no():
-        # Flip the data l-r.
-        for i in range(feature_tile.shape[2]):
-            feature_tile[:, :, i] = np.fliplr(feature_tile[:, :, i])
-        for i in range(one_hot.shape[2]):
-            one_hot[:, :, i] = np.fliplr(one_hot[:, :, i])
-            weights[:, :, i] = np.fliplr(weights[:, :, i])
-        return feature_tile, one_hot, weights
-    if _yes_or_no():
-        # Flip the data u-d.
-        for i in range(feature_tile.shape[2]):
-            feature_tile[:, :, i] = np.flipud(feature_tile[:, :, i])
-        for i in range(one_hot.shape[2]):
-            one_hot[:, :, i] = np.flipud(one_hot[:, :, i])
-            weights[:, :, i] = np.flipud(weights[:, :, i])
-        return feature_tile, one_hot, weights
-    return feature_tile, one_hot, weights
-    
+    ''' Applies rotation | lr | ud | lr_ud | flipping, or doesn't. '''
+    possible_augments = [_rotate, _flip_ud, _flip_lr, _flip_lr_ud, _do_nothing]
+    possible_augments = [_do_nothing]
+    return choice(possible_augments)(feature_tile, one_hot, weights)
 
 
 def generate_unbalanced_data(training_directory='training_data/train/', border_width=2,

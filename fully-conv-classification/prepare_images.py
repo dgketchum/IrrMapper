@@ -28,6 +28,7 @@ from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 from met.thredds import GridMet, TopoWX
+from shutil import rmtree
 from bounds import RasterBounds, GeoBounds
 from dem import AwsDem
 from ssebop_app.image import get_image
@@ -102,7 +103,6 @@ class ImageStack(object):
         self.get_et()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images()
-
 
     def build_evaluating(self):
         self.get_landsat(fmask=True)
@@ -207,6 +207,7 @@ class ImageStack(object):
                         print("Saving {}".format(outfile))
                         out_final = gm.conform(out_arr)
                         gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)
+                rmtree(gm.temp_dir)
 
 
     def get_terrain(self):

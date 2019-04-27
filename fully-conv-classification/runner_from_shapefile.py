@@ -188,6 +188,8 @@ if __name__ == "__main__":
     master_dirs = [master_train, master_test]
     shapefile_directory = 'shapefile_data/western_us/split_shapefiles/clipped_to_target_states/'
     i = 0
+    fs = [f for f in glob(shapefile_directory + "*.shp")] 
+    print(len(fs))
     for f in glob(shapefile_directory + "*.shp"):
         if '2013' in f:
             year = 2013
@@ -199,32 +201,34 @@ if __name__ == "__main__":
             year = 2016
         else:
             year = 2014
-        if 'irrigated' in f:
-            i += 1
         download_images_over_shapefile(f, image_train_directory, year)
-    # master_train = '/home/thomas/share/master_rasters/train/'
-    # master_test = '/home/thomas/share/master_rasters/test/'
-    # image_train = '/home/thomas/share/image_data/train/'
-    # image_test = '/home/thomas/share/image_data/test/' 
-    # irr1 = 'Huntley'
-    # irr2 = 'Sun_River'
-    # fallow = 'Fallow'
-    # forest = 'Forrest'
-    # other = 'other'
-    # target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:2}
-    # augment_dict = {0:True, 1:False, 2:False, 3:True}
-    # train_dir = 'training_data/train/'
-    # shp_train = 'shapefile_data/train/'
-    # save = True
-    # pixel_dict = extract_training_data(target_dict, shp_train, image_train,
-    #         master_train, train_dir, save=save, augment_dict=augment_dict) 
-    # print("{} instances in each class.".format(pixel_dict))
-    # max_weight = max(pixel_dict.values())
-    # for key in pixel_dict:
-    #     print(key, max_weight / pixel_dict[key])
+        print("{} of {} done.".format(i+1, len(fs)))
+        i += 1
+    '''
+    master_train = '/home/thomas/share/master_rasters/train/'
+    master_test = '/home/thomas/share/master_rasters/test/'
+    image_train = '/home/thomas/share/image_data/train/'
+    image_test = '/home/thomas/share/image_data/test/' 
+    irr1 = 'irrigated'
+    irr2 = 'uncultivated'
+    fallow = 'unirrigated'
+    forest = 'wetlands'
+    other = 'other'
+    target_dict = {irr2:0, irr1:0, fallow:1, forest:2, other:2}
+    augment_dict = {0:False, 1:False, 2:False, 3:True}
+    train_dir = 'training_data/train/'
+    shp_train = 'shapefile_data/train/'
+    save = True
+    pixel_dict = extract_training_data(target_dict, shp_train, image_train,
+            master_train, train_dir, save=save, augment_dict=augment_dict) 
+    print("{} instances in each class.".format(pixel_dict))
+    max_weight = max(pixel_dict.values())
+    for key in pixel_dict:
+        print(key, max_weight / pixel_dict[key])
     # tot = 0
     # test_dir = 'training_data/test/'
     # shp_test = 'shapefile_data/test/'
     # pixel_dict = extract_training_data(target_dict, shp_test, image_test, master_test, 
     #         test_dir, save=save, augment_dict=augment_dict)
     # print("And {} instances in each class.".format(pixel_dict))
+    '''

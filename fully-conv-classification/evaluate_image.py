@@ -11,7 +11,7 @@ from fully_conv import weighted_loss, weighted_focal_loss
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
 
-def evaluate_image_many_shot(master_raster, model, num_classes=4, n_overlaps=20, outfile=None, ii=None):
+def evaluate_image_many_shot(master_raster, model, num_classes=4, n_overlaps=4, outfile=None, ii=None):
     ''' To recover from same padding, slide many different patches over the image. '''
 
     if not os.path.isfile(master_raster):
@@ -85,12 +85,12 @@ def evaluate_image_one_shot(master_raster, model, num_classes=4, outfile=None, i
 if __name__ == '__main__':
     master_raster_t = '/home/thomas/share/master_rasters/test/master_raster_37_28_2013.tif'
     master_raster = '/home/thomas/share/master_rasters/train/master_raster_39_27_2013.tif'
-    model_name = 'augment_60_irr_weight_more_filters.h5'
+    model_name = 'all_classes_augmented_flips_rotations_90_irr_weight.h5'
     model = load_model("models/" + model_name, custom_objects={'tf':tf, '_epsilon':_epsilon, 
         'weighted_loss':weighted_loss})
     outfile = 'compare_model_outputs/new-feed-method/{}_37_28.tif'.format(model_name[:-3])
-    #evaluate_image_many_shot(master_raster_t, model, outfile=outfile, num_classes=4)
-    evaluate_image_one_shot(master_raster_t, model, outfile=outfile, num_classes=4)
+    evaluate_image_many_shot(master_raster_t, model, outfile=outfile, num_classes=4)
+    #evaluate_image_one_shot(master_raster_t, model, outfile=outfile, num_classes=4)
     outfile = 'compare_model_outputs/new-feed-method/{}_39_27.tif'.format(model_name[:-3])
-    #evaluate_image_many_shot(master_raster, model, outfile=outfile, num_classes=4)
-    evaluate_image_one_shot(master_raster, model, outfile=outfile, num_classes=4)
+    evaluate_image_many_shot(master_raster, model, outfile=outfile, num_classes=4)
+    #evaluate_image_one_shot(master_raster, model, outfile=outfile, num_classes=4)
