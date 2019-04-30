@@ -7,8 +7,8 @@ from glob import glob, iglob
 from random import sample, shuffle, choice
 from scipy.ndimage.morphology import distance_transform_edt
 from runspec import mask_rasters
-from data_utils import load_raster
-from shapefile_utils import get_shapefile_path_row, generate_class_mask 
+from data_utils import load_raster, paths_map, stack_rasters
+from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile
 from rasterio import open as rasopen
 from warnings import warn
 from skimage import transform
@@ -75,14 +75,6 @@ def random_sample(class_mask, n_instances, box_size=0, fill_value=1, nodata=0):
     return class_mask
 
 
-def assign_class_code(target_dict, shapefilename):
-    for key in target_dict:
-        if key in shapefilename:
-            return target_dict[key]
-    print("{} has no known match in target_dict.".format(shapefilename))
-    return None
-
-
 class DataMask(object):
 
     def __init__(self, mask, class_code):
@@ -136,93 +128,74 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
     return class_mask
 
 
-def extract_training_data(target_dict, shapefile_directory, image_directory,
-        master_raster_directory, training_directory, save=True, tile_size=608,
-        year=2013, min_pixels=2000, fmask=True, nodata=0, augment_dict={}):
-    '''
-    target_dict: {filename or string in filename : class_code}
-    This function extracts training data from master_rasters in master_raster_directory. Master
-    rasters are rasters containing all feature bands. 
-    To do this, we iterate over the shapefile (vector) data in shapefile directory
-    and mask the corresponding raster with the vector data. We also ignore all pixels
-    in the master_rasters that have any clouds or water in them. 
-    steps:
-       pull a shapefile at random from shapefile_directory.
-       get all the other shapefiles that are in the same path and row.
-       use these shapefiles to create a binary mask: 0 where there's no
-       data and 1 where there is data. 
-       Assign each binary mask to a class.
-       Iterate over the master raster in that path / row and
-       create a new datatile object for each binary mask that contains
-       data, and save it. 
-    '''
-    
-    done = set()
+def extract_training_data(shapefile_directory, image_directory,
+        training_directory, save=True, tile_size=608,
+        assign_shapefile_year=None, assign_shapefile_class_code=None,
+        min_pixels=50, fmask=True, n_classes=4, nodata=0, augment_dict={}):
+
+    if isinstance(assign_shapefile_year, type(None)):
+        raise ValueError("Please provide a function to assign shapefile year.")
+    if isinstance(assign_shapefile_class_code, type(None)):
+        raise ValueError("Please provide a function to assign shapefile class code.")
+
     pixel_dict = {} # pixel dict counts number of pixels present in each class.
-    for class_code in target_dict.values():
+    for class_code in range(n_classes):
         pixel_dict[class_code] = 0 
-    year = year #TODO: incorporate year attr. from shapefile
-    train_raster = 'master_raster_' # template
-    mask_raster = 'class_mask_' # template
-    for f in glob(os.path.join(shapefile_directory, "*.shp")):
+    done = set()
+    all_shapefiles = [f for f in glob(os.path.join(shapefile_directory, "*.shp"))]
+    for f in all_shapefiles:
         if f not in done:
             done.add(f)
-            all_matches = all_matching_shapefiles(f, shapefile_directory) # get all shapefiles in the same path / row
+            all_matches = all_matching_shapefiles(f, shapefile_directory, assign_shapefile_year) # get all shapefiles
+            # in the same path / row / year
             for match in all_matches:
                 done.add(match)
-            p, r = get_shapefile_path_row(f)
-            suffix = '{}_{}_{}.tif'.format(p, r, year) #image directory
-            master_raster = os.path.join(master_raster_directory, train_raster + suffix)
-            mask_file = os.path.join(master_raster_directory, mask_raster + suffix) # for rasterio.mask.mask
-            masks = [] 
-            shp = None
+            p, r = get_shapefile_path_row(f) #TODO: error checking on this function.
+            year = assign_shapefile_year(f)
+            suffix = '{}_{}_{}'.format(p, r, year) 
+            paths_mapping = paths_map(os.path.join(image_directory, suffix)) 
+            try:
+                master = stack_rasters(paths_mapping, p, r, year)
+            except Exception as e:
+                print(e)
+                print("Bad image data in", suffix)
+                continue
+            mask_file = paths_mapping['B1.TIF'][0]
+            masks = []
             for match in all_matches:
-                cc = assign_class_code(target_dict, match)
-                msk, mask_meta = generate_class_mask(match, mask_file, nodata=nodata)
+                cc = assign_shapefile_class_code(match)
+                if cc is None:
+                    raise ValueError("Shapefile {} not provided with a class code.".format(os.path.basename(match)))
+                msk, mask_meta = mask_raster_to_shapefile(match, mask_file, return_binary=True)
                 if fmask:
-                    msk = concatenate_fmasks(os.path.join(image_directory, suffix[:-4]), msk,
+                    msk = concatenate_fmasks(os.path.join(image_directory, suffix), msk,
                             mask_meta, nodata=nodata) 
-                shp = msk.shape
-                print(match, cc)
-                if cc is not None:
-                    dm = DataMask(msk, cc) # a binary mask that has a class_code attributed to it.
-                    masks.append(dm)
+                dm = DataMask(msk, cc) # a binary mask that has a class_code attributed to it.
+                masks.append(dm)
+                print("Extracting data for {}. CC: {}. Year: {}".format(os.path.basename(match), cc,
+                    year))
 
-            if save:
-                master, meta = load_raster(master_raster)
-            else:
-                master = np.zeros(shp)
-
-            for datamask in masks:
-                if augment_dict[datamask.class_code]:
-                    pixel_dict = _iterate_over_raster(master, datamask, pixel_dict, 
-                            tile_size=tile_size, save=save, augment=True, min_pixels=min_pixels,
-                            training_directory=training_directory)
-                else:
-                    pixel_dict = _iterate_over_raster(master, datamask,
-                            pixel_dict, min_pixels=min_pixels,
-                            tile_size=tile_size, save=save,
-                            training_directory=training_directory)
+            pixel_dict = _iterate_over_raster(master, masks, pixel_dict, 
+                    tile_size=tile_size, save=save, min_pixels=min_pixels,
+                    training_directory=training_directory)
+        print("{} of {} shapefiles done. ".format(len(done), len(all_shapefiles)))
 
     return pixel_dict
 
 
-def _iterate_over_raster(raster, datamask, pixel_dict, tile_size=608, augment=False,
+def _iterate_over_raster(raster, datamasks, pixel_dict, tile_size=608, 
         save=True, training_directory=None, min_pixels=None):
-    step = tile_size
-    if augment:
-        # This is offline augmentation.
-        step = np.random.randint(50, tile_size // 2)
-        print("Augmenting w/ step:", step)
+    step = tile_size 
     for i in range(0, raster.shape[1]-tile_size, step):
         for j in range(0, raster.shape[2]-tile_size, step):
             sub_raster = raster[:, i:i+tile_size, j:j+tile_size]
-            sub_mask = datamask.mask[:, i:i+tile_size, j:j+tile_size]
-            if _check_dimensions_and_content(sub_raster, sub_mask, tile_size, min_pixels):
-                pixel_dict[datamask.class_code] += len(np.where(sub_mask != 0)[0])
-                if save:
-                    dt = DataTile(sub_raster, sub_mask, datamask.class_code)
-                    dt.to_pickle(training_directory)
+            for datamask in datamasks:
+                sub_mask = datamask.mask[:, i:i+tile_size, j:j+tile_size]
+                if _check_dimensions_and_content(sub_raster, sub_mask, tile_size, min_pixels):
+                    pixel_dict[datamask.class_code] += len(np.where(sub_mask != 0)[0])
+                    if save:
+                        dt = DataTile(sub_raster, sub_mask, datamask.class_code)
+                        dt.to_pickle(training_directory)
     return pixel_dict
 
 
@@ -236,49 +209,14 @@ def _check_dimensions_and_content(sub_raster, sub_mask, tile_size, min_pixels):
     return True
 
 
-def all_matching_shapefiles(to_match, shapefile_directory):
+def all_matching_shapefiles(to_match, shapefile_directory, assign_shapefile_year):
     out = []
     pr = get_shapefile_path_row(to_match)
+    year = assign_shapefile_year(to_match)
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
-        if get_shapefile_path_row(f) == pr:
-            out.append(f)
+        if get_shapefile_path_row(f) == pr and assign_shapefile_year(f) == year:
+                out.append(f)
     return out
-
-
-class DataGen:
-    ''' Infinite data generator. Pulls files from 
-        a directory named "class_dir".
-        Class dir can have multiple directories full of data files
-        in it.
-    '''
-
-    def __init__(self, class_dir, augment=False, random_augment=False):
-        self.file_list = None
-        self.class_dir = class_dir
-        self._get_files()
-        self.n_files = len(self.file_list)
-        self.idx = 0
-        self.shuffled = sample(self.file_list, self.n_files)
-
-    def _get_files(self):
-        self.file_list = [x for x in iglob(self.class_dir + "**", recursive=True)]
-        self.file_list = [x for x in self.file_list if os.path.isfile(x)]
-
-    def next(self):
-        if self.idx == self.n_files:
-            self.idx = 0
-            self.shuffled = sample(self.file_list, self.n_files)
-            out = self.shuffled[self.idx]
-            self.idx += 1
-        else:
-            out = self.shuffled[self.idx]
-            self.idx += 1
-        return self._from_pickle(out)
-    
-    def _from_pickle(self, filename):
-        with open(filename, 'rb') as f:
-            data = pickle.load(f)
-        return data
 
 
 def make_border_labels(mask, border_width):
@@ -327,6 +265,7 @@ class SatDataSequence(Sequence):
             if len(files) != max_instances:
                 if len(files) < (max_instances - len(files)):
                     files *= (max_instances // len(files))
+                    shuffle(files)
                 additional_files = sample(files, max_instances - len(files))
                 self.file_list.extend(additional_files)
 
@@ -439,96 +378,7 @@ def _do_nothing(feature_tile, one_hot, weights):
 def _augment_data(feature_tile, one_hot, weights):
     ''' Applies rotation | lr | ud | lr_ud | flipping, or doesn't. '''
     possible_augments = [_rotate, _flip_ud, _flip_lr, _flip_lr_ud, _do_nothing]
-    possible_augments = [_do_nothing]
     return choice(possible_augments)(feature_tile, one_hot, weights)
-
-
-def generate_unbalanced_data(training_directory='training_data/train/', border_width=2,
-        batch_size=2, class_weights={}, 
-        channels='all', nodata=0, n_classes=5):
-    ''' Assumes data is stored in training_directory '''
-    border_class = len(class_weights.keys()) - 1
-    gen = DataGen(training_directory)
-    while True:
-        masters = []
-        one_hots = []
-        weightings = []
-        tile_shape = None
-        for _ in range(batch_size):
-            tile = gen.next().copy()
-            if tile_shape is None:
-                tile_shape = tile['class_mask'].shape
-            one_hot = np.zeros((tile_shape[1], tile_shape[2], n_classes))
-            weights = np.zeros((tile_shape[1], tile_shape[2]))
-            labels = tile['class_mask'][0]
-            one_hot[:, :, tile['class_code']] = labels
-            weights[labels == 1] = class_weights[tile['class_code']]
-            if tile['class_code'] == 0:
-                border_labels = make_border_labels(tile['class_mask'],
-                        border_width=border_width)
-                one_hot[:, :, border_class] = border_labels
-                weights[border_labels[0] == 1] = class_weights[border_class]
-            m = np.squeeze(tile['data'])
-            m = np.swapaxes(m, 0, 2)
-            m = np.swapaxes(m, 0, 1)
-            masters.append(m)
-            one_hots.append(one_hot)
-            weightings.append(weights)
-
-        yield np.asarray(masters), np.asarray(one_hots), np.asarray(weightings)
-
-
-def generate_training_data(training_directory, threshold=None, sigma=None,
-        w0=None, class_weights={}, channels='all', nodata=0, n_classes=5):
-    ''' Assumes data is stored in training_directory
-    in subdirectories labeled class_n_train with n the class code '''
-    class_dirs = [os.path.join(training_directory, x) for x in os.listdir(training_directory)]
-    if not len(class_dirs):
-        class_dirs = [training_directory]
-    generators = []
-    border_class = len(class_weights.keys())
-    for d in class_dirs:
-        generators.append(DataGen(d))
-    while True:
-        masters = []
-        one_hots = []
-        weightings = []
-        tile_shape = None
-        for _ in range(2):
-            data_tiles = []
-            weighting_dict = {}
-            count_dict = {}
-            for gen in generators:
-                out = gen.next().copy()
-                if tile_shape is None:
-                    tile_shape = out['class_mask'].shape
-                data_tiles.append(out)
-                n_samples = len(np.where(out['class_mask'] != nodata)[0])
-                weighting_dict[out['class_code']] = n_samples
-                count_dict[out['class_code']] = n_samples
-
-            maxx = max(weighting_dict.values())
-            for key in weighting_dict:
-                weighting_dict[key] = maxx / weighting_dict[key]
-            
-            for tile in data_tiles:
-                one_hot = np.zeros((tile_shape[1], tile_shape[2], n_classes))
-                weights = np.zeros((tile_shape[1], tile_shape[2]))
-                labels = tile['class_mask']
-                one_hot[:, :, tile['class_code']] = labels
-                weights[labels == 1] = class_weights[tile['class_code']]
-                if tile['class_code'] == 0:
-                    border_labels = make_border_labels(tile['class_mask'], border_width=2)
-                    one_hot[:, :, border_class] = border_labels
-                    weights[border_labels == 1] = class_weights[border_class]
-
-                m = np.squeeze(tile['data'])
-                m = np.swapaxes(m, 0, 2)
-                masters.append(m)
-                one_hots.append(one_hot)
-                weightings.append(weights)
-
-        yield np.asarray(masters), np.asarray(masks), np.asarray(weightings)
 
 
 if __name__ == '__main__':
