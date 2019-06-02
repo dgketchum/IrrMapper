@@ -3,76 +3,25 @@ import os
 import time
 import pickle
 import matplotlib.pyplot as plt
-from glob import glob, iglob
+import warnings
+from glob import glob
 from random import sample, shuffle, choice
 from scipy.ndimage.morphology import distance_transform_edt
+from rasterio import open as rasopen
+from skimage import transform
+from sat_image.warped_vrt import warp_single_image
+from tensorflow.keras.utils import Sequence
+
 from runspec import mask_rasters
 from data_utils import load_raster, paths_map, stack_rasters
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile
-from rasterio import open as rasopen
-from warnings import warn
-from skimage import transform
-from scipy.ndimage.interpolation import shift
-from sat_image.warped_vrt import warp_single_image
-from tensorflow.keras.utils import Sequence
 
 
 def distance_map(mask):
     mask = mask.copy().astype(bool)
     mask = ~mask # make the non-masked areas masked
     distances = distance_transform_edt(mask) # ask where the closest masked pixel is
-    # distances are always positive, so 1-distances can be very negative.
-    # We're setting the e-folding time with sigma, and the
-    # border pixel value (y-intercept) with w0.
     return distances
-
-
-def weight_map(mask, w0=10, sigma=10):
-    mask = mask.copy().astype(bool)
-    mask = ~mask # make the non-masked areas masked
-    distances = distance_transform_edt(mask) # ask where the closest masked pixel is
-    # distances are always positive, so 1-distances can be very negative.
-    # We're setting the e-folding time with sigma, and the
-    # border pixel value (y-intercept) with w0.
-    return w0*np.exp((1-distances) / sigma)
-
-
-def random_sample(class_mask, n_instances, box_size=0, fill_value=1, nodata=0):
-    if box_size:
-        n_instances /= box_size
-
-    out = np.where(class_mask != nodata)
-    class_mask = class_mask.copy()
-    try:
-        out_x = out[1]
-        out_y = out[2] 
-    except IndexError as e:
-        out_x = out[0]
-        out_y = out[1] 
-
-    indices = np.random.choice(len(out_x), size=n_instances, replace=False)
-    out_x = out_x[indices]
-    out_y = out_y[indices] 
-
-    try:
-        class_mask[:, :, :] = nodata
-        if box_size == 0:
-            class_mask[0, out_x, out_y] = fill_value
-        else:
-            ofs = box_size // 2
-            for x, y in zip(out_x, out_y):
-                class_mask[0, x-ofs:x+ofs+1, y-ofs:y+ofs+1] = fill_value
-
-    except IndexError as e:
-        class_mask[:, :] = nodata
-        if box_size == 0:
-            class_mask[out_x, out_y] = fill_value
-        else:
-            ofs = box_size // 2
-            for x, y in zip(out_x, out_y):
-                class_mask[x-ofs:x+ofs, y-ofs:y+ofs] = fill_value
-
-    return class_mask
 
 
 class DataMask(object):
@@ -106,10 +55,11 @@ class DataTile(object):
 
 
 def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
-    ''' Fmasks are masks of clouds and water. We don't clouds/water in
+    ''' 
+    ``Fmasks'' are masks of clouds and water. We don't want clouds/water in
     the training set, so this function gets all the fmasks for a landsat
     scene (contained in image_directory), and merges them into one raster. 
-    They may not all be the same size, so warp_vrt is used to make them align. 
+    They may not be the same size, so warp_vrt is used to make them align. 
     '''
     paths = []
     for dirpath, dirnames, filenames in os.walk(image_directory):
@@ -118,9 +68,9 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
                 if f.endswith(suffix):
                     paths.append(os.path.join(dirpath, f))
     for fmask_file in paths:
-        fmask, fmeta = load_raster(fmask_file)
+        fmask, _ = load_raster(fmask_file)
         try:
-            class_mask[fmask == 1] = nodata # 0 index is for removing the (1, n, m) dimension.
+            class_mask[fmask == 1] = nodata 
         except (ValueError, IndexError) as e:
             fmask = warp_single_image(fmask_file, class_mask_geo)
             class_mask[fmask == 1] = nodata
@@ -131,7 +81,7 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
 def extract_training_data(shapefile_directory, image_directory,
         training_directory, save=True, tile_size=608,
         assign_shapefile_year=None, assign_shapefile_class_code=None,
-        min_pixels=50, fmask=True, n_classes=4, nodata=0, augment_dict={}):
+        min_pixels=500, fmask=True, n_classes=4, nodata=0, augment_dict={}):
 
     if isinstance(assign_shapefile_year, type(None)):
         raise ValueError("Please provide a function to assign shapefile year.")
@@ -153,15 +103,21 @@ def extract_training_data(shapefile_directory, image_directory,
             p, r = get_shapefile_path_row(f) #TODO: error checking on this function.
             year = assign_shapefile_year(f)
             suffix = '{}_{}_{}'.format(p, r, year) 
+            if not os.path.isdir(os.path.join(image_directory, suffix)):
+                # TODO: Figure out why the warning isn't working.
+                print("Images for {} not in given image directory ({}). Skipping extraction of data for following shapefiles: {}".format(suffix, image_directory, [os.path.basename(x) for x in all_matches]))
+                continue
             paths_mapping = paths_map(os.path.join(image_directory, suffix)) 
             try:
-                master = stack_rasters(paths_mapping, p, r, year)
+                master = stack_rasters(paths_mapping, p, r, year) #todo; error check empty
+                #    paths_mapping
             except Exception as e:
                 print(e)
                 print("Bad image data in", suffix)
                 continue
-            mask_file = paths_mapping['B1.TIF'][0]
+            mask_file = paths_mapping['B1.TIF'][0] #TODO: this shouldn't be hardcoded.
             masks = []
+            # TODO: Only warp fmasks/load them into memory once. 
             for match in all_matches:
                 cc = assign_shapefile_class_code(match)
                 if cc is None:
@@ -178,7 +134,7 @@ def extract_training_data(shapefile_directory, image_directory,
             pixel_dict = _iterate_over_raster(master, masks, pixel_dict, 
                     tile_size=tile_size, save=save, min_pixels=min_pixels,
                     training_directory=training_directory)
-        print("{} of {} shapefiles done. ".format(len(done), len(all_shapefiles)))
+            print("{} of {} shapefiles done. ".format(len(done), len(all_shapefiles)))
 
     return pixel_dict
 
@@ -276,7 +232,8 @@ class SatDataSequence(Sequence):
 
     def on_epoch_end(self):
         self._create_file_list()
-        self.shuffled = sample(self.file_list, self.n_files)
+        shuffle(self.file_list)
+        self.shuffled = self.file_list
 
 
     def __getitem__(self, idx):
@@ -317,6 +274,7 @@ def _preprocess_input_data(data_tiles, class_weights, classes_to_augment=None, b
                     border_width=border_width)
             one_hot[:, :, border_class] = border_labels
             weights[:][border_labels[0] == 1] = class_weights[border_class]
+
         feature_tile = np.squeeze(tile['data'])
         feature_tile = np.swapaxes(feature_tile, 0, 2) # This is necessary b/c tf expects columns_last (GeoTiffs are columns first).
         feature_tile = np.swapaxes(feature_tile, 0, 1)
@@ -377,7 +335,7 @@ def _do_nothing(feature_tile, one_hot, weights):
 
 def _augment_data(feature_tile, one_hot, weights):
     ''' Applies rotation | lr | ud | lr_ud | flipping, or doesn't. '''
-    possible_augments = [_rotate, _flip_ud, _flip_lr, _flip_lr_ud, _do_nothing]
+    possible_augments = [_flip_ud, _flip_lr, _flip_lr_ud, _do_nothing]
     return choice(possible_augments)(feature_tile, one_hot, weights)
 
 

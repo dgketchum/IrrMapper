@@ -105,8 +105,9 @@ class ImageStack(object):
         self.paths_map, self.masks = self._order_images()
 
     def build_evaluating(self):
+        # Multiprocessing on this may not be plausible.
         self.get_landsat(fmask=True)
-        self.profile = self.landsat.rasterio_geometry
+        self.profile = self.landsat.rasterio_geometry # fix this?
         #self.get_et() This doesn't work reliably. 
         self.get_climate_timeseries()
         self.get_terrain()
@@ -207,7 +208,7 @@ class ImageStack(object):
                         print("Saving {}".format(outfile))
                         out_final = gm.conform(out_arr)
                         gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)
-                rmtree(gm.temp_dir)
+                        rmtree(gm.temp_dir)
 
 
     def get_terrain(self):

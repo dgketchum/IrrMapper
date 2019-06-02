@@ -40,7 +40,7 @@ def evaluate_image_many_shot(master_raster, model, num_classes=4, n_overlaps=4, 
                     soft = np.swapaxes(soft, 1, 2)
                     out[j:j+chunk_size, i:i+chunk_size, :] += soft[0]
 
-                stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k / overlap_step, n_overlaps, i / master.shape[1]))
+                stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k // overlap_step + 1, n_overlaps, i / master.shape[1]))
 
     out = np.swapaxes(out, 0, 2)
     out = out.astype(np.float32)
@@ -85,12 +85,13 @@ def evaluate_image_one_shot(master_raster, model, num_classes=4, outfile=None, i
 if __name__ == '__main__':
     master_raster_t = '/home/thomas/share/master_rasters/test/master_raster_37_28_2013.tif'
     master_raster = '/home/thomas/share/master_rasters/train/master_raster_39_27_2013.tif'
-    model_name = 'all_classes_augmented_flips_rotations_90_irr_weight.h5'
+    n_classes = 5
+    model_name = 'augmentation_irr_and_wetlands_no_class_weights.h5'
     model = load_model("models/" + model_name, custom_objects={'tf':tf, '_epsilon':_epsilon, 
         'weighted_loss':weighted_loss})
     outfile = 'compare_model_outputs/new-feed-method/{}_37_28.tif'.format(model_name[:-3])
-    evaluate_image_many_shot(master_raster_t, model, outfile=outfile, num_classes=4)
-    #evaluate_image_one_shot(master_raster_t, model, outfile=outfile, num_classes=4)
+    evaluate_image_many_shot(master_raster_t, model, outfile=outfile, num_classes=n_classes)
+    #evaluate_image_one_shot(master_raster_t, model, outfile=outfile, num_classes=n_classes)
     outfile = 'compare_model_outputs/new-feed-method/{}_39_27.tif'.format(model_name[:-3])
-    evaluate_image_many_shot(master_raster, model, outfile=outfile, num_classes=4)
-    #evaluate_image_one_shot(master_raster, model, outfile=outfile, num_classes=4)
+    evaluate_image_many_shot(master_raster, model, outfile=outfile, num_classes=n_classes)
+    #evaluate_image_one_shot(master_raster, model, outfile=outfile, num_classes=n_classes)

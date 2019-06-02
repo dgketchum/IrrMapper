@@ -5,7 +5,7 @@ import keras.backend as K
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.callbacks import (TensorBoard, ModelCheckpoint, LearningRateScheduler)
-from data_generators import generate_unbalanced_data, SatDataSequence
+from data_generators import SatDataSequence
 from models import unet_same_padding
 
 
@@ -51,11 +51,15 @@ def acc(y_true, y_pred):
 
 def lr_schedule(epoch):
     lr = 1e-4
-    if epoch > 100:
+    if epoch > 150:
+        lr /= 256
+    elif epoch > 100:
+        lr /= 128
+    elif epoch > 50:
         lr /= 64
-    if epoch > 45:
-        lr /= 32.
     elif epoch > 30:
+        lr /= 32.
+    elif epoch > 25:
         lr /= 16.
     elif epoch > 20:
         lr /= 8.
@@ -72,7 +76,7 @@ if __name__ == '__main__':
     n_classes = 5
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/all_data.h5'
+    filepath = './models/augmentation_irr_and_wetlands_no_class_weights.h5'
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
@@ -85,16 +89,18 @@ if __name__ == '__main__':
     model.compile(opt, loss=weighted_loss, metrics=[acc])
     #model.summary() #line_length argument
     # irrigated, uncultivated, unirrigated, wetlands, border
-    # need to make a test set for this class set
-    class_weights = {0:50, 1:1.0, 2:25, 3:50, 4:50} 
-    classes_to_augment = {0:True, 1:False, 2:False, 3:False, 4:False}
+    class_weights = {0:1.0, 1:1.0, 2:1.0, 3:1.0, 4:1.0} 
+    classes_to_augment = {0:True, 1:False, 2:False, 3:True, 4:True}
     batch_size = 3
-    generator = SatDataSequence('training_data/train/', batch_size=batch_size,
+    generator = SatDataSequence('/home/thomas/share/training_data/train/', batch_size=batch_size,
             class_weights=class_weights, classes_to_augment=classes_to_augment)
-    valid_generator = SatDataSequence('training_data/test/', batch_size=batch_size,
-            class_weights=class_weights)
+    valid_generator = SatDataSequence('/home/thomas/share/training_data/test/', 
+            batch_size=batch_size, class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=100,
+            epochs=1000,
+            callbacks=[lr_scheduler, checkpoint, tensorboard],
+            use_multiprocessing=True,
             validation_data=valid_generator,
-            callbacks=[checkpoint, lr_scheduler, tensorboard],
+            workers=12,
+            max_queue_size=20,
             verbose=1)

@@ -17,6 +17,26 @@ def get_features(gdf):
     return features
 
 
+def mask_raster_to_shapefile(shapefile, raster, return_binary=True):
+    ''' Generates a mask with 1 everywhere 
+    shapefile data is present and a no_data value everywhere else.
+    no_data is -1 in this case, as it is never a valid class label.
+    Switching coordinate reference systems is important here, or 
+    else the masking won't work.
+    '''
+    shp = gpd.read_file(shapefile)
+    shp = shp[shp.geometry.notnull()]
+    with rasopen(raster, 'r') as src:
+        shp = shp.to_crs(src.crs)
+        features = get_features(shp)
+        arr = src.read()
+        out_image, out_transform = mask(src, shapes=features)
+        if return_binary:
+            out_image[out_image != 0] = 1 
+        meta = src.meta
+    return out_image, meta
+
+
 def generate_class_mask(shapefile, master_raster, nodata=-1):
     ''' Generates a mask with 1 everywhere 
     shapefile data is present and a no_data value everywhere else.
@@ -46,7 +66,7 @@ def get_shapefile_lat_lon(shapefile):
     return latc, lonc 
 
 
-def construct_kdtree(wrs2):
+def _construct_kdtree(wrs2):
     centroids = []
     path_rows = [] # a mapping
     features = []
@@ -90,16 +110,15 @@ def get_pr_subset(poly, tiles):
     return ls
 
 
-def filter_shapefile(shapefile, out_directory): 
+def filter_shapefile_overlapping(shapefile, save=False, out_directory=None): 
     """ Shapefiles may span multiple path/rows/years.
     For training, we want all of the data available.
     This function filters the polygons contained in
     the shapefile into separate files for each path/row/year
     contained in the shapefile. """
-    # Problem: Not every polygon has a year attribute.
-    path_row_year_map = defaultdict(list)
+    path_row_map = defaultdict(list)
     wrs2 = fopen('../spatial_data/wrs2_descending_usa.shp', 'r')
-    tree, path_rows, features = construct_kdtree(wrs2)
+    tree, path_rows, features = _construct_kdtree(wrs2)
     wrs2.close()
 
     cent_arr = array([0, 0])
@@ -116,20 +135,23 @@ def filter_shapefile(shapefile, out_directory):
             prs = get_pr_subset(poly, tiles) # gets the matching path/rows
 
             for p in prs:
-                path_row_year_map[p].append(feat)
+                path_row_map[p].append(feat)
+
+    if not save:
+        return path_row_map
 
     outfile = os.path.basename(shapefile)
     outfile = os.path.splitext(outfile)[0]
 
-    for path_row_year in path_row_year_map:
-        out = outfile + path_row_year + ".shp"
+    for path_row in path_row_map:
+        out = outfile + path_row + ".shp"
         with fopen(os.path.join(out_directory, out), 'w', **meta) as dst:
             print("Saving {}".format(out))
-            for feat in path_row_year_map[path_row_year]:
+            for feat in path_row_map[path_row]:
                 dst.write(feat)
 
 
-def split_shapefile(base, base_shapefile, data_directory):
+def filter_shapefile_non_overlapping(base, base_shapefile, data_directory):
     """
     Shapefiles may deal with data over multiple path/rows.
     This is a method to get the minimum number of
@@ -140,7 +162,7 @@ def split_shapefile(base, base_shapefile, data_directory):
     id_mapping = {}
     # TODO: un hardcode this directory.
     wrs2 = fopen('../spatial_data/wrs2_descending_usa.shp', 'r')
-    tree, path_rows, features = construct_kdtree(wrs2)
+    tree, path_rows, features = _construct_kdtree(wrs2)
     wrs2.close()
 
     cent_arr = array([0, 0])
@@ -248,7 +270,6 @@ def required_points(shapefile, total_area, total_instances):
 
 
 def buffer_shapefile(shp):
-
     buf = -0.00050
     with fopen(shp, 'r') as polys:
         out = []
@@ -259,8 +280,8 @@ def buffer_shapefile(shp):
                 dst.write(feat)
 
 if __name__ == '__main__':
-
     from glob import glob
-    out_dir = 'shapefile_data/western_us/split_shapefiles/'
-    for f in glob("/home/thomas/IrrigationGIS/western_states_irrgis/western_gis_backup/non-irrigated-reprojected/" + '*.shp'):
-        filter_shapefile(f, out_dir)
+    out_dir = '/home/thomas/IrrigationGIS/UT_CO_MT_WY_split/'
+    for f in glob('/home/thomas/IrrigationGIS/UT_CO_MT_WY/' + "*.shp"):
+        if 'unirrigated' in f:
+            filter_shapefile(f, out_dir)
