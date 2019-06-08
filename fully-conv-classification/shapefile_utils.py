@@ -110,6 +110,35 @@ def get_pr_subset(poly, tiles):
     return ls
 
 
+def clip_shapefile_to_geometry(shapefile, clip_shapefile, out_filename, outside_filename,
+        out_directory): 
+    """ Mask a shapefile with another shapefile."""
+
+    intersection = []
+    outside = []
+    with fopen(shapefile, "r") as src:
+        meta = deepcopy(src.meta)
+        with fopen(clip_shapefile) as clip_with:
+            for feat in src:
+                poly = shape(feat['geometry'])
+                for clip_feat in clip_with:
+                    clip_poly = shape(clip_feat['geometry'])
+                    if poly.within(clip_poly):
+                        intersection.append(feat)
+                    else:
+                        outside.append(feat)
+
+    with fopen(os.path.join(out_directory, out_filename), 'w', **meta) as dst:
+        print("Saving {}".format(out_filename))
+        for feat in intersection:
+            dst.write(feat)
+
+    with fopen(os.path.join(out_directory, outside_filename), 'w', **meta) as dst:
+        print("Saving {}".format(outside_filename))
+        for feat in outside:
+            dst.write(feat)
+
+
 def filter_shapefile_overlapping(shapefile, save=False, out_directory=None): 
     """ Shapefiles may span multiple path/rows/years.
     For training, we want all of the data available.
@@ -281,7 +310,13 @@ def buffer_shapefile(shp):
 
 if __name__ == '__main__':
     from glob import glob
-    out_dir = '/home/thomas/IrrigationGIS/UT_CO_MT_WY_split/'
-    for f in glob('/home/thomas/IrrigationGIS/UT_CO_MT_WY/' + "*.shp"):
-        if 'unirrigated' in f:
-            filter_shapefile(f, out_dir)
+
+    pth = '/home/thomas/IrrigationGIS/western_states_irrgis/reprojected_western_gis/post-2013'
+    wrs2 = '/home/thomas/IrrMapper/spatial_data/wrs2_descending_test_path_rows.shp'
+    for f in glob(pth + "/*.shp"):
+        out_directory = 'shapefile_data/'
+        filename, _ = os.path.splitext(f)
+        filename = os.path.basename(filename)
+        test_file = filename + "_test.shp"
+        train_file = filename + "_train.shp"
+        clip_shapefile_to_geometry(f, wrs2, test_file, train_file, out_directory)
