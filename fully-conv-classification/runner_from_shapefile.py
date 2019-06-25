@@ -5,6 +5,7 @@ from pprint import pprint
 import time
 from numpy import save as nsave
 from fiona import open as fopen
+from rasterio.errors import RasterioIOError
 from collections import defaultdict, OrderedDict
 from random import choice
 from shapely.geometry import shape
@@ -86,22 +87,67 @@ if __name__ == "__main__":
     # 2. Download images over shapefiles
     # 3. Extract training data
     # 4. Train network.
-
     # Need to download images.
 
+    mt_path = [42, 41, 40, 39, 38, 37, 36, 35, 42, 41, 40, 39, 38, 37, 36, 35, 41, 40, 39, 38, 37,
+            36, 35, 34, 40, 39, 38, 37, 36, 35, 34]
+    mt_row = [26, 26, 26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
+            28, 28, 28, 29, 29, 29, 29, 29, 29, 29]
+    years = [2013, 2014, 2015, 2016, 2017, 2018, 2019]
     shapefile_directory = '/home/thomas/IrrigationGIS/western_states_irrgis/reprojected_western_gis/post-2013'
+    print(len(mt_path), len(mt_row))
     image_directory = '/home/thomas/share/image_data/train/'
+    for year in years:
+        for path, row in zip(mt_path, mt_row):
+            for attempt in range(60):
+                try:
+                    print(path, row, year)
+                    download_from_pr(path, row, year, image_directory)
+                    break
+                except Exception as e:
+                    print("EE_------------------------------------------")
+                    print(e)
+                    if type(e) == RasterioIOError:
+                        print(e)
+                        string = e.args[0]
+                        first = string.find('/')
+                        end = string[first:]
+                        end = end[:end.find(',')]
+                        os.remove(end)
+                    time.sleep(2)
+                    print("EE_------------------------------------------")
+
+
     shapefiles = [f for f in glob(os.path.join(shapefile_directory, "*.shp"))]
-    for f in shapefiles:
-        print("Downloading images for {}".format(f))
-        path_row_map = filter_shapefile_overlapping(f)
-        year = assign_shapefile_year(f)
-        for path_row in path_row_map:
-            path = int(path_row[0:2])
-            row = int(path_row[-2:])
-            try:
-                print(path, row, year)
-                download_from_pr(path, row, year, image_directory)
-            except Exception as e:
-                print(e)
-                time.sleep(3)
+
+
+
+#    for f in shapefiles:
+#        print("Downloading images for {}".format(f))
+#        path_row_map = filter_shapefile_overlapping(f)
+#        year = assign_shapefile_year(f)
+#        for i, path_row in enumerate(path_row_map):
+#            path, row = path_row.split('_')
+#            for attempt in range(60):
+#                try:
+#                    print(path, row, year, "{} of {} path/rows done.".format(i+1, len(path_row_map)))
+#                    download_from_pr(path, row, year, image_directory)
+#                    break
+#                except Exception as e:
+#                    if type(e) == RasterioIOError:
+#                        print(e)
+#                        string = e.args[0]
+#                        first = string.find('/')
+#                        end = string[first:]
+#                        end = end[:end.find(',')]
+#                        os.remove(end)
+
+
+
+
+
+
+
+
+
+

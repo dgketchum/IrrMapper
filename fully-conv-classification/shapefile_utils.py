@@ -123,7 +123,7 @@ def clip_shapefile_to_geometry(shapefile, clip_shapefile, out_filename, outside_
                 poly = shape(feat['geometry'])
                 for clip_feat in clip_with:
                     clip_poly = shape(clip_feat['geometry'])
-                    if poly.within(clip_poly):
+                    if clip_poly.contains(poly):
                         intersection.append(feat)
                     else:
                         outside.append(feat)
