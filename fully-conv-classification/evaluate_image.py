@@ -1,15 +1,34 @@
 import os
 import numpy as np
+import matplotlib.pyplot as plt
+import keras.backend as K
 import tensorflow as tf
-from data_utils import clip_rasters, save_raster, stack_rasters, paths_map
+import pdb
 from sys import stdout
 from tensorflow.keras.models import load_model
-from data_generators import load_raster
-import matplotlib.pyplot
-import keras.backend as K
+from glob import glob
+from rasterio.errors import RasterioIOError
+
+from data_utils import save_raster, stack_rasters, paths_map, load_raster, clip_raster
 from fully_conv import weighted_loss, weighted_focal_loss
+from data_generators import concatenate_fmasks
+
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
+
+def fmask_evaluated_image(evaluated_image, path, row, year, landsat_directory):
+    image, meta = load_raster(evaluated_image)
+    suffix = str(path) + '_' + str(row) + '_' + str(year)
+    image_subdirectory = os.path.join(landsat_directory, suffix)
+    temp_mask = np.expand_dims(np.zeros_like(image)[0], 0)
+    meta.update(count=1)
+    masked_image = concatenate_fmasks(image_subdirectory, temp_mask, meta, nodata=1)
+    for i in range(image.shape[0]):
+        image[i, :, :][masked_image[0]==1] = np.nan
+    meta.update(count=image.shape[0])
+    meta.update(nodata=np.nan)
+    return image, meta
+    
 
 def evaluate_image_many_shot(path, row, year, image_directory, model, num_classes=4, n_overlaps=4, outfile=None, ii=None):
     ''' To recover from same padding, slide many different patches over the image. '''
@@ -60,19 +79,39 @@ if __name__ == '__main__':
     mt_row = [26, 26, 26, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 28, 28, 28, 28, 28,
             28, 28, 28, 29, 29, 29, 29, 29, 29, 29]
     years = [2013, 2014, 2015, 2016, 2017, 2018, 2019]
-    n_classes = 5
-    model_name = 'augmentation_irr_and_wetlands_no_class_weights.h5'
-    image_directory = '/home/thomas/share/image_data/train/'
-    save_directory = '/home/thomas/share/evaluated_mt/'
-    model = load_model("models/" + model_name, custom_objects={'tf':tf, '_epsilon':_epsilon, 
-        'weighted_loss':weighted_loss})
-    for year in years:
-        for path, row in zip(mt_path, mt_row):
-            print("Evaluating", path, row, year)
-            suffix = 'irr_{}_{}_{}.tif'.format(path, row, year) 
-            outfile = os.path.join(save_directory, suffix)
-            if not os.path.isfile(outfile):
-                evaluate_image_many_shot(path, row, year, image_directory,
-                    model, outfile=outfile, num_classes=n_classes)
-            else:
-                print("Image {} already exists.".format(outfile))
+
+    landsat_directory = '/home/thomas/share/image_data/train/'
+    save_directory = '/home/thomas/share/fmask_evaluated_mt/'
+    for f in glob("/home/thomas/share/evaluated_mt/" + "*.tif"):
+        _, path, row, year = os.path.basename(f).split('_')
+        year = year[:-4]
+        outfile = os.path.join(save_directory, os.path.basename(f))
+        if not os.path.isfile(outfile):
+            print(path, row, year)
+            try:
+                out, meta = fmask_evaluated_image(f, path, row, year, landsat_directory)
+                save_raster(out, outfile, meta)
+                clip_raster(outfile, int(path), int(row))
+            except RasterioIOError as e:
+                print(e)
+
+    # n_classes = 5
+    # model_name = 'augmentation_irr_and_wetlands_no_class_weights.h5'
+    # image_directory = '/home/thomas/share/image_data/train/'
+    # save_directory = '/home/thomas/share/evaluated_mt/'
+    # model = load_model("models/" + model_name, custom_objects={'tf':tf, '_epsilon':_epsilon, 
+    #     'weighted_loss':weighted_loss})
+    # for year in years:
+    #     for path, row in zip(mt_path, mt_row):
+    #         print("Evaluating", path, row, year)
+    #         suffix = 'irr_{}_{}_{}.tif'.format(path, row, year) 
+    #         outfile = os.path.join(save_directory, suffix)
+    #         if not os.path.isfile(outfile):
+    #             try:
+    #                 evaluate_image_many_shot(path, row, year, image_directory,
+    #                     model, outfile=outfile, num_classes=n_classes)
+    #             except Exception as e:
+    #                 print(e)
+    #                 continue
+    #         else:
+    #             print("Image {} already exists.".format(outfile))

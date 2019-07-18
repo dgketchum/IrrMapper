@@ -141,13 +141,3 @@ if __name__ == "__main__":
 #                        end = string[first:]
 #                        end = end[:end.find(',')]
 #                        os.remove(end)
-
-
-
-
-
-
-
-
-
-

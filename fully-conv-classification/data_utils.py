@@ -228,17 +228,6 @@ def download_images(project_directory, path, row, year, satellite=8, n_landsat=3
     return image_stack
 
 
-def clip_rasters(evaluated_tif_dir, include_string):
-    for f in glob(os.path.join(evaluated_tif_dir, "*.tif")):
-        if include_string in f:
-            out = os.path.basename(f)
-            out = out[out.find("_")+1:]
-            out = out[out.find("_")+1:]
-            out = out[out.find("_")+1:]
-            path = out[:2]
-            row = out[3:5]
-            clip_raster(f, int(path), int(row), outfile=f)
-
 def get_wrs2_features(path, row):
 
     with fopen(WRS2) as src:
@@ -356,7 +345,6 @@ def clip_raster(evaluated, path, row, outfile=None):
     shp = gpd.read_file(WRS2)
     out = shp[shp['PATH'] == path]
     out = out[out['ROW'] == row]
-
 
     with rasopen(evaluated, 'r') as src:
         out = out.to_crs(src.crs)
