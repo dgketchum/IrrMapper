@@ -6,7 +6,7 @@ from copy import deepcopy
 from fiona import open as fopen
 from rasterio.mask import mask
 from rasterio import open as rasopen
-from shapely.geometry import shape, mapping
+from shapely.geometry import shape, mapping, Polygon
 from sklearn.neighbors import KDTree
 from collections import defaultdict
 
@@ -30,9 +30,26 @@ def mask_raster_to_shapefile(shapefile, raster, return_binary=True):
         shp = shp.to_crs(src.crs)
         features = get_features(shp)
         arr = src.read()
-        out_image, out_transform = mask(src, shapes=features)
+        out_image, out_transform = mask(src, shapes=features, filled=False)
         if return_binary:
             out_image[out_image != 0] = 1 
+        meta = src.meta
+    return out_image, meta
+
+
+def mask_raster_to_features(raster, features, features_meta):
+    # This function is useful when you don't have access to the 
+    # file from which the features came or if the file doesn't exist.
+
+    gdf = gpd.GeoDataFrame.from_features(features, features_meta) # do I need
+    # the whole metadata?
+    gdf = gdf[gdf.geometry.notnull()]
+    with rasopen(raster, 'r') as src:
+        shp = gdf.to_crs(src.crs)
+        features = get_features(shp)
+        arr = src.read()
+        out_image, out_transform = mask(src, shapes=features)
+        out_image[out_image != 0] = 1 
         meta = src.meta
     return out_image, meta
 
@@ -139,7 +156,7 @@ def clip_shapefile_to_geometry(shapefile, clip_shapefile, out_filename, outside_
             dst.write(feat)
 
 
-def filter_shapefile_overlapping(shapefile, save=False, out_directory=None): 
+def filter_shapefile_overlapping(shapefile, out_directory=None): 
     """ Shapefiles may span multiple path/rows/years.
     For training, we want all of the data available.
     This function filters the polygons contained in
@@ -166,14 +183,14 @@ def filter_shapefile_overlapping(shapefile, save=False, out_directory=None):
             for p in prs:
                 path_row_map[p].append(feat)
 
-    if not save:
-        return path_row_map
+    if out_directory is None:
+        return path_row_map, meta
 
     outfile = os.path.basename(shapefile)
     outfile = os.path.splitext(outfile)[0]
 
     for path_row in path_row_map:
-        out = outfile + path_row + ".shp"
+        out = outfile + "_" + path_row + ".shp"
         with fopen(os.path.join(out_directory, out), 'w', **meta) as dst:
             print("Saving {}".format(out))
             for feat in path_row_map[path_row]:
@@ -266,7 +283,13 @@ def get_shapefile_path_row(shapefile):
     # strip extension
     # TODO: Find some way to update shapefile metadata
     shp = shapefile[-9:-4].split("_")
-    return int(shp[0]), int(shp[1])
+    try:
+        p = int(shp[0])
+        r = int(shp[1])
+    except ValueError:
+        p = int(shp[1])
+        r = int(shp[2])
+    return p, r
 
 
 def shapefile_area(shapefile):
@@ -309,14 +332,5 @@ def buffer_shapefile(shp):
                 dst.write(feat)
 
 if __name__ == '__main__':
-    from glob import glob
+    pass
 
-    pth = '/home/thomas/IrrigationGIS/western_states_irrgis/reprojected_western_gis/post-2013'
-    wrs2 = '/home/thomas/IrrMapper/spatial_data/wrs2_descending_test_path_rows.shp'
-    for f in glob(pth + "/*.shp"):
-        out_directory = 'shapefile_data/'
-        filename, _ = os.path.splitext(f)
-        filename = os.path.basename(filename)
-        test_file = filename + "_test.shp"
-        train_file = filename + "_train.shp"
-        clip_shapefile_to_geometry(f, wrs2, test_file, train_file, out_directory)

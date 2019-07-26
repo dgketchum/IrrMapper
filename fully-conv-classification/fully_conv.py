@@ -76,7 +76,7 @@ if __name__ == '__main__':
     n_classes = 5
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/augmentation_irr_and_wetlands_no_class_weights.h5'
+    filepath = './models/whoknows.h5'
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     valid_generator = SatDataSequence('/home/thomas/share/training_data/test/', 
             batch_size=batch_size, class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=1000,
+            epochs=2,
             callbacks=[lr_scheduler, checkpoint, tensorboard],
             use_multiprocessing=True,
             validation_data=valid_generator,
