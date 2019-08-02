@@ -50,57 +50,70 @@ def acc(y_true, y_pred):
 
 
 def lr_schedule(epoch):
-    lr = 1e-4
-    if epoch > 150:
+    lr = 1e-2
+    if epoch > 15:
         lr /= 256
-    elif epoch > 100:
+    elif epoch > 13:
         lr /= 128
-    elif epoch > 50:
+    elif epoch > 11:
         lr /= 64
-    elif epoch > 30:
+    elif epoch > 9:
         lr /= 32.
-    elif epoch > 25:
+    elif epoch > 7:
         lr /= 16.
-    elif epoch > 20:
+    elif epoch > 5:
         lr /= 8.
-    elif epoch > 15:
+    elif epoch > 3:
         lr /= 4.
-    elif epoch > 10:
+    elif epoch > 1:
         lr /= 2.
     print('Learning rate: ', lr)
     return lr
 
 
+class Model(object):
+
+    def __init__(self, model, weights, augmentation_dict, n_classes):
+        self.dict = {}
+        self.model = model
+        self.dict['weights'] = weights
+        self.dict['augmentation_dict'] = augmentation_dict
+        self.dict['n_classes'] = n_classes
+
+
 if __name__ == '__main__':
 
-    n_classes = 5
+    n_classes = 6
     input_shape = (None, None, 51)
     weight_shape = (None, None, n_classes)
-    filepath = './models/whoknows.h5'
+    filepath = './models/template_to_fill_in/model.h5'
+    tb_path = './models/template_to_fill_in/graphs/'
+    if not os.path.isdir(tb_path):
+        os.makedirs(tb_path)
     # Prepare callbacks for model saving and for learning rate adjustment.
     checkpoint = ModelCheckpoint(filepath=filepath,
                                  monitor='val_acc',
                                  verbose=1,
                                  save_best_only=True)
-    tensorboard = TensorBoard(log_dir='graphs/{}'.format(time.time()))
+    tensorboard = TensorBoard(log_dir=tb_path)
     lr_scheduler = LearningRateScheduler(lr_schedule)
     model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=5)
     opt = tf.keras.optimizers.Adam()
     model.compile(opt, loss=weighted_loss, metrics=[acc])
-    #model.summary() #line_length argument
+    # model.summary() #line_length argument
     # irrigated, uncultivated, unirrigated, wetlands, border
-    class_weights = {0:1.0, 1:1.0, 2:1.0, 3:1.0, 4:1.0} 
-    classes_to_augment = {0:True, 1:False, 2:False, 3:True, 4:True}
+    class_weights = {0:1, 1:1.0, 2:1.0, 3:1, 4:1.0, 5:1} 
+    classes_to_augment = {0:True, 1:False, 2:False, 3:True, 4:True, 5:False}
     batch_size = 3
     generator = SatDataSequence('/home/thomas/share/training_data/train/', batch_size=batch_size,
             class_weights=class_weights, classes_to_augment=classes_to_augment)
     valid_generator = SatDataSequence('/home/thomas/share/training_data/test/', 
             batch_size=batch_size, class_weights=class_weights)
     model.fit_generator(generator,
-            epochs=2,
+            epochs=20,
             callbacks=[lr_scheduler, checkpoint, tensorboard],
-            use_multiprocessing=True,
+            use_multiprocessing=False,
             validation_data=valid_generator,
-            workers=12,
+            workers=1,
             max_queue_size=20,
             verbose=1)

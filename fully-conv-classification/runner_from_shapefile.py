@@ -4,12 +4,7 @@ import time
 import pdb
 from glob import glob
 from pprint import pprint
-from numpy import save as nsave
-from fiona import open as fopen
-from rasterio.errors import RasterioIOError
 from collections import defaultdict, OrderedDict
-from random import choice
-from shapely.geometry import shape
 from multiprocessing import Pool
 
 from shapefile_utils import filter_shapefile_overlapping
@@ -55,9 +50,12 @@ if __name__ == "__main__":
     image_directory = '/home/thomas/share/image_data/train/'
     training_data_directory = '/home/thomas/share/training_data/train/'
     test_data_directory = '/home/thomas/share/training_data/test/'
-    fs = [f for f in glob(in_train_shapefile_directory + "*.shp")]
-    tf = [split_out_train_shapefile_directory] * len(fs)
-
+    # fs = [f for f in glob(in_test_shapefile_directory + "*.shp")]
+    # tf = [split_out_test_shapefile_directory] * len(fs)
+    # with Pool() as pool:
+    #     pool.starmap(filter_shapefile_overlapping, zip(fs, tf))
+    # fs = [f for f in glob(in_train_shapefile_directory + "*.shp")]
+    # tf = [split_out_train_shapefile_directory] * len(fs)
     # with Pool() as pool:
     #     pool.starmap(filter_shapefile_overlapping, zip(fs, tf))
     extract_training_data_v2(split_out_train_shapefile_directory, image_directory,

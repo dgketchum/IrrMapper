@@ -36,9 +36,9 @@ def download_images_over_shapefile(shapefile, image_directory, year):
         satellite = 7
     if not os.path.isdir(landsat_dir):
         os.mkdir(landsat_dir)
-        ims = download_images(landsat_dir, p, r, year, satellite)
+        ims = _download_images(landsat_dir, p, r, year, satellite)
     else:
-        ims = download_images(landsat_dir, p, r, year, satellite)
+        ims = _download_images(landsat_dir, p, r, year, satellite)
 
     return ims
 
@@ -46,6 +46,8 @@ def download_images_over_shapefile(shapefile, image_directory, year):
 def download_from_pr(p, r, year, image_directory):
     '''Downloads p/r corresponding to the location of 
        the shapefile, and creates master raster'''
+    # TODO: add rasterioIOError error checking
+    # and resolution here.
     suff = str(p) + '_' + str(r) + "_" + str(year)
     landsat_dir = os.path.join(image_directory, suff)
     satellite = 8
@@ -53,10 +55,21 @@ def download_from_pr(p, r, year, image_directory):
         satellite = 7
     if not os.path.isdir(landsat_dir):
         os.mkdir(landsat_dir)
-        ims = download_images(landsat_dir, p, r, year, satellite)
+        ims = _download_images(landsat_dir, p, r, year, satellite)
     else:
-        ims = download_images(landsat_dir, p, r, year, satellite)
+        ims = _download_images(landsat_dir, p, r, year, satellite)
     return ims
+
+
+def _download_images(project_directory, path, row, year, satellite=8, n_landsat=3, 
+        max_cloud_pct=40):
+
+    image_stack = ImageStack(satellite=satellite, path=path, row=row, root=project_directory,
+            max_cloud_pct=max_cloud_pct, n_landsat=n_landsat, year=year)
+
+    image_stack.build_evaluating() # the difference b/t build_training() and build_eval() is
+    # a cloud mask.
+    return image_stack
 
 
 def _parse_landsat_capture_date(landsat_scene):
@@ -273,12 +286,18 @@ def clip_raster(evaluated, path, row, outfile=None):
 
     with rasopen(evaluated, 'r') as src:
         out = out.to_crs(src.crs)
-        meta = src.meta.copy()
         features = get_features(out)
+        # if crop == true for mask, you have to update the metadata.
         out_image, out_transform = mask(src, shapes=features, crop=True, nodata=nan)
+        meta = src.meta.copy()
+        count = out_image.shape[0]
 
-    outfile = evaluated
-    save_raster(out_image, outfile, meta)
+    meta.update({"driver": "GTiff",
+                 "height": out_image.shape[1],
+                 "width": out_image.shape[2],
+                 "transform": out_transform})
+    if outfile is not None:
+        save_raster(out_image, outfile, meta, count)
 
 
 def save_raster(arr, outfile, meta, count=5):
