@@ -7,6 +7,8 @@ import numpy as np
 from tensorflow.keras.callbacks import (TensorBoard, ModelCheckpoint, LearningRateScheduler)
 from data_generators import SatDataSequence
 from models import unet_same_padding
+config = tf.ConfigProto()
+config.gpu_options.allow_growth
 
 
 def weighted_loss(target, output):
@@ -102,7 +104,7 @@ if __name__ == '__main__':
     model.compile(opt, loss=weighted_loss, metrics=[acc])
     # model.summary() #line_length argument
     # irrigated, uncultivated, unirrigated, wetlands, border
-    class_weights = {0:1, 1:1.0, 2:1.0, 3:1, 4:1.0, 5:1} 
+    class_weights = {0:100, 1:1.0, 2:1.0, 3:100, 4:100.0, 5:1.0} 
     classes_to_augment = {0:True, 1:False, 2:False, 3:True, 4:True, 5:False}
     batch_size = 3
     generator = SatDataSequence('/home/thomas/share/training_data/train/', batch_size=batch_size,
@@ -112,8 +114,8 @@ if __name__ == '__main__':
     model.fit_generator(generator,
             epochs=20,
             callbacks=[lr_scheduler, checkpoint, tensorboard],
-            use_multiprocessing=False,
+            use_multiprocessing=True,
             validation_data=valid_generator,
-            workers=1,
+            workers=12,
             max_queue_size=20,
             verbose=1)

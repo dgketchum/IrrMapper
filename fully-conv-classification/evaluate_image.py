@@ -31,10 +31,12 @@ def fmask_evaluated_image(evaluated_image, path, row, year, landsat_directory):
     return image, meta
     
 
-def evaluate_image_many_shot(path, row, year, image_directory, model, num_classes=4, n_overlaps=4, outfile=None, ii=None):
+def evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=4, n_overlaps=4, outfile=None, ii=None):
     ''' To recover from same padding, slide many different patches over the image. '''
-    suffix = '{}_{}_{}'.format(path, row, year) 
+    suffix = '{}_{}_{}'.format(path, row, year)
     image_path = os.path.join(image_directory, suffix)
+    model = load_model(model_path, custom_objects={'weighted_loss':weighted_loss, 'tf':tf,
+        '_epsilon':_epsilon})
     if not os.path.isdir(image_path):
         print('Images not downloaded for {}'.format(image_path))
         return
@@ -45,23 +47,26 @@ def evaluate_image_many_shot(path, row, year, image_directory, model, num_classe
     except Exception as e:
         print(e)
         return
-    class_mask = np.ones((master.shape[1], master.shape[2], num_classes)) # Just a placeholder
-    out = np.zeros((master.shape[2], master.shape[1], num_classes))
+    class_mask = np.ones((1, image_stack.shape[2], image_stack.shape[1], num_classes)) # Just a placeholder
+    out = np.zeros((image_stack.shape[2], image_stack.shape[1], num_classes))
     image_stack = np.swapaxes(image_stack, 0, 2)
+    image_stack = np.expand_dims(image_stack, 0)
+    imshow(image_stack[0, :, :, 9])
+    show()
     chunk_size = 608
     diff = 608
     stride = 608
     overlap_step = 10
     for k in range(0, n_overlaps*overlap_step, overlap_step):
-        for i in range(k, master.shape[1]-diff, stride):
-            for j in range(k, master.shape[2]-diff, stride):
-                sub_master = master[i:i+chunk_size, j:j+chunk_size, :]
-                sub_mask = class_mask[i:i+chunk_size, j:j+chunk_size, :]
-                preds = model.predict([sub_master, sub_mask]) 
+        for i in range(k, image_stack.shape[1]-diff, stride):
+            for j in range(k, image_stack.shape[2]-diff, stride):
+                sub_image_stack = image_stack[:, i:i+chunk_size, j:j+chunk_size, :]
+                sub_mask = class_mask[:, i:i+chunk_size, j:j+chunk_size, :]
+                preds = model.predict([sub_image_stack, sub_mask]) 
                 preds = np.exp(preds)
                 soft = preds / np.sum(preds, axis=-1, keepdims=True)
-                out[j:j+chunk_size, i:i+chunk_size, :] += soft[0]
-            stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k // overlap_step + 1, n_overlaps, i / master.shape[1]))
+                out[i:i+chunk_size, j:j+chunk_size, :] += soft[0]
+            stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k // overlap_step + 1, n_overlaps, i / image_stack.shape[1]))
     out = np.swapaxes(out, 0, 2)
     out = out.astype(np.float32)
     temp_mask = np.zeros((1, out.shape[1], out.shape[2]))
@@ -77,9 +82,10 @@ def evaluate_image_many_shot(path, row, year, image_directory, model, num_classe
 
 if __name__ == '__main__':
 
-    path = 39
-    row = 27
+    path = 37
+    row = 28
     year = 2013
     image_directory = "/home/thomas/share/image_data/train/"
-    model = 'models/train_test_montana/2019-08-01-77pacc.h5'
-    evaluate_image_many_shot(path, row, year, image_directory, model, num_classes=6, n_overlaps=1, outfile='testing_trained_model.tif')
+    model_path = '/home/thomas/IrrMapper/fully-conv-classification/models/2019-03-08_40pacc_all_unit_weights/model.h5'
+    evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=6,
+            n_overlaps=1, outfile='bad_accuracy.tif')
