@@ -6,6 +6,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras.callbacks import (TensorBoard, ModelCheckpoint, LearningRateScheduler)
 from data_generators import SatDataSequence
+from functools import partial
 from models import unet_same_padding
 config = tf.ConfigProto()
 config.gpu_options.allow_growth
@@ -51,8 +52,8 @@ def acc(y_true, y_pred):
     return K.mean(K.equal(y_t_arg_mask, y_arg_mask))
 
 
-def lr_schedule(epoch):
-    lr = 1e-2
+def lr_schedule(epoch, initial_learning_rate):
+    lr = 0.0001
     if epoch > 15:
         lr /= 256
     elif epoch > 13:
@@ -73,23 +74,14 @@ def lr_schedule(epoch):
     return lr
 
 
-class Model(object):
-
-    def __init__(self, model, weights, augmentation_dict, n_classes):
-        self.dict = {}
-        self.model = model
-        self.dict['weights'] = weights
-        self.dict['augmentation_dict'] = augmentation_dict
-        self.dict['n_classes'] = n_classes
-
-
 if __name__ == '__main__':
 
     n_classes = 6
     input_shape = (None, None, 51)
+    initial_learning_rate = 1e-4
     weight_shape = (None, None, n_classes)
     filepath = './models/template_to_fill_in/model.h5'
-    tb_path = './models/template_to_fill_in/graphs/'
+    tb_path = './models/template_to_fill_in/' + str(time.time())
     if not os.path.isdir(tb_path):
         os.makedirs(tb_path)
     # Prepare callbacks for model saving and for learning rate adjustment.
@@ -97,22 +89,33 @@ if __name__ == '__main__':
                                  monitor='val_acc',
                                  verbose=1,
                                  save_best_only=True)
-    tensorboard = TensorBoard(log_dir=tb_path)
-    lr_scheduler = LearningRateScheduler(lr_schedule)
+    tensorboard = TensorBoard(log_dir=tb_path, update_freq=30, profile_batch=0)
+    lr_schedule_func = partial(lr_schedule, initial_learning_rate=initial_learning_rate)
+    lr_scheduler = LearningRateScheduler(lr_schedule_func)
     model = unet_same_padding(input_shape, weight_shape, n_classes=n_classes, initial_exp=5)
     opt = tf.keras.optimizers.Adam()
     model.compile(opt, loss=weighted_loss, metrics=[acc])
     # model.summary() #line_length argument
     # irrigated, uncultivated, unirrigated, wetlands, border
-    class_weights = {0:100, 1:1.0, 2:1.0, 3:100, 4:100.0, 5:1.0} 
-    classes_to_augment = {0:True, 1:False, 2:False, 3:True, 4:True, 5:False}
+    class_weights = {0:1, 1:1.0, 2:1.0, 3:1, 4:1.0, 5:1} 
+    classes_to_augment = {0:False, 1:False, 2:False, 3:False, 4:False, 7:False}
     batch_size = 3
-    generator = SatDataSequence('/home/thomas/share/training_data/train/', batch_size=batch_size,
-            class_weights=class_weights, classes_to_augment=classes_to_augment)
-    valid_generator = SatDataSequence('/home/thomas/share/training_data/test/', 
-            batch_size=batch_size, class_weights=class_weights)
+    balance = True
+    generator = SatDataSequence('/home/thomas/ssd/training_data/train_mc/', batch_size=batch_size,
+            class_weights=class_weights, single_class_per_tile=False, balance=balance, n_classes=n_classes, classes_to_augment=classes_to_augment)
+    valid_generator = SatDataSequence('/home/thomas/ssd/training_data/test_mc/', 
+            batch_size=batch_size, balance=False, n_classes=n_classes, single_class_per_tile=False,
+            class_weights=class_weights)
+    # m,model.fit_generator(generator,
+    # m,        epochs=20,
+    # m,        callbacks=[lr_scheduler, checkpoint, tensorboard],
+    # m,        use_multiprocessing=False,
+    # m,        validation_data=valid_generator,
+    # m,        workers=1,
+    # m,        max_queue_size=20,
+    # m,        verbose=1)
     model.fit_generator(generator,
-            epochs=20,
+            epochs=4, 
             callbacks=[lr_scheduler, checkpoint, tensorboard],
             use_multiprocessing=True,
             validation_data=valid_generator,

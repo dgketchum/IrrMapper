@@ -1,4 +1,5 @@
 import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 import numpy as np
 import keras.backend as K
 import tensorflow as tf
@@ -12,7 +13,7 @@ from multiprocessing import Pool
 
 from data_utils import save_raster, stack_rasters, paths_map_multiple_scenes, load_raster, clip_raster
 from fully_conv import weighted_loss, weighted_focal_loss
-from data_generators import concatenate_fmasks
+from extract_training_data import concatenate_fmasks
 
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
@@ -49,14 +50,13 @@ def evaluate_image_many_shot(path, row, year, image_directory, model_path, num_c
         return
     class_mask = np.ones((1, image_stack.shape[2], image_stack.shape[1], num_classes)) # Just a placeholder
     out = np.zeros((image_stack.shape[2], image_stack.shape[1], num_classes))
-    image_stack = np.swapaxes(image_stack, 0, 2)
-    image_stack = np.expand_dims(image_stack, 0)
-    imshow(image_stack[0, :, :, 9])
-    show()
     chunk_size = 608
     diff = 608
     stride = 608
     overlap_step = 10
+    image_stack = np.swapaxes(image_stack, 0, 2)
+    image_stack = np.expand_dims(image_stack, 0)
+    print(image_stack.shape)
     for k in range(0, n_overlaps*overlap_step, overlap_step):
         for i in range(k, image_stack.shape[1]-diff, stride):
             for j in range(k, image_stack.shape[2]-diff, stride):
@@ -82,10 +82,17 @@ def evaluate_image_many_shot(path, row, year, image_directory, model_path, num_c
 
 if __name__ == '__main__':
 
-    path = 37
-    row = 28
-    year = 2013
+    paths = [37, 39, 41]
+    rows = [28, 27, 27]
+    years = [2013, 2013, 2013]
     image_directory = "/home/thomas/share/image_data/train/"
-    model_path = '/home/thomas/IrrMapper/fully-conv-classification/models/2019-03-08_40pacc_all_unit_weights/model.h5'
-    evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=6,
-            n_overlaps=1, outfile='bad_accuracy.tif')
+    model_dirs = [d for d in os.listdir('./models/') if 'template_to_fill_in' in d]
+    model_paths = ['/home/thomas/IrrMapper/fully-conv-classification/models/{}/model.h5'.format(model_dir) for model_dir in model_dirs]
+    outfile_path = '/home/thomas/IrrMapper/fully-conv-classification/models/{}/'
+    # outfile_path = outfile_path + "evaluated_{}_{}_{}.tif"
+    outfile_paths = [outfile_path.format(model_dir) + "evaluated_{}_{}_{}.tif" for model_dir in model_dirs]
+    for model_path, outfile_path in zip(model_paths, outfile_paths):
+        print(model_path, outfile_path)
+        for path, row, year  in zip(paths, rows, years):
+            evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=6,
+                    n_overlaps=1, outfile=outfile_path.format(path, row, year))

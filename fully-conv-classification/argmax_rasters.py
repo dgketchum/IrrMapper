@@ -2,14 +2,11 @@ import numpy as np
 from rasterio import open as rasopen
 from rasterio import int32
 from glob import glob
-from os.path import basename, join
-from sys import argv
+from os.path import basename, join, dirname, splitext
+import argparse
 
+def compute_argmax(f, outfile):
 
-im_path = 'compare_model_outputs/systematic/'
-save_path = 'compare_model_outputs/argmax/'
-
-def get_argmax(f, outfile):
     with rasopen(f, 'r') as src:
         arr = src.read()
         meta = src.meta.copy()
@@ -20,18 +17,27 @@ def get_argmax(f, outfile):
     meta.update(count=1, dtype=int32)
     with rasopen(outfile, 'w', **meta) as dst:
         dst.write(arg)
-    return None
-
-
-def main(f):
-    b = basename(f)
-    suff = b[:-14]
-    pref = b[-14:]
-    outfile = join(save_path, suff + 'argmax_' + pref)
-    print('Saving argmax raster to {}'.format(outfile))
-    get_argmax(f, outfile)
-
 
 if __name__ == '__main__':
-    in_f = argv[1]
-    main(in_f)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", 
+            "--file",
+            help='geoTIFF to perform argmax on',
+            required=True)
+    parser.add_argument('-o',
+            '--outfile',
+            help='optional filename for outfile')
+
+    args = parser.parse_args()
+    if not args.outfile:
+        outfile = basename(args.file)
+        outdir = dirname(args.file)
+        outfile = splitext(outfile)[0] + '_argmax.tif'
+        outfile = join(outdir, outfile)
+        compute_argmax(args.file, outfile)
+
+
+
+
+
