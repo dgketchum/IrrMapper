@@ -32,14 +32,18 @@ Install SatelliteImage:
 ## 1 
 Edit the file ```runspec.py``` and fill out the two methods ```assign_shapefile_class_code``` and ```assign_shapefile_year```. These functions take as input a path to a shapefile and return integers corresponding to the class code of the vector data in the shapefile and the year the data was recorded, respectively. This means shapefiles should be split up according to class code and year before the next step.
 
-Also in ``runpsec.py``, select the bands you want by editing ``landsat_rasters()``, ``static_rasters()``, and ``climate_rasters()``. ``mask_rasters()`` specifies water and cloud masks. 
+Also in ``runspec.py``, select the bands you want by editing ``landsat_rasters()``, ``static_rasters()``, and ``climate_rasters()``. ``mask_rasters()`` specifies water and cloud masks. 
 ## 2
-use split_shapefile.py to split the training data shapefiles into WRS2 descending path/rows.
-```python split_shapefile.py --shapefile-dir /home/thomas/training_data/ --output-dir /home/thomas/split_training_data/```
+use split_shapefile.py to split the training data shapefiles into WRS2 descending path/rows. Ex:
+```
+python split_shapefile.py --shapefile-dir /home/thomas/training_data/ --output-dir /home/thomas/split_training_data/
+```
 Default extension is .shp for the input shapefiles.
 ## 3
-run extract_training_data.py to extract training data. This relies on the methods ``assign_shapefile_class_code`` and ``assign_shapefile_year`` that reside in ``runspec.py``. It also downloads all image data to image-dir. Right now, it downloads all 11 Landsat bands for 3 scenes from may-october. I need to figure out how to change this.
-```python extract_training_data.py --shapefile-dir /home/thomas/split_training_data --image-dir /home/thomas/landsat/ --training-dir /home/thomas/irrmapper/data/train/ --n-classes 5```
+run extract_training_data.py to extract training data. This relies on the methods ``assign_shapefile_class_code`` and ``assign_shapefile_year`` that reside in ``runspec.py``. It also downloads all image data to image-dir. 
+```
+python extract_training_data.py --shapefile-dir /home/thomas/split_training_data --image-dir /home/thomas/landsat/ --training-dir /home/thomas/irrmapper/data/train/ --n-classes 5
+```
 Before running this, check ```_one_hot_from_labels_mc()``` in ```extract_training_data.py```. This applies a border class to shapefile data of class code 0 for reasons related to mapping irrigation. If this is not what you want, comment out the conditional in this function.  
 
 ## 4 
