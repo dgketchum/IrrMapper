@@ -43,9 +43,9 @@ def download_images_over_shapefile(shapefile, image_directory, year):
     return ims
 
 
-def download_from_pr(p, r, year, image_directory):
+def download_from_pr(p, r, year, image_directory, landsat_bands, climate_bands):
     '''Downloads p/r corresponding to the location of 
-       the shapefile, and creates master raster'''
+       the shapefile.'''
     # TODO: add rasterioIOError error checking
     # and resolution here.
     suff = str(p) + '_' + str(r) + "_" + str(year)
@@ -55,16 +55,15 @@ def download_from_pr(p, r, year, image_directory):
         satellite = 7
     if not os.path.isdir(landsat_dir):
         os.mkdir(landsat_dir)
-        ims = _download_images(landsat_dir, p, r, year, satellite)
-    else:
-        ims = _download_images(landsat_dir, p, r, year, satellite)
+    ims = _download_images(landsat_dir, p, r, year, satellite, landsat_bands, climate_bands)
     return ims
 
 
-def _download_images(project_directory, path, row, year, satellite=8, n_landsat=3, 
-        max_cloud_pct=40):
+def _download_images(project_directory, path, row, year, satellite, landsat_bands, climate_bands,
+        n_landsat=3, max_cloud_pct=40):
 
-    image_stack = ImageStack(satellite=satellite, path=path, row=row, root=project_directory,
+    image_stack = ImageStack(satellite=satellite, path=path, landsat_bands=landsat_bands,
+            climate_bands=climate_bands, row=row, root=project_directory,
             max_cloud_pct=max_cloud_pct, n_landsat=n_landsat, year=year)
 
     image_stack.build_evaluating() # the difference b/t build_training() and build_eval() is
@@ -312,14 +311,19 @@ def load_raster(raster_name):
         meta = src.meta.copy()
     return arr, meta
 
-
-def save_model_info(outfile, args):
-    template = '{}={}|'
-    with open(outfile, 'a') as f:
-        for key in args:
-            f.write(template.format(key, args[key]))
-        f.write("\n-------------------\n")
-    print("wrote run info to {}".format(outfile))
-
 if __name__ == "__main__":
-    pass
+
+    from runspec import landsat_rasters, climate_rasters
+    download_from_pr(37, 28, 2013, '/home/thomas/landsat_test/', landsat_rasters(),
+            climate_rasters())
+
+
+
+
+
+
+
+
+
+
+

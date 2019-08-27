@@ -1,6 +1,6 @@
 import numpy as np
 from rasterio import open as rasopen
-from rasterio import int32
+from rasterio import int32, float32
 from glob import glob
 from os.path import basename, join, dirname, splitext
 import argparse
@@ -11,12 +11,15 @@ def compute_argmax(f, outfile):
         arr = src.read()
         meta = src.meta.copy()
 
+    irr = arr[0]
+    irr[irr < 0.3] = np.nan
+    irr = np.expand_dims(irr, 0)
     arg = np.argmax(arr, axis=0)
     arg = np.expand_dims(arg, axis=0)
     arg = arg.astype(np.int32)
-    meta.update(count=1, dtype=int32)
+    meta.update(count=1, dtype=float32)
     with rasopen(outfile, 'w', **meta) as dst:
-        dst.write(arg)
+        dst.write(irr)
 
 if __name__ == '__main__':
 

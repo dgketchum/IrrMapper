@@ -26,10 +26,15 @@ from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, fi
 
 class SatDataSequence(Sequence):
 
-    def __init__(self, data_directory, batch_size, class_weights={},
-            balance=True, single_class_per_tile=True, n_classes=6, classes_to_augment=None):
+    def __init__(self, data_directory, batch_size, class_weights=None,
+            balance=True, single_class_per_tile=True, n_classes=5, classes_to_augment=None):
         self.data_directory = data_directory
         self.class_weights = class_weights
+        if self.class_weights is None:
+            dct = {}
+            for i in range(n_classes):
+                dct[i] = 1
+            self.class_weights = dct
         self.n_classes = n_classes
         self.single_class_per_tile = single_class_per_tile
         self.batch_size = batch_size
@@ -86,7 +91,7 @@ class SatDataSequence(Sequence):
     def __getitem__(self, idx):
         batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
-        processed = self._make_weights_labels_and_features(data_tiles, self.classes_to_augment)
+        processed = self._labels_and_features(data_tiles, self.classes_to_augment)
         batch_x = processed[0]
         batch_y = processed[1]
         return batch_x, batch_y
@@ -96,6 +101,27 @@ class SatDataSequence(Sequence):
         with open(filename, 'rb') as f:
             data = pickle.load(f)
         return data
+
+    def _apply_weights(self, one_hot):
+        for i in range(self.n_classes):
+            one_hot[:, :, i] *= self.class_weights[i]
+
+
+    def _labels_and_features(self, data_tiles, classes_to_augment):
+        features = []
+        one_hots = []
+        for tile in data_tiles:
+            data = tile['data']
+            one_hot = tile['one_hot'].astype(np.int)
+            one_hot[0, 0, :] = 0
+            self._apply_weights(one_hot)
+            class_code = tile['class_code']
+            if not self._no_augment:
+                if classes_to_augment[tile['class_code']]:
+                    data, one_hot, weights = _augment_data(data, one_hot, weights)
+            features.append(data)
+            one_hots.append(one_hot)
+        return [np.asarray(features)], [np.asarray(one_hots)]
 
 
     def _make_weights_labels_and_features(self, data_tiles, classes_to_augment):

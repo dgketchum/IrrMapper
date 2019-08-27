@@ -4,6 +4,7 @@ import os
 import time
 import pickle
 import warnings
+import argparse
 import pdb
 import matplotlib.pyplot as plt
 
@@ -18,7 +19,7 @@ from tensorflow.keras.utils import Sequence
 from multiprocessing import Pool
 from collections import defaultdict
 
-from runspec import mask_rasters
+from runspec import landsat_rasters, climate_rasters, mask_rasters, assign_shapefile_class_code, assign_shapefile_year
 from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
 
@@ -32,13 +33,11 @@ def distance_map(mask):
 
 class DataTile(object):
 
-    def __init__(self, data, one_hot, weights, class_code):
+    def __init__(self, data, one_hot, class_code):
         self.dict = {}
         self.dict['data'] = data
         self.dict['one_hot'] = one_hot
         self.dict['class_code'] = class_code
-        self.dict['weights'] = weights
-        # Need to split the data into separate classes to play with class balance.
 
     def to_pickle(self, training_directory):
         if not os.path.isdir(training_directory):
@@ -115,8 +114,7 @@ def extract_training_data_multiple_classes_per_instance(split_shapefile_director
         done.update(shapefiles_over_same_path_row)
         image_path = os.path.join(image_directory, path_row_year)
         if not os.path.isdir(image_path):
-            download_from_pr(path, row, year, image_directory)
-            continue
+            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
         image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
         try:
             mask_file = image_path_map['B1.TIF'][0]
@@ -174,9 +172,8 @@ def _save_training_data_multiple_classes(image_stack, class_labels, training_dat
             if np.all(class_label_tile.mask == True):
                 continue
             sub_one_hot = _one_hot_from_labels_mc(class_label_tile, n_classes)
-            weights = _weights_from_one_hot(sub_one_hot, n_classes)
             sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
-            dt = DataTile(sub_image_stack, sub_one_hot, weights, class_code)
+            dt = DataTile(sub_image_stack, sub_one_hot, class_code)
             out.append(dt)
             if len(out) > 50:
                 with Pool() as pool:
@@ -224,14 +221,14 @@ def extract_training_data_single_class_per_instance(split_shapefile_directory, i
         done.update(shapefiles_over_same_path_row)
         image_path = os.path.join(image_directory, path_row_year)
         if not os.path.isdir(image_path):
-            download_from_pr(path, row, year, image_directory)
-            continue
+            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
         image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
         try:
+            # todo : more robust way of getting a random band from the paths map
             mask_file = image_path_map['B1.TIF'][0]
         except IndexError:
             os.rmdir(os.path.join(image_directory, path_row_year))
-            download_from_pr(path, row, year, image_directory)
+            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
             image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
             mask_file = image_path_map['B1.TIF'][0]
 
@@ -358,3 +355,20 @@ def make_border_labels(mask, border_width):
     dm = distance_map(mask)
     dm[dm > border_width] = 0
     return dm
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--shapefile-dir', help='shapefile directory containing the split shapefiles', type=str)
+    parser.add_argument('-i', '--image-dir', help='directory in which to find/save landsat images', type=str)
+    parser.add_argument('-t', '--training-dir', help='directory in which to save training data', type=str)
+    parser.add_argument('-n', '--n-classes', help='number of classes present', type=int)
+
+    # todo : add single scene mapping
+    # more robust selection of random band
+    # how to download only selected images?
+
+    args = parser.parse_args()
+    extract_training_data_multiple_classes_per_instance(args.shapefile_dir, args.image_dir,
+            args.training_dir, assign_shapefile_year, assign_shapefile_class_code,
+            n_classes=args.n_classes)
