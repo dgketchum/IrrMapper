@@ -51,16 +51,9 @@ train a model with train_model.py.
 
 # TODO: 
 Make training a model easier (i.e. don't require a separate weights matrix and stop computing softmax within the network)
-Make the images downloaded pull from runspec.py, not automatically download all possible bands
+Extract new data sets using new model
 Implement IoU (multiclass dice loss).
 add binary classification possibililty
 add raster training data extraction
+Make the images downloaded pull from runspec.py, not automatically download all possible bands
 add paths_map_single_scene flag to extract_training_data
-
-
-
-
-
-
-
-
