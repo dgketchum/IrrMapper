@@ -27,7 +27,7 @@ from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, fi
 class SatDataSequence(Sequence):
 
     def __init__(self, data_directory, batch_size, class_weights=None,
-            balance=True, single_class_per_tile=True, n_classes=5, classes_to_augment=None):
+            balance=False, single_class_per_tile=True, n_classes=5, classes_to_augment=None):
         self.data_directory = data_directory
         self.class_weights = class_weights
         if self.class_weights is None:
@@ -36,10 +36,17 @@ class SatDataSequence(Sequence):
                 dct[i] = 1
             self.class_weights = dct
         self.n_classes = n_classes
+        self.binary = False
+        if n_classes ==  1:
+            self.binary = True
         self.single_class_per_tile = single_class_per_tile
         self.batch_size = batch_size
-        self._no_augment = classes_to_augment is None
         self.classes_to_augment = classes_to_augment
+        if self.classes_to_augment is None:
+            dct = {}
+            for i in range(n_classes):
+                dct[i] = False
+            self.classes_to_augment = dct
         self.balance = balance
         self._get_files()
         self.n_files = len(self.file_list)
@@ -60,7 +67,6 @@ class SatDataSequence(Sequence):
         self.lengths = [len(self.file_dict[k]) for k in self.file_dict]
         self._create_file_list()
         shuffle(self.file_list)
-
 
 
     def _create_file_list(self):
@@ -85,13 +91,19 @@ class SatDataSequence(Sequence):
 
 
     def on_epoch_end(self):
-        self._create_file_list()
+        if not self.balance:
+            shuffle(self.file_list)
+        else:
+            self._create_file_list()
 
 
     def __getitem__(self, idx):
         batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
-        processed = self._labels_and_features(data_tiles, self.classes_to_augment)
+        if self.binary:
+            processed = self._binary_labels_and_features(data_tiles, self.classes_to_augment)
+        else:
+            processed = self._labels_and_features(data_tiles, self.classes_to_augment)
         batch_x = processed[0]
         batch_y = processed[1]
         return batch_x, batch_y
@@ -102,9 +114,28 @@ class SatDataSequence(Sequence):
             data = pickle.load(f)
         return data
 
+
     def _apply_weights(self, one_hot):
         for i in range(self.n_classes):
             one_hot[:, :, i] *= self.class_weights[i]
+
+
+    def _binary_labels_and_features(self, data_tiles, classes_to_augment):
+        features = []
+        one_hots = []
+        for tile in data_tiles:
+            data = tile['data']
+            one_hot = tile['one_hot'].astype(np.int)
+            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 # -1 will represent nodata in this case.
+            for i in range(one_hot.shape[2]):
+                if i == 0:
+                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 1
+                else:
+                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
+
+            features.append(data)
+            one_hots.append(binary_one_hot)
+        return [np.asarray(features)], [np.asarray(one_hots)]
 
 
     def _labels_and_features(self, data_tiles, classes_to_augment):
@@ -116,9 +147,8 @@ class SatDataSequence(Sequence):
             one_hot[0, 0, :] = 0
             self._apply_weights(one_hot)
             class_code = tile['class_code']
-            if not self._no_augment:
-                if classes_to_augment[tile['class_code']]:
-                    data, one_hot, weights = _augment_data(data, one_hot, weights)
+            if classes_to_augment[tile['class_code']]:
+                data, one_hot, weights = _augment_data(data, one_hot, weights)
             features.append(data)
             one_hots.append(one_hot)
         return [np.asarray(features)], [np.asarray(one_hots)]
