@@ -50,12 +50,15 @@ Before running this, check ```_one_hot_from_labels_mc()``` in ```extract_trainin
 train a model with train_model.py.
 
 # TODO: 
-Make training a model easier (i.e. don't require a separate weights matrix and stop computing softmax within the network)
-Extract new data sets using new model
+Make training a model easier [x] (i.e. don't require a separate weights matrix and stop computing softmax within the network)
 
-Implement IoU (multiclass dice loss).
+Implement binary dice loss [x]
 
-add binary classification possibililty
+Get rid of class_7_data necessity 
+
+Implement multiclass dice loss
+
+add binary classification possibility [x]
 
 add raster training data extraction
 
