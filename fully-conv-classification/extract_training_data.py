@@ -15,12 +15,11 @@ from rasterio import open as rasopen
 from rasterio.errors import RasterioIOError
 from skimage import transform
 from sat_image.warped_vrt import warp_single_image
-from tensorflow.keras.utils import Sequence
-from multiprocessing import Pool
+from multiprocessing import Pool 
 from collections import defaultdict
 
 from runspec import landsat_rasters, climate_rasters, mask_rasters, assign_shapefile_class_code, assign_shapefile_year
-from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr
+from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr, paths_mapping_single_scene
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
 
 
@@ -51,7 +50,7 @@ class DataTile(object):
             with open(outfile, 'wb') as f:
                 pickle.dump(self.dict, f, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            print("What? Contact administrator.")
+            raise ValueError()
 
 
 def _pickle_datatile(datatile, training_directory):
@@ -67,19 +66,21 @@ def _pickle_datatile(datatile, training_directory):
             pass
 
 
-def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
+def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0, target_directory=None):
     ''' 
     ``Fmasks'' are masks of clouds and water. We don't want clouds/water in
     the training set, so this function gets all the fmasks for a landsat
     scene (contained in image_directory), and merges them into one raster. 
     They may not be the same size, so warp_vrt is used to make them align. 
     '''
+    class_mask = class_mask.copy()
     paths = []
     for dirpath, dirnames, filenames in os.walk(image_directory):
         for f in filenames:
             for suffix in mask_rasters():
                 if f.endswith(suffix):
-                    paths.append(os.path.join(dirpath, f))
+                    pth = os.path.join(dirpath, f)
+                    paths.append(pth)
     for fmask_file in paths:
         fmask, _ = load_raster(fmask_file)
         # clouds, water present where fmask == 1.
@@ -92,86 +93,84 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0):
     return class_mask
 
 
-def extract_training_data_multiple_classes_per_instance(split_shapefile_directory, image_directory,
-        training_data_directory, assign_shapefile_year, assign_shapefile_class_code, n_classes=5):
+def extract_training_data_over_path_row(shapefiles, path, row, year, image_directory,
+        training_data_directory, n_classes, assign_shapefile_class_code, path_map_func=None,
+        preprocessing_func=None, tile_size=608):
 
-    split_shapefiles = [f for f in glob(os.path.join(split_shapefile_directory, "*.shp"))]
+    if path_map_func is None:
+        path_map_func = paths_map_multiple_scenes
 
-    done = set()
+    if not isinstance(shapefiles, list):
+        shapefiles = [shapefiles]
+    
+    path_row_year = str(path) + '_' + str(row) +  '_' + str(year)
+    image_path = os.path.join(image_directory, path_row_year)
+    if not os.path.isdir(image_path):
+        download_from_pr(path, row, year, image_directory)
+    image_path_maps = path_map_func(image_path)
+    mask_file = _random_tif_from_directory(image_path)
+    mask, mask_meta = load_raster(mask_file)
+    mask = np.zeros_like(mask).astype(np.int)
+    first = True
+    class_labels = None
+    for f in shapefiles:
+        class_code = assign_shapefile_class_code(f)
+        print(f, class_code)
+        out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
+        if first:
+            class_labels = out
+            class_labels[~class_labels.mask] = class_code
+            first = False
+        else:
+            class_labels[~out.mask] = class_code
+    try:
+        image_stack = stack_rasters_multiprocess(image_path_maps, target_geo=mask_meta, target_shape=mask.shape)
+    except RasterioIOError as e:
+        print("Redownload images for", path_row_year)
+        print(e)
+        return
+    if preprocessing_func is not None:
+        image_stack = preprocessing_func(image_path_map, image_stack)
 
-    total_time = 0
-
-    for counter, shapefile in enumerate(split_shapefiles):
-        begin_time = time.time()
-        if shapefile in done:
-            continue
-        _, path, row = os.path.splitext(shapefile)[0][-7:].split('_')
-        year = assign_shapefile_year(shapefile)
-        path_row_year = path + '_' + row +  '_' + str(year)
-        print("Extracting data for", path_row_year)
-        shapefiles_over_same_path_row = all_matching_shapefiles(shapefile,
-                split_shapefile_directory, assign_shapefile_year)
-        done.update(shapefiles_over_same_path_row)
-        image_path = os.path.join(image_directory, path_row_year)
-        if not os.path.isdir(image_path):
-            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
-        image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
-        try:
-            mask_file = image_path_map['B1.TIF'][0]
-        except IndexError:
-            os.rmdir(os.path.join(image_directory, path_row_year))
-            download_from_pr(path, row, year, image_directory)
-            image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
-            mask_file = image_path_map['B1.TIF'][0]
-
-        mask, mask_meta = load_raster(mask_file)
-        mask = np.zeros_like(mask).astype(np.int)
-        fmask = concatenate_fmasks(os.path.join(image_directory, path_row_year), mask,
-                mask_meta) 
-        if fmask.mask.all():
-            print("All pixels covered by cloud for {}".format(path_row_year))
-            continue
-
-        first = True
-        class_labels = None
-        for f in shapefiles_over_same_path_row:
-            class_code = assign_shapefile_class_code(f)
-            print(f, class_code)
-            out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
-            if first:
-                class_labels = out
-                class_labels[~class_labels.mask] = class_code
-                first = False
-            else:
-                class_labels[~out.mask] = class_code
-        try:
-            image_stack = stack_rasters_multiprocess(image_path_map, target_geo=mask_meta, target_shape=mask.shape)
-        except RasterioIOError as e:
-            print("Redownload images for", path_row_year)
-            # TODO: remove corrupted file and redownload images.
-            continue
-        class_labels[fmask.mask] = ma.masked # well, I didn't fmask the data.
-        image_stack = np.swapaxes(image_stack, 0, 2)
-        class_labels = np.swapaxes(class_labels, 0, 2)
-        class_labels = np.squeeze(class_labels)
-        _save_training_data_multiple_classes(image_stack, class_labels,
-                training_data_directory, n_classes)
-        end_time = time.time()
-        diff = end_time - begin_time
-        total_time += diff
-        print('single iteration time:', diff, 'avg.', total_time / (counter + 1))
+    class_labels = concatenate_fmasks(image_path, class_labels, mask_meta) 
+    image_stack = np.swapaxes(image_stack, 0, 2)
+    class_labels = np.swapaxes(class_labels, 0, 2)
+    class_labels = np.squeeze(class_labels)
+    tiles_y, tiles_x = _target_indices_from_class_labels(class_labels, tile_size)
+    _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
+            n_classes, tiles_x, tiles_y, tile_size)
 
 
-def _save_training_data_multiple_classes(image_stack, class_labels, training_data_directory, n_classes):
-    tile_size = 608
+def _target_indices_from_class_labels(class_labels, tile_size):
+    where = np.nonzero(~class_labels.mask)
+    max_y = np.max(where[0])
+    min_y = np.min(where[0])
+    max_x = np.max(where[1])
+    min_x = np.min(where[1])
+    max_y += (tile_size - ((max_y - min_y) % tile_size))
+    max_x += (tile_size - ((max_x - min_x) % tile_size))
+    tiles_y = range(min_y, max_y, tile_size)
+    tiles_x = range(min_x, max_x, tile_size)
+    return tiles_y, tiles_x
+
+
+def _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
+        n_classes, indices_y, indices_x, tile_size):
     out = []
-    class_code = 7 # dummy...
-    for i in range(0, image_stack.shape[0]-tile_size, tile_size):
-        for j in range(0, image_stack.shape[1]-tile_size, tile_size):
+    for i in indices_x:
+        for j in indices_y:
             class_label_tile = class_labels[i:i+tile_size, j:j+tile_size]
-            if np.all(class_label_tile.mask == True):
+            shape = class_label_tile.shape
+            if (shape[0], shape[1]) != (tile_size, tile_size):
+                # Todo: handle this
                 continue
-            sub_one_hot = _one_hot_from_labels_mc(class_label_tile, n_classes)
+            if np.all(class_label_tile.mask):
+                continue
+            if np.any(class_label_tile == 1):
+                class_code = 1
+            else:
+                class_code = 0 
+            sub_one_hot = _one_hot_from_labels(class_label_tile, n_classes)
             sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
             dt = DataTile(sub_image_stack, sub_one_hot, class_code)
             out.append(dt)
@@ -187,121 +186,83 @@ def _save_training_data_multiple_classes(image_stack, class_labels, training_dat
             out = []
 
 
-def _one_hot_from_labels_mc(labels, n_classes):
+def _random_tif_from_directory(image_directory):
+
+    bleh = os.listdir(image_directory)
+    for d in bleh:
+        if os.path.isdir(os.path.join(image_directory, d)):
+            tiffs = glob(os.path.join(os.path.join(image_directory, d), "*.TIF"))
+            tiffs = [tif for tif in tiffs if 'BQA' not in tif]
+            break
+    shuffle(tiffs)
+    return tiffs[0]
+
+
+def min_data_tiles_to_cover_labels(shapefiles, path, row, year, image_directory, tile_size=608):
+    path_row_year = "_".join([str(path), str(row), str(year)])
+    image_directory = os.path.join(image_directory, path_row_year)
+    mask_file = _random_tif_from_directory(image_directory)
+    mask, mask_meta = load_raster(mask_file)
+    mask = np.zeros_like(mask).astype(np.int)
+    first = True
+    class_labels = None
+    if not isinstance(shapefiles, list):
+        shapefiles = [shapefiles]
+    for f in shapefiles:
+        class_code = assign_shapefile_class_code(f)
+        out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
+        if first:
+            class_labels = out
+            class_labels[~class_labels.mask] = class_code
+            first = False
+        else:
+            class_labels[~out.mask] = class_code
+    class_labels = concatenate_fmasks(image_directory, class_labels, mask_meta) 
+    where = np.nonzero(~class_labels.mask[0])
+    max_y = np.max(where[0])
+    min_y = np.min(where[0])
+    max_x = np.max(where[1])
+    min_x = np.min(where[1])
+    frac = np.count_nonzero(~class_labels.mask)/(class_labels.shape[1]*class_labels.shape[2])
+
+    max_y += (tile_size - ((max_y - min_y) % tile_size))
+    max_x += (tile_size - ((max_x - min_x) % tile_size))
+
+    tiles_y = range(min_y, max_y, tile_size)
+    tiles_x = range(min_x, max_x, tile_size)
+
+    plt.plot([max_x, max_x], [max_y, min_y], 'b', linewidth=2)
+    plt.plot([min_x, min_x], [max_y, min_y], 'b', linewidth=2)
+    plt.plot([min_x, max_x], [max_y, max_y], 'b', linewidth=2)
+    plt.plot([min_x, max_x], [min_y, min_y], 'b', linewidth=2)
+
+
+
+    y_min = [min_x] * len(tiles_y)
+    y_max = [max_x] * len(tiles_y)
+    for t, mn, mx in zip(tiles_y, y_min, y_max):
+        plt.plot([mn, mx], [t, t], 'r')
+
+    x_min = [min_y] * len(tiles_x)
+    x_max = [max_y] * len(tiles_x)
+    for t, mn, mx in zip(tiles_x, x_min, x_max):
+        plt.plot([t, t], [mn, mx], 'r')
+
+    plt.imshow(class_labels[0])
+    plt.title(frac)
+    plt.colorbar()
+    plt.show()
+
+
+def _one_hot_from_labels(labels, n_classes):
     one_hot = np.zeros((labels.shape[0], labels.shape[1], n_classes))
     for class_code in range(n_classes):
         one_hot[:, :, class_code][labels == class_code] = 1
-        if class_code == 0: # apply border class to only irrigated pixels
-            border_labels = make_border_labels(one_hot[:, :, 0], border_width=1)
-            border_labels.astype(np.int)
-            one_hot[:, :, n_classes-1] = border_labels
+        # if class_code == 1: # apply border class to only irrigated pixels
+        #     border_labels = make_border_labels(one_hot[:, :, 1], border_width=1)
+        #     border_labels = border_labels.astype(np.uint8)
+        #     one_hot[:, :, n_classes-1][border_labels == 1] = 1
     return one_hot.astype(np.int)
-
-
-def extract_training_data_single_class_per_instance(split_shapefile_directory, image_directory,
-        training_data_directory, assign_shapefile_year, assign_shapefile_class_code,
-        offline_augmentation_dict=None, n_classes=5):
-
-    split_shapefiles = [f for f in glob(os.path.join(split_shapefile_directory, "*.shp"))]
-
-    done = set()
-
-    total_time = 0
-
-    for counter, shapefile in enumerate(split_shapefiles):
-        begin_time = time.time()
-        if shapefile in done:
-            continue
-        _, path, row = os.path.splitext(shapefile)[0][-7:].split('_')
-        year = assign_shapefile_year(shapefile)
-        path_row_year = path + '_' + row +  '_' + str(year)
-        print("Extracting data for", path_row_year)
-        shapefiles_over_same_path_row = all_matching_shapefiles(shapefile,
-                split_shapefile_directory, assign_shapefile_year)
-        done.update(shapefiles_over_same_path_row)
-        image_path = os.path.join(image_directory, path_row_year)
-        if not os.path.isdir(image_path):
-            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
-        image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
-        try:
-            # todo : more robust way of getting a random band from the paths map
-            mask_file = image_path_map['B1.TIF'][0]
-        except IndexError:
-            os.rmdir(os.path.join(image_directory, path_row_year))
-            download_from_pr(path, row, year, image_directory, landsat_rasters, climate_rasters)
-            image_path_map = paths_map_multiple_scenes(os.path.join(image_directory, path_row_year))
-            mask_file = image_path_map['B1.TIF'][0]
-
-        mask, mask_meta = load_raster(mask_file)
-        mask = np.zeros_like(mask).astype(np.int)
-        fmask = concatenate_fmasks(os.path.join(image_directory, path_row_year), mask,
-                mask_meta) 
-        if fmask.mask.all():
-            print("All pixels covered by cloud for {}".format(path_row_year))
-            continue
-        first = True
-        class_labels = None
-        for f in shapefiles_over_same_path_row:
-            class_code = assign_shapefile_class_code(f)
-            if offline_augmentation_dict[class_code] == 0:
-                continue
-            print(f, class_code)
-            out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
-            if first:
-                class_labels = out
-                class_labels[~class_labels.mask] = class_code
-                first = False
-            else:
-                class_labels[~out.mask] = class_code
-        if class_labels is None:
-            print("no extra augmentation for", path_row_year)
-            continue
-        try:
-            image_stack = stack_rasters_multiprocess(image_path_map, target_geo=mask_meta, target_shape=mask.shape)
-        except RasterioIOError as e:
-            print("Redownload images for", path_row_year)
-            # TODO: remove corrupted file and redownload images.
-            continue
-        class_labels[fmask.mask] = ma.masked # well, I didn't fmask the data.
-        image_stack = np.swapaxes(image_stack, 0, 2)
-        class_labels = np.swapaxes(class_labels, 0, 2)
-        class_labels = np.squeeze(class_labels)
-        _save_training_data_offline_augmentation(image_stack, class_labels,
-                training_data_directory, n_classes, offline_augmentation_dict)
-        end_time = time.time()
-        diff = end_time - begin_time
-        total_time += diff
-        print('single iteration time:', diff, 'avg.', total_time / (counter + 1))
-
-
-def _save_training_data_offline_augmentation(image_stack, class_labels,
-        training_data_directory, n_classes, offline_augmentation_dict):
-    unique = np.unique(class_labels)
-    unique = unique[~unique.mask]
-    tile_size = 608
-    for class_code in unique:
-        out = []
-        augmentation_step = offline_augmentation_dict[class_code]
-        for i in range(0, image_stack.shape[0]-tile_size, augmentation_step):
-            for j in range(0, image_stack.shape[1]-tile_size, augmentation_step):
-                class_label_tile = class_labels[i:i+tile_size, j:j+tile_size]
-                if not _check_dimensions_and_min_pixels(class_label_tile, class_code, tile_size):
-                    continue
-                sub_one_hot = _one_hot_from_labels(class_label_tile, class_code, n_classes)
-                weights = _weights_from_one_hot(sub_one_hot, n_classes)
-                sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
-                dt = DataTile(sub_image_stack, sub_one_hot, weights, class_code)
-                out.append(dt)
-                if len(out) > 50:
-                    with Pool() as pool:
-                        td = [training_data_directory]*len(out)
-                        pool.starmap(_pickle_datatile, zip(out, td))
-                    out = []
-        if len(out):
-            with Pool() as pool:
-                td = [training_data_directory]*len(out)
-                pool.starmap(_pickle_datatile, zip(out, td))
-                out = []
 
 
 def _weights_from_one_hot(one_hot, n_classes):
@@ -320,16 +281,6 @@ def _one_hot_from_shapefile(shapefile, mask_file, shapefile_class_code, n_classe
     return one_hot
 
 
-def _one_hot_from_labels(labels, class_code, n_classes):
-    one_hot = np.zeros((labels.shape[0], labels.shape[1], n_classes))
-    one_hot[:, :, class_code][labels == class_code] = 1
-    if class_code == 0: # apply border class to only irrigated pixels
-        border_labels = make_border_labels(one_hot[:, :, 0], border_width=1)
-        border_labels.astype(np.int)
-        one_hot[:, :, n_classes-1] = border_labels
-    return one_hot.astype(np.int)
-
-
 def _check_dimensions_and_min_pixels(sub_one_hot, class_code, tile_size):
     # 200 is the minimum amount of pixels required to save the data.
     if sub_one_hot.shape[0] != tile_size or sub_one_hot.shape[1] != tile_size:
@@ -346,7 +297,7 @@ def all_matching_shapefiles(to_match, shapefile_directory, assign_shapefile_year
     year = assign_shapefile_year(to_match)
     for f in glob(os.path.join(shapefile_directory, "*.shp")):
         if get_shapefile_path_row(f) == pr and assign_shapefile_year(f) == year:
-                out.append(f)
+            out.append(f)
     return out
 
 
@@ -356,19 +307,54 @@ def make_border_labels(mask, border_width):
     dm[dm > border_width] = 0
     return dm
 
+def _mean_of_three_images(paths_map, image_stack):
+    # for each key in image_stack (sorted):
+    # ...climate...landsat...static...
+    pass
+
+
 if __name__ == '__main__':
+    
+    sd = glob('shapefile_data/test/*.shp')
+    idd = '/home/thomas/share/image_data/'
+    td = '/home/thomas/ssd/binary_train_no_border_labels/test/'
+    n_classes = 2
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--shapefile-dir', help='shapefile directory containing the split shapefiles', type=str)
-    parser.add_argument('-i', '--image-dir', help='directory in which to find/save landsat images', type=str)
-    parser.add_argument('-t', '--training-dir', help='directory in which to save training data', type=str)
-    parser.add_argument('-n', '--n-classes', help='number of classes present', type=int)
+    done = set()
 
-    # todo : add single scene mapping
-    # more robust selection of random band
-    # how to download only selected images?
+    for i, f in enumerate(sd):
+        if f in done:
+            continue
+        ffg = all_matching_shapefiles(f, 'shapefile_data/test/', assign_shapefile_year)
+        for e in ffg:
+            done.add(e)
+        bs = os.path.splitext(os.path.basename(f))[0]
+        _, path, row = bs[-7:].split("_")
+        year = assign_shapefile_year(f)
+        print("extracting data for", path, row, year)
+        paths_map_func = paths_map_multiple_scenes
+        extract_training_data_over_path_row(ffg, path, row, year, idd, td, n_classes,
+           assign_shapefile_class_code, path_map_func=paths_map_func)
 
-    args = parser.parse_args()
-    extract_training_data_multiple_classes_per_instance(args.shapefile_dir, args.image_dir,
-            args.training_dir, assign_shapefile_year, assign_shapefile_class_code,
-            n_classes=args.n_classes)
+
+    # TODO: rewrite this to take advantage of test train data in same path/row
+    sd = glob('shapefile_data/train/*.shp')
+    idd = '/home/thomas/share/image_data/'
+    td = '/home/thomas/ssd/binary_train_no_border_labels/train/'
+    n_classes = 2
+
+    done = set()
+
+    for i, f in enumerate(sd):
+        if f in done:
+            continue
+        ffg = all_matching_shapefiles(f, 'shapefile_data/train/', assign_shapefile_year)
+        for e in ffg:
+            done.add(e)
+        bs = os.path.splitext(os.path.basename(f))[0]
+        _, path, row = bs[-7:].split("_")
+        year = assign_shapefile_year(f)
+        print("extracting data for", path, row, year)
+        paths_map_func = paths_map_multiple_scenes
+        extract_training_data_over_path_row(ffg, path, row, year, idd, td, n_classes,
+           assign_shapefile_class_code, path_map_func=paths_map_func)

@@ -6,7 +6,7 @@ import datetime
 
 from fiona import open as fopen
 from glob import glob
-from lxml import html
+from lxml import html 
 from requests import get
 from copy import deepcopy
 from numpy import zeros, asarray, array, reshape, nan, sqrt, std, uint16
@@ -43,27 +43,23 @@ def download_images_over_shapefile(shapefile, image_directory, year):
     return ims
 
 
-def download_from_pr(p, r, year, image_directory, landsat_bands, climate_bands):
+def download_from_pr(p, r, year, image_directory, satellite=8):
     '''Downloads p/r corresponding to the location of 
        the shapefile.'''
     # TODO: add rasterioIOError error checking
     # and resolution here.
     suff = str(p) + '_' + str(r) + "_" + str(year)
     landsat_dir = os.path.join(image_directory, suff)
-    satellite = 8
-    if year < 2013:
-        satellite = 7
     if not os.path.isdir(landsat_dir):
         os.mkdir(landsat_dir)
-    ims = _download_images(landsat_dir, p, r, year, satellite, landsat_bands, climate_bands)
+    ims = _download_images(landsat_dir, p, r, year, satellite)
     return ims
 
 
-def _download_images(project_directory, path, row, year, satellite, landsat_bands, climate_bands,
+def _download_images(project_directory, path, row, year, satellite,
         n_landsat=3, max_cloud_pct=40):
 
-    image_stack = ImageStack(satellite=satellite, path=path, landsat_bands=landsat_bands,
-            climate_bands=climate_bands, row=row, root=project_directory,
+    image_stack = ImageStack(satellite=satellite, path=path, row=row, root=project_directory,
             max_cloud_pct=max_cloud_pct, n_landsat=n_landsat, year=year)
 
     image_stack.build_evaluating() # the difference b/t build_training() and build_eval() is
@@ -125,7 +121,7 @@ def _climate_band_map(directory, band_map, date):
     return band_map
 
 
-def paths_mappings_single_scene(landsat_directory):
+def paths_mapping_single_scene(landsat_directory):
     directories = [os.path.join(landsat_directory, f) for f in os.listdir(landsat_directory) if
             os.path.isdir(os.path.join(landsat_directory, f))]
     climate_directory  = os.path.join(landsat_directory, 'climate_rasters')
@@ -170,6 +166,71 @@ def paths_map_multiple_scenes(image_directory, satellite=8):
 
     return band_map
 
+def mean_of_scenes(paths_map, target_geo, target_shape):
+
+    rasters = _load_rasters(paths_map, target_geo, target_shape)
+    n_scenes = len(paths_map['B1.TIF'])
+    num_rasters = len(rasters)
+    j = 0
+    image_stack = np.zeros((num_rasters, target_shape[1], target_shape[2]))
+    for band in sorted(paths_map.keys()):
+        feature_rasters = paths_map[band]
+        empty = np.zeros(target_shape)
+        for feature_raster in feature_raster:
+            empty += rasters[feature_raster]
+        image_stack[j] = empty/n_scenes
+    return image_stack
+
+
+def median_of_scenes(paths_map, target_geo, target_shape):
+
+    rasters = _load_rasters(paths_map, target_geo, target_shape)
+    n_scenes = len(paths_map['B1.TIF'])
+    num_rasters = len(rasters)
+    j = 0
+    image_stack = np.zeros((num_rasters, target_shape[1], target_shape[2]))
+    for band in sorted(paths_map.keys()):
+        feature_rasters = paths_map[band]
+        empty = np.zeros(target_shape)
+        for feature_raster in feature_raster:
+            empty += rasters[feature_raster]
+        image_stack[j] = empty/n_scenes
+    return image_stack
+
+
+def map_bands_to_indices(target_bands, satellite=8):
+
+    band_map = defaultdict(list)
+    for band in landsat_rasters()[satellite]:
+        band_map[band] = []
+    for band in static_rasters():
+        band_map[band] = []
+    for band in climate_rasters():
+        band_map[band] = []
+
+    image_directory = '/home/thomas/share/image_data/train/37_28_2013/'
+    extensions = (".tif", ".TIF")
+    for dirpath, dirnames, filenames in os.walk(image_directory):
+        for f in filenames:
+            if any(ext in f for ext in extensions):
+                for band in band_map:
+                    if f.endswith(band):
+                        band_map[band].append(os.path.join(dirpath, f))
+
+    for band in band_map:
+        band_map[band] = sorted(band_map[band]) # ensures ordering within bands - sort by time.
+
+    indices = []
+    i = 0
+    for feat in sorted(band_map.keys()): # ensures the stack is in the same order each time.
+        feature_rasters = band_map[feat]
+        for feature_raster in feature_rasters:
+            for band in target_bands:
+                if feature_raster.endswith(band):
+                    indices.append(i)
+                    i += 1
+    return indices
+
 
 def _maybe_warp(feature_raster, target_geo, target_shape):
     arr, _ = load_raster(feature_raster)
@@ -178,15 +239,29 @@ def _maybe_warp(feature_raster, target_geo, target_shape):
     return arr, feature_raster
 
 
-def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
-    first = True
-    stack = None
+def _load_rasters(paths_map, target_geo, target_shape):
+    single_band = False
     num_rasters = 0
     for key in paths_map:
-        num_rasters += len(paths_map[key])
+        if isinstance(paths_map[key], str):
+            single_band = True
+            num_rasters += 1
+        else:
+            num_rasters += len(paths_map[key])
     j = 0
-    feature_rasters = [feature_raster for feat in paths_map.keys() for feature_raster in
-    paths_map[feat]]
+
+    if not single_band:
+        feature_rasters = [feature_raster for feat in paths_map.keys() for feature_raster in
+        paths_map[feat]]
+    else:
+        feature_rasters = [paths_map[feat] for feat in paths_map.keys()]
+    tg = [target_geo]*len(feature_rasters)
+    ts = [target_shape]*len(feature_rasters)
+    if not single_band:
+        feature_rasters = [feature_raster for feat in paths_map.keys() for feature_raster in
+        paths_map[feat]]
+    else:
+        feature_rasters = [paths_map[feat] for feat in paths_map.keys()]
     tg = [target_geo]*len(feature_rasters)
     ts = [target_shape]*len(feature_rasters)
     with Pool() as pool:
@@ -194,12 +269,35 @@ def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
         # Speedup of ~40s.
         out = pool.starmap(_maybe_warp, zip(feature_rasters, tg, ts))
     rasters = {feature_raster: array for (array, feature_raster) in out}
+    return rasters, num_rasters
+
+
+def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
+    first = True
+    stack = None
+    single_band = False
+    j = 0
+    rasters, num_rasters = _load_rasters(paths_map, target_geo, target_shape)
     for feat in sorted(paths_map.keys()): # ensures the stack is in the same order each time.
         # Ordering within bands is assured by sorting the list that
         # each band corresponding to, as that's sorted by date.
         feature_rasters = paths_map[feat] # maps bands to their location in filesystem.
-        for feature_raster in feature_rasters:
-            arr = rasters[feature_raster]
+        if not single_band:
+            for feature_raster in feature_rasters:
+                arr = rasters[feature_raster]
+                if first:
+                    stack = zeros((num_rasters, target_shape[1], target_shape[2]), uint16)
+                    stack[j, :, :] = arr
+                    j += 1
+                    first = False
+                else:
+                    stack[j, :, :] = arr
+                    j += 1 
+        else:
+
+            arr, _ = _select_correct_band(rasters, feat)
+
+            # somehow select
             if first:
                 stack = zeros((num_rasters, target_shape[1], target_shape[2]), uint16)
                 stack[j, :, :] = arr
@@ -211,12 +309,17 @@ def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
     return stack
 
 
+def _select_correct_band(rasters, target_feat):
+    for path in rasters:
+        if path.endswith(target_feat):
+            return rasters[path], path
+
+
 def stack_rasters(paths_map, target_geo, target_shape):
     first = True
     stack = None
     num_rasters = 0
-    for key in paths_map:
-        num_rasters += len(paths_map[key])
+    for key in paths_map: num_rasters += len(paths_map[key])
     j = 0
     for feat in sorted(paths_map.keys()): # ensures the stack is in the same order each time.
         # Ordering within bands is assured by sorting the list that
@@ -314,16 +417,10 @@ def load_raster(raster_name):
 if __name__ == "__main__":
 
     from runspec import landsat_rasters, climate_rasters
-    download_from_pr(37, 28, 2013, '/home/thomas/landsat_test/', landsat_rasters(),
-            climate_rasters())
-
-
-
-
-
-
-
-
-
-
-
+    for path in range(34, 44):
+        for row in range(26, 30):
+            for sat in [7, 8]:
+                for year in [2012, 2013, 2014, 2015]:
+                    if year < 2012 and sat == 8:
+                        continue
+                    download_from_pr(path, row, year, '/home/thomas/share/landsat_test/', 7)

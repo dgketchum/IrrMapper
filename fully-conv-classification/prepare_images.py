@@ -31,15 +31,14 @@ from met.thredds import GridMet, TopoWX
 from shutil import rmtree
 from bounds import RasterBounds, GeoBounds
 from dem import AwsDem
-from ssebop_app.image import get_image
 from functools import partial
-from pyproj import Proj, transform as pytransform
+from pyproj import Proj, transform as pytransform, CRS as pyCRS
 from shapely.geometry import shape, Polygon, mapping
 from shapely.ops import transform
 from rasterio import open as rasopen, float32
 from rasterio.crs import CRS
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
-from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters, climate_rasters
+from pixel_classification.runspec import (static_rasters, ancillary_rasters, mask_rasters, landsat_rasters)
 from sklearn.preprocessing import StandardScaler
 from geopandas.geodataframe import GeoDataFrame
 
@@ -49,8 +48,7 @@ class ImageStack(object):
     """
 
     def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None,
-            max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None,
-            climate_targets=None):
+            max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -65,7 +63,7 @@ class ImageStack(object):
         self.lon = lon
         self.year = year
 
-        self.max_cloud = max_cloud_pct
+        self.max_cloud = 100
         self.start = start
         self.end = end
         self.root = root
@@ -83,24 +81,19 @@ class ImageStack(object):
 
         self.cdl_tif = None
         self.cdl_mask = None
-        self.climate_targets = climate_targets
-        if not self.climate_targets:
-            self.climate_targets = ['pr', 'pet', 'tmmn', 'tmmx', 'etr']
-
+        self.climate_targets = ['pr', 'pet', 'tmmn', 'tmmx', 'etr']
         self.n = n_landsat
-
         self.ancillary_rasters = []
         self.exclude_rasters = []
 
         if year and not start and not end:
-            self.start = '{}-05-01'.format(self.year)
-            self.end = '{}-10-15'.format(self.year)
+            self.start = '{}-01-01'.format(self.year)
+            self.end = '{}-12-30'.format(self.year)
 
     def build_training(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
         self.get_climate_timeseries()
-        self.get_et()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images()
 
@@ -108,10 +101,10 @@ class ImageStack(object):
         # Multiprocessing on this may not be plausible.
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry # fix this?
-        #self.get_et() This doesn't work reliably. 
-        self.get_climate_timeseries()
+        # self.get_climate_timeseries()
+        # The above line stopped working for unknown reasons.
+        # Maybe due to mismatched CRS?
         self.get_terrain()
-        self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
 
     def get_cdl(self):
@@ -135,16 +128,18 @@ class ImageStack(object):
         the root directory.
         """
         if self.lat is None:
-            g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
-                               output_path=self.root, max_cloud_percent=self.max_cloud)
+            g = GoogleDownload(self.start, self.end, self.sat, 
+                    path=self.path, row=self.row, output_path=self.root, 
+                    max_cloud_percent=self.max_cloud)
         else:
-            g = GoogleDownload(self.start, self.end, self.sat, latitude=self.lat, longitude=self.lon,
-                               output_path=self.root, max_cloud_percent=self.max_cloud)
+            g = GoogleDownload(self.start, self.end, self.sat,
+                    latitude=self.lat, longitude=self.lon, output_path=self.root,
+                    max_cloud_percent=self.max_cloud)
 
-        g.select_scenes(self.n)
-        self.scenes = g.selected_scenes
-        g.download(list_type='selected')
-
+        #l g.select_scenes(100)
+        # print('this should download after')
+        # self.scenes = g.selected_scenes
+        g.download(list_type='all')
         self.image_dirs = [x[0] for x in os.walk(self.root) if
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
 
@@ -155,20 +150,16 @@ class ImageStack(object):
     def _get_bounds(self):
         poly_in = self.landsat.get_tile_geometry()
         poly_in = Polygon(poly_in[0]['coordinates'][0])
+        crs = pyCRS(self.profile['crs']['init'])
         project = partial(
                 pytransform, 
-                Proj(self.profile['crs']),
-                Proj(self.profile['crs']))
+                Proj(crs),
+                Proj(crs))
         # The above is not needed.
         for_bounds = partial(
                 pytransform, 
-                Proj(self.profile['crs']),
-                Proj(init='epsg:4326'))
-        # Change the coordinate system
-        # The issue: the CRSs for the bounding box and for the mask are different.
-        # In _project, the incorrect CRS was making it throw an error.
-        # the fix? Inputting bounds in a unprojected CRS and 
-        # a projected shape for masking.
+                Proj(crs),
+                Proj('epsg:4326'))
         poly = transform(project, poly_in)
         poly_bounds = transform(for_bounds, poly_in)
         poly = Polygon(poly.exterior.coords)
@@ -180,6 +171,7 @@ class ImageStack(object):
 
     def get_climate_timeseries(self):
         bounds, geometry = self._get_bounds()
+        print(bounds, geometry)
         dates = self.scenes['DATE_ACQUIRED'].values
         all_dates = arange(datetime(self.year, 3, 1), max(dates)+1,
                 timedelta(days=1)).astype(datetime64)

@@ -1,22 +1,50 @@
 import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
+#E os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 import numpy as np
 import keras.backend as K
 import tensorflow as tf
 import pdb
+import argparse
+
 from sys import stdout
 from tensorflow.keras.models import load_model
 from glob import glob
 from rasterio.errors import RasterioIOError
 from matplotlib.pyplot import imshow, show, subplots
 from multiprocessing import Pool
+from scipy.special import expit
+from scipy.stats import mode
 
-from data_utils import save_raster, stack_rasters, paths_map_multiple_scenes, load_raster, clip_raster
-from fully_conv import weighted_loss, weighted_focal_loss
+from data_utils import (save_raster, stack_rasters, stack_rasters_multiprocess, paths_map_multiple_scenes, load_raster, clip_raster, paths_mapping_single_scene)
+from losses import multiclass_acc, masked_binary_xent, dice_loss, binary_acc, binary_focal_loss
 from extract_training_data import concatenate_fmasks
 
-
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
+
+masked_binary_xent = masked_binary_xent(pos_weight=1.0)
+custom_objects = {'masked_binary_xent':masked_binary_xent, 'binary_acc':binary_acc}
+
+
+def _evaluate_image_return_logits(model, raster, n_classes, n_overlaps=4):
+    chunk_size = 608
+    diff = 608
+    stride = 608
+    overlap_step = 10
+    raster = np.swapaxes(raster, 0, 2)
+    raster = np.expand_dims(raster, 0)
+    out = np.zeros((raster.shape[1], raster.shape[2], n_classes))
+    for k in range(0, n_overlaps*overlap_step, overlap_step):
+        for i in range(k, raster.shape[1]-diff, stride):
+            for j in range(k, raster.shape[2]-diff, stride):
+                sub_raster = raster[:, i:i+chunk_size, j:j+chunk_size, :]
+                preds = model.predict([sub_raster]) 
+                preds = expit(preds[0])
+                out[i:i+chunk_size, j:j+chunk_size, :] += preds
+            stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k // overlap_step + 1, n_overlaps, i / raster.shape[1]))
+    out = np.swapaxes(out, 0, 2)
+    out = out.astype(np.float32)
+    return out
+
 
 def fmask_evaluated_image(evaluated_image, path, row, year, landsat_directory):
     image, meta = load_raster(evaluated_image)
@@ -32,67 +60,70 @@ def fmask_evaluated_image(evaluated_image, path, row, year, landsat_directory):
     return image, meta
     
 
-def evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=4, n_overlaps=4, outfile=None, ii=None):
+def evaluate_image_many_shot(image_directory, model_paths, n_classes=4,
+        n_overlaps=4, outfile=None, custom_objects=None):
     ''' To recover from same padding, slide many different patches over the image. '''
-    suffix = '{}_{}_{}'.format(path, row, year)
-    image_path = os.path.join(image_directory, suffix)
-    model = load_model(model_path, custom_objects={'weighted_loss':weighted_loss, 'tf':tf,
-        '_epsilon':_epsilon})
-    if not os.path.isdir(image_path):
-        print('Images not downloaded for {}'.format(image_path))
+    print(outfile)
+    if not isinstance(model_paths, list):
+        model_paths = [model_paths]
+    if os.path.isfile(outfile):
+        print("image {} already exists".format(outfile))
         return
-    paths_mapping = paths_map_multiple_scenes(image_path)
-    try:
-        template, meta = load_raster(paths_mapping['B1.TIF'][0])
-        image_stack = stack_rasters(paths_mapping, meta, template.shape)
-    except Exception as e:
-        print(e)
+    if not os.path.isdir(image_directory):
+        print('Images not downloaded for {}'.format(image_directory))
         return
-    class_mask = np.ones((1, image_stack.shape[2], image_stack.shape[1], num_classes)) # Just a placeholder
-    out = np.zeros((image_stack.shape[2], image_stack.shape[1], num_classes))
-    chunk_size = 608
-    diff = 608
-    stride = 608
-    overlap_step = 10
-    image_stack = np.swapaxes(image_stack, 0, 2)
-    image_stack = np.expand_dims(image_stack, 0)
-    print(image_stack.shape)
-    for k in range(0, n_overlaps*overlap_step, overlap_step):
-        for i in range(k, image_stack.shape[1]-diff, stride):
-            for j in range(k, image_stack.shape[2]-diff, stride):
-                sub_image_stack = image_stack[:, i:i+chunk_size, j:j+chunk_size, :]
-                sub_mask = class_mask[:, i:i+chunk_size, j:j+chunk_size, :]
-                preds = model.predict([sub_image_stack, sub_mask]) 
-                preds = np.exp(preds)
-                soft = preds / np.sum(preds, axis=-1, keepdims=True)
-                out[i:i+chunk_size, j:j+chunk_size, :] += soft[0]
-            stdout.write("K: {} of {}. Percent done: {:.2f}\r".format(k // overlap_step + 1, n_overlaps, i / image_stack.shape[1]))
-    out = np.swapaxes(out, 0, 2)
-    out = out.astype(np.float32)
-    temp_mask = np.zeros((1, out.shape[1], out.shape[2]))
-    masked_image = concatenate_fmasks(image_path, temp_mask, meta, nodata=1)
-    for i in range(out.shape[0]):
-        out[i, :, :][masked_image.mask[0]] = np.nan
-    meta.update(dtype=np.float32)
-    out /= n_overlaps
+    paths_mapping = paths_map_multiple_scenes(image_directory)
+    template, meta = load_raster(paths_mapping['B1.TIF'][0])
+    image_stack = stack_rasters_multiprocess(paths_mapping, meta, template.shape)
+    out_arr = np.zeros((1, image_stack.shape[1], image_stack.shape[2]))
+    for i, model_path in enumerate(model_paths):
+        print('loading {}'.format(model_path))
+        model = load_model(model_path, custom_objects=custom_objects)
+        out_arr += _evaluate_image_return_logits(model, image_stack, n_classes=n_classes,
+            n_overlaps=n_overlaps)
+        del model
+
+    print(out_arr.shape)
+    temp_mask = np.zeros((1, out_arr.shape[1], out_arr.shape[2]))
+    fmasked_image = concatenate_fmasks(image_directory, temp_mask, meta, nodata=1)
+    # for i in range(out_arr.shape[0]):
+    #     out_arr[i, :, :][fmasked_image.mask[0]] = np.nan
+    meta.update(dtype=np.float64)
+    out_arr /= n_overlaps
     if outfile:
-        save_raster(out, outfile, meta, count=num_classes)
-    return out
+        save_raster(out_arr, outfile, meta, count=n_classes)
+    return out_arr
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model', type=str, required=True)
+    parser.add_argument('-i', '--image-dir', type=str, required=True)
+    parser.add_argument('-o', '--out-dir', type=str)
+    parser.add_argument('-n', '--n-classes', type=int, default=5)
+    parser.add_argument('-b', '--binary', action='store_true')
+    args = parser.parse_args()
+    if args.out_dir is None:
+        out_dir = os.path.dirname(os.path.splitext(args.model)[0])
+        if not os.path.isdir(out_dir):
+            os.mkdir(out_dir)
+    else: 
+        out_dir = args.out_dir
 
-    paths = [37, 39, 41]
-    rows = [28, 27, 27]
-    years = [2013, 2013, 2013]
-    image_directory = "/home/thomas/share/image_data/train/"
-    model_dirs = [d for d in os.listdir('./models/') if 'template_to_fill_in' in d]
-    model_paths = ['/home/thomas/IrrMapper/fully-conv-classification/models/{}/model.h5'.format(model_dir) for model_dir in model_dirs]
-    outfile_path = '/home/thomas/IrrMapper/fully-conv-classification/models/{}/'
-    # outfile_path = outfile_path + "evaluated_{}_{}_{}.tif"
-    outfile_paths = [outfile_path.format(model_dir) + "evaluated_{}_{}_{}.tif" for model_dir in model_dirs]
-    for model_path, outfile_path in zip(model_paths, outfile_paths):
-        print(model_path, outfile_path)
-        for path, row, year  in zip(paths, rows, years):
-            evaluate_image_many_shot(path, row, year, image_directory, model_path, num_classes=6,
-                    n_overlaps=1, outfile=outfile_path.format(path, row, year))
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+    custom_objects = {'mb':masked_binary_xent, 'binary_acc':binary_acc}
+
+    # model_paths = glob('/home/thomas/IrrMapper/fully-conv-classification/ensemble_models/test3/*.h5')
+    # model_paths = sorted(model_paths)
+    # model_paths = model_paths[len(model_paths)-1]
+    model_paths = args.model
+    image_directory = args.image_dir
+    outfile = os.path.join(os.path.basename(os.path.normpath(image_directory)) +
+            '_random_majority_sample.tif')
+    outfile = os.path.join(out_dir, outfile)
+    evaluate_image_many_shot(image_directory, 
+             model_paths=model_paths, 
+             n_classes=args.n_classes,
+             n_overlaps=1,
+             outfile=outfile,
+             custom_objects=custom_objects)

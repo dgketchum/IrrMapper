@@ -1,9 +1,7 @@
 # =============================================================================================
-# Copyright 2018 dgketchum
-#
+# Copyright 2018 dgketchum #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# you may not use this file except in compliance with the License.  You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
@@ -20,25 +18,21 @@ from glob import glob
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
 
+target_bands = ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF')
 
 def assign_shapefile_class_code(shapefile):
     if 'irrigated' in shapefile and 'unirrigated' not in shapefile:
-        return 0
-    if 'unirrigated' in shapefile:
         return 1
-    if 'uncultivated' in shapefile:
-        return 2
-    if 'wetlands' in shapefile:
-        return 3
-    if 'fallow' in shapefile:
-        return 4
+    return 0
 
-
-def assign_shapefile_class_code_binary(shapefile):
-    if 'irrigated' in shapefile and 'unirrigated' not in shapefile:
-        return 0
-    return 1
-
+# if 'unirrigated' in shapefile:
+#     return 1
+# if 'uncultivated' in shapefile:
+#     return 2
+# if 'wetlands' in shapefile:
+#     return 2
+# if 'fallow' in shapefile:
+#     return 4
 
 def assign_shapefile_year(shapefile):
     # get the shapefile name, not the whole path.
@@ -78,7 +72,7 @@ def static_rasters():
 
 
 def mask_rasters():
-    m = ('cloud_fmask.tif', 'water_fmask.tif')
+    m = ('cloud_fmask.tif', )# , 'water_fmask.tif')
     return m
 
 

@@ -5,6 +5,7 @@ from numpy import zeros, asarray, array, reshape, nan, sqrt, std
 from copy import deepcopy
 from fiona import open as fopen
 from rasterio.mask import mask
+from pyproj import CRS
 from rasterio import open as rasopen
 from shapely.geometry import shape, mapping, Polygon
 from sklearn.neighbors import KDTree
@@ -27,7 +28,9 @@ def mask_raster_to_shapefile(shapefile, raster, return_binary=True):
     shp = gpd.read_file(shapefile)
     shp = shp[shp.geometry.notnull()]
     with rasopen(raster, 'r') as src:
-        shp = shp.to_crs(src.crs)
+        # pyproj deprecated the +init syntax.
+        crs = CRS(src.crs['init'])
+        shp = shp.to_crs(crs)
         features = get_features(shp)
         arr = src.read()
         out_image, out_transform = mask(src, shapes=features, filled=False)
@@ -45,6 +48,8 @@ def mask_raster_to_features(raster, features, features_meta):
     # the whole metadata?
     gdf = gdf[gdf.geometry.notnull()]
     with rasopen(raster, 'r') as src:
+        crs = CRS(src.crs['init'])
+        print(crs)
         shp = gdf.to_crs(src.crs)
         features = get_features(shp)
         arr = src.read()
