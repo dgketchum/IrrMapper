@@ -138,7 +138,6 @@ def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classe
             except IndexError as e:
                 print(e)
                 continue
-
             cmats = pool.starmap(_preprocess_masks_and_calculate_cmat, zip(y_trues, y_preds,
                 [n_classes]*batch_size))
             for cmat in cmats:

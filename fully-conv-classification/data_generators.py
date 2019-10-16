@@ -13,14 +13,92 @@ from scipy.ndimage.morphology import distance_transform_edt
 from rasterio import open as rasopen
 from rasterio.errors import RasterioIOError
 from skimage import transform
+from skimage.morphology import erosion
 from sat_image.warped_vrt import warp_single_image
 from tensorflow.keras.utils import Sequence
 from multiprocessing import Pool
 from collections import defaultdict
-from sys import getsizeof
+from sys import getsizeof, exit
 
 from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
+
+
+class SatDataGenerator(Sequence):
+
+    def __init__(self, batch_size, n_classes, training=True):
+
+        self.batch_size = batch_size
+        self.training = training
+        self.n_classes = n_classes
+
+    def _get_files(self):
+        # Required override.
+        raise NotImplementedError
+
+
+    def on_epoch_end(self):
+        raise NotImplementedError
+
+
+    def __len__(self):
+        raise NotImplementedError
+
+
+    def __getitem__(self, idx):
+        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
+        data_tiles = [self._from_pickle(x) for x in batch]
+        self.batch=batch
+        if self.n_classes == 2:
+            processed = self._binary_labels_and_features(data_tiles)
+        else:
+            processed = self._labels_and_features(data_tiles)
+        batch_y = processed[1]
+        batch_x = processed[0]
+        raise NotImplementedError
+        return batch_x, batch_y
+
+
+    def _from_pickle(self, filename):
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
+        return data
+
+
+    def _labels_and_features(self, data_tiles):
+        features = []
+        one_hots = []
+        for tile in data_tiles:
+            data = tile['data']
+            one_hot = tile['one_hot'].astype(np.int)
+            class_code = tile['class_code']
+            if self.training:
+                data, one_hot = _augment_data(data, one_hot)
+            features.append(data)
+            one_hots.append(one_hot)
+        return [np.asarray(features)], [np.asarray(one_hots)]
+
+
+    def _binary_labels_and_features(self, data_tiles):
+        features = []
+        one_hots = []
+        bad_shape = False
+        for cnt, tile in enumerate(data_tiles):
+            data = tile['data']
+            one_hot = tile['one_hot'].astype(np.int)
+            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 
+            for i in range(one_hot.shape[2]):
+                if i == 1:
+                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 1
+                else:
+                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
+            if self.training:
+                data, binary_one_hot = _augment_data(data, binary_one_hot, binary=True)
+            binary_one_hot = np.expand_dims(binary_one_hot, 2)
+            features.append(data)
+            one_hots.append(binary_one_hot)
+        return [np.asarray(features)], [np.asarray(one_hots)]
+
 
 
 class RandomMajorityUndersamplingSequence(Sequence):
@@ -129,27 +207,60 @@ class RandomMajorityUndersamplingSequence(Sequence):
 
 class BinaryDataSequence(Sequence):
 
-    def __init__(self, batch_size, file_list, training=True, balance_pixels=False):
+    def __init__(self, batch_size, minority_file_list, majority_file_list, total_files=None,
+            training=True, balance_pixels=False, erode=False, balance_files=False):
         # this requires a file list of training data.
         self.training = training
         self.balance_pixels = balance_pixels
         self.batch_size = batch_size
-        self.file_list = file_list
-        self.n_files = len(self.file_list)
-        shuffle(self.file_list)
+        self.erode = erode
+        self.minority_file_list = minority_file_list
+        self.majority_file_list = majority_file_list
+        need_to_resample = True
+        assert(len(self.majority_file_list) >= len(self.minority_file_list))
+        if total_files is not None:
+            self.total_files = total_files
+            self.total_files = min(len(self.minority_file_list), total_files)
+        elif balance_files:
+            self.total_files = len(self.minority_file_list)
+        else:
+            self.file_list = self.minority_file_list + self.majority_file_list
+            self.total_files = len(self.majority_file_list) + len(self.minority_file_list)
+            self.file_subset = np.random.choice(self.file_list, self.total_files, replace=False)
+            need_to_resample = False
+
+        if need_to_resample:
+            self.file_subset = list(np.random.choice(self.minority_file_list, self.total_files,
+                replace=False))
+            self.file_subset.extend(list(np.random.choice(self.majority_file_list, self.total_files,
+                replace=False)))
+
+        assert(len(self.minority_file_list) <= len(self.file_subset))
+
+
+        shuffle(self.file_subset)
         self.idx = 0
 
 
     def __len__(self):
-        return int(np.ceil(self.n_files / self.batch_size))
+        return int(np.ceil(self.total_files / self.batch_size))
 
 
     def on_epoch_end(self):
-        shuffle(self.file_list)
+        if self.training:
+            # resample from corpus
+            self.file_subset = list(np.random.choice(self.minority_file_list, self.total_files,
+                replace=False))
+            self.file_subset.extend(list(np.random.choice(self.majority_file_list, self.total_files,
+                replace=False)))
+            shuffle(self.file_subset)
+        else:
+            # don't resample from corpus
+            shuffle(self.file_subset)
 
 
     def __getitem__(self, idx):
-        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
+        batch = self.file_subset[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
         processed = self._binary_labels_and_features(data_tiles)
         batch_y = processed[1]
@@ -171,6 +282,8 @@ class BinaryDataSequence(Sequence):
     def _binary_labels_and_features(self, data_tiles):
         features = []
         one_hots = []
+        if not self.training:
+            np.random.seed(0)
         for tile in data_tiles:
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
@@ -191,6 +304,11 @@ class BinaryDataSequence(Sequence):
                     xs = neg_examples[0][idx]
                     ys = neg_examples[1][idx]
                     binary_one_hot[xs, ys] = -1
+
+            if self.erode:
+                binary_one_hot = erosion(binary_one_hot)
+                binary_one_hot = erosion(binary_one_hot)
+
             binary_one_hot = np.expand_dims(binary_one_hot, 2)
             features.append(data)
             one_hots.append(binary_one_hot)

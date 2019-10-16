@@ -20,19 +20,20 @@ sys.path.append(abspath)
 
 target_bands = ('B1.TIF', 'B2.TIF', 'B3.TIF', 'B4.TIF')
 
-def assign_shapefile_class_code(shapefile):
+def assign_shapefile_class_code_binary(shapefile):
     if 'irrigated' in shapefile and 'unirrigated' not in shapefile:
         return 1
     return 0
 
-# if 'unirrigated' in shapefile:
-#     return 1
-# if 'uncultivated' in shapefile:
-#     return 2
-# if 'wetlands' in shapefile:
-#     return 2
-# if 'fallow' in shapefile:
-#     return 4
+def assign_shapefile_class_code(shapefile):
+    if 'irrigated' in shapefile and 'unirrigated' not in shapefile:
+        return 0
+    if 'unirrigated' in shapefile or 'wetlands' in shapefile:
+        return 1
+    if 'uncultivated' in shapefile:
+        return 2
+    if 'fallow' in shapefile:
+        return 3
 
 def assign_shapefile_year(shapefile):
     # get the shapefile name, not the whole path.

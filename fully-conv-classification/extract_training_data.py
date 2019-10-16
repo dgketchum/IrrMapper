@@ -154,6 +154,16 @@ def _target_indices_from_class_labels(class_labels, tile_size):
     return tiles_y, tiles_x
 
 
+def _assign_class_code_to_tile(class_label_tile):
+    if np.all(class_label_tile != 0):
+        unique, unique_count = np.unique(class_label_tile, return_counts=True)
+        unique = unique[:-1] # assume np.ma.masked is last.
+        unique_count = unique_count[:-1]
+        return unique[np.argmax(unique_count)]
+    # if a tile has any irrigated pixels, return 0.
+    return 0
+
+
 def _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
         n_classes, indices_y, indices_x, tile_size):
     out = []
@@ -161,15 +171,11 @@ def _save_training_data_from_indices(image_stack, class_labels, training_data_di
         for j in indices_y:
             class_label_tile = class_labels[i:i+tile_size, j:j+tile_size]
             shape = class_label_tile.shape
-            if (shape[0], shape[1]) != (tile_size, tile_size):
-                # Todo: handle this
-                continue
             if np.all(class_label_tile.mask):
                 continue
-            if np.any(class_label_tile == 1):
-                class_code = 1
-            else:
-                class_code = 0 
+            if (shape[0], shape[1]) != (tile_size, tile_size):
+                continue
+            class_code = _assign_class_code_to_tile(class_label_tile)
             sub_one_hot = _one_hot_from_labels(class_label_tile, n_classes)
             sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
             dt = DataTile(sub_image_stack, sub_one_hot, class_code)
@@ -317,8 +323,8 @@ if __name__ == '__main__':
     
     sd = glob('shapefile_data/test/*.shp')
     idd = '/home/thomas/share/image_data/'
-    td = '/home/thomas/ssd/binary_train_no_border_labels/test/'
-    n_classes = 2
+    td = '/home/thomas/ssd/multiclass_no_border_labels/test/'
+    n_classes = 4
 
     done = set()
 
@@ -339,9 +345,8 @@ if __name__ == '__main__':
 
     # TODO: rewrite this to take advantage of test train data in same path/row
     sd = glob('shapefile_data/train/*.shp')
-    idd = '/home/thomas/share/image_data/'
-    td = '/home/thomas/ssd/binary_train_no_border_labels/train/'
-    n_classes = 2
+    td = '/home/thomas/ssd/multiclass_no_border_labels/train/'
+    n_classes = 4
 
     done = set()
 
