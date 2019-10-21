@@ -403,5 +403,6 @@ class CropDataLayer(object):
 
 
 if __name__ == '__main__':
+    print(CropDataLayer.cdl.keys())
     pass
 # ========================= EOF ====================================================================

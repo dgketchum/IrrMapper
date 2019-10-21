@@ -22,7 +22,7 @@ sys.path.append(abspath)
 from numpy import vstack
 from datetime import datetime
 
-from pixel_classification.runspec import Montana, Nevada, Oregon, Utah, Washington
+from pixel_classification.runspec import Montana
 from pixel_classification.prepare_images import ImageStack
 from pixel_classification.compose_array import PixelTrainingArray as Pta
 from pixel_classification.tf_multilayer_perceptron import mlp
@@ -141,8 +141,5 @@ if __name__ == '__main__':
 
     classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=c_project_dir,
                    n_images=3, model=model_name)
-
-
-
 
 # ========================= EOF ====================================================================
