@@ -39,7 +39,7 @@ TEMP_TIF = os.path.join(os.path.dirname(__file__), 'temp', 'temp_tile_geo.tif')
 def get_geometries(shp, **filter_attrs):
     gdf = read_file(shp)
     df = DataFrame(gdf)
-    if filter_attrs['select']:
+    if filter_attrs:
         _drop = [x for x in df.columns if x not in filter_attrs['select']]
         df.drop(columns=_drop, inplace=True)
     df.sample(frac=1.)
@@ -105,9 +105,9 @@ if __name__ == '__main__':
 
     tables = os.path.join(extraction, 'training_data')
     shape_dir = os.path.join(extraction, 'raw_shapefiles')
-    shapes = os.path.join(shape_dir, 'central_WA.shp')
+    shapes = os.path.join(shape_dir, 'ID_2009.shp')
 
-    geos = get_geometries(shapes, **{'field': 'Irrigation', 'select': []})
-    visualize_geometries(geos, state='WA', out_dir=tables)
+    geos = get_geometries(shapes)
+    visualize_geometries(geos, state='ID', out_dir=tables)
 
 # ========================= EOF ====================================================================
