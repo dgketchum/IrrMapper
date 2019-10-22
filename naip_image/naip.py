@@ -144,7 +144,8 @@ class ApfoNaip(NaipImage):
         if 'year' in kwargs.keys():
             y = int(kwargs['year'])
             yr_ep = str(int((datetime(y, 1, 1, 0, 0, 0) - datetime(1970, 1, 1)).total_seconds()))
-            epoch = '{}%2C1262304000000'.format(yr_ep)
+            epoch = '{}%2C1262304000000'.format(yr_ep).
+
         else:
             epoch = '1230768000000%2C1262304000000'
 
