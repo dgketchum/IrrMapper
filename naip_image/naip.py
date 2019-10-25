@@ -15,6 +15,7 @@
 # =============================================================================================
 
 import os
+from datetime import datetime
 
 from bounds import GeoBounds, BufferPoint
 from numpy import empty, uint8
@@ -140,11 +141,19 @@ class ApfoNaip(NaipImage):
         if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
             raise BadCoordinatesError('{} is not a good latitude'.format(bbox[0]))
 
+        if 'year' in kwargs.keys():
+            y = int(kwargs['year'])
+            yr_ep = str(int((datetime(y, 1, 1, 0, 0, 0) - datetime(1970, 1, 1)).total_seconds()))
+            epoch = '{}%2C1262304000000'.format(yr_ep)
+
+        else:
+            epoch = '1230768000000%2C1262304000000'
+
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP_Historical/'
-        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
+        self.usda_query_str = '{a}/ImageServer/exportImage?f=image&time={b}&bbox={a}' \
                               '&imageSR=102100&bboxSR=102100&size=1024,1024' \
                               '&format=tiff&pixelType=U8' \
-                              '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
+                              '&interpolation=+RSP_BilinearInterpolation'.format(a='{}', b=epoch)
 
         for key, val in kwargs.items():
             self.__setattr__(key, val)
@@ -176,10 +185,6 @@ class ApfoNaip(NaipImage):
         req = get(url, verify=False, stream=True)
         if req.status_code != 200:
             raise ValueError('Bad response {} from NAIP API request.'.format(req.status_code))
-
-        # with open(self.temp_file, 'wb') as f:
-        #     f.write(req.content)
-
         with open(self.temp_file, 'wb') as f:
             for chunk in req.iter_content(chunk_size=1024):
                 if chunk:
