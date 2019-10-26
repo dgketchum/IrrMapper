@@ -26,11 +26,12 @@ from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, fi
 
 class SatDataGenerator(Sequence):
 
-    def __init__(self, batch_size, n_classes, training=True):
+    def __init__(self, batch_size, n_classes, balance_pixels_per_batch=False, training=True):
 
         self.batch_size = batch_size
-        self.training = training
         self.n_classes = n_classes
+        self.training = training
+        self.balance_pixels_per_batch = balance_pixels_per_batch
 
     def _get_files(self):
         # Required override.
@@ -46,17 +47,7 @@ class SatDataGenerator(Sequence):
 
 
     def __getitem__(self, idx):
-        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
-        data_tiles = [self._from_pickle(x) for x in batch]
-        self.batch=batch
-        if self.n_classes == 2:
-            processed = self._binary_labels_and_features(data_tiles)
-        else:
-            processed = self._labels_and_features(data_tiles)
-        batch_y = processed[1]
-        batch_x = processed[0]
         raise NotImplementedError
-        return batch_x, batch_y
 
 
     def _from_pickle(self, filename):
@@ -68,21 +59,73 @@ class SatDataGenerator(Sequence):
     def _labels_and_features(self, data_tiles):
         features = []
         one_hots = []
+        if self.balance_pixels_per_batch:
+            min_count = self._count_pixels(data_tiles)
+        
         for tile in data_tiles:
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
             class_code = tile['class_code']
+            if self.balance_pixels_per_batch:
+                one_hot = self._balance_pixels(one_hot, min_count)
             if self.training:
                 data, one_hot = _augment_data(data, one_hot)
             features.append(data)
             one_hots.append(one_hot)
+
         return [np.asarray(features)], [np.asarray(one_hots)]
 
+
+    def _balance_pixels(self, one_hot, min_count, binary=False):
+
+        if binary:
+            ys, xs = np.where(one_hot[:, :] == 1)
+            if len(ys):
+                ys = np.random.choice(ys, size=int(len(ys)-min_count), replace=False)
+                xs = np.random.choice(xs, size=int(len(xs)-min_count), replace=False)
+                one_hot[ys, xs, i] = -1
+            ys, xs = np.where(one_hot[:, :] == 0)
+            if len(ys):
+                ys = np.random.choice(ys, size=int(len(ys)-min_count), replace=False)
+                xs = np.random.choice(xs, size=int(len(xs)-min_count), replace=False)
+                one_hot[ys, xs, i] = -1
+
+        else:
+            for i in range(one_hot.shape[2]):
+                ys, xs = np.where(one_hot[:, :, i] == 1)
+                if len(ys):
+                    ys = np.random.choice(ys, size=int(len(ys)-min_count), replace=False)
+                    xs = np.random.choice(xs, size=int(len(xs)-min_count), replace=False)
+                    one_hot[ys, xs, i] = 0
+            
+        return one_hot
+
+
+    def _count_pixels(self, data_tiles):
+        pixel_counts = np.ones((self.n_classes))*np.inf
+        for tile in data_tiles:
+            data = tile['data']
+            one_hot = tile['one_hot'].astype(np.int)
+            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 
+            nodata_mask = np.sum(one_hot, axis=2) 
+            argmaxed = np.argmax(one_hot, axis=2) 
+            argmaxed[nodata_mask == 0] = -1
+            unique, counts = np.unique(argmaxed, return_counts=True) 
+            unique = unique[1:]
+            counts = counts[1:] 
+            for val, count in zip(unique, counts):
+                if count < pixel_counts[val]:
+                    pixel_counts[val] = count
+        return np.min(pixel_counts)
+    
 
     def _binary_labels_and_features(self, data_tiles):
         features = []
         one_hots = []
-        bad_shape = False
+
+        if self.balance_pixels_per_batch:
+            min_count = self._count_pixels(data_tiles)
+        
         for cnt, tile in enumerate(data_tiles):
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
@@ -92,6 +135,11 @@ class SatDataGenerator(Sequence):
                     binary_one_hot[:, :][one_hot[:, :, i] == 1] = 1
                 else:
                     binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
+            
+            if self.balance_pixels_per_batch:
+
+                one_hot = self._balance_pixels(one_hot, min_count, binary=True)
+
             if self.training:
                 data, binary_one_hot = _augment_data(data, binary_one_hot, binary=True)
             binary_one_hot = np.expand_dims(binary_one_hot, 2)
@@ -100,219 +148,165 @@ class SatDataGenerator(Sequence):
         return [np.asarray(features)], [np.asarray(one_hots)]
 
 
+class DataGenerator(SatDataGenerator):
+    '''
+    Feeds examples into the network in order
+    sorted by class_label. This is a form of random majority 
+    undersampling.
 
-class RandomMajorityUndersamplingSequence(Sequence):
+    I want the following functionality:
+       Easily switch between binary/multiclass classification
 
-    def __init__(self, batch_size, data_directory, training=True):
+       Can focus on examples from one class (dict of target_classes) 
+       Can apply arbitary morphological operations to the input labels
 
-        self.training = training
+       Able to feed in examples without any preprocessing (unbalanced)
+       Able to feed in examples that are balanced, but in a random order
+       Able to feed in examples that are balanced and in a definite order (queue of files)
+       Able to feed in batches that are balanced on a pixel count level.
+
+    '''
+    def __init__(self, data_directory, batch_size, n_classes=None, training=True,
+            target_classes=None, balance=False, balance_examples_per_batch=False,
+            balance_pixels_per_batch=False):
+        # Assert that all three can't be true
+        super().__init__(batch_size, n_classes, balance_pixels_per_batch, training)
         self.data_directory = data_directory
-        self.batch_size = batch_size
+        self.balance = balance
+        self.balance_examples_per_batch = balance_examples_per_batch
+        self.target_classes = target_classes
         self._get_files()
-        self.n_files = len(self.file_list)
-        shuffle(self.file_list)
-        self.idx = 0
+
+
+    def _check_if_directory_is_in_targets(self, directory):
+        ''' Assumes directory is at the top of the 
+            directory hierarchy '''
+        if self.target_classes is None:
+            return True
+        if not isinstance(self.target_classes, list):
+            if isinstance(self.target_classes, int):
+                self.target_classes = [self.target_classes]
+            else:
+                raise ValueError("target_classes must be one of int, list")
+        for target in self.target_classes:
+            if str(target) in directory:
+                return True
+        return False
 
 
     def _get_files(self):
-
-        self.class_directories = os.listdir(self.data_directory)
-        self.n_classes = len(self.class_directories)
-        self.files = [glob(os.path.join(self.data_directory, d, "*.pkl")) for d in
-                self.class_directories]
-        self.n_minority = min([len(f) for f in self.files])
-        self.file_list = []
-        if self.training:
-            self.file_list.extend(sample(self.files[0], self.n_minority))
-            self.file_list.extend(sample(self.files[1], self.n_minority))
-        else:
-            self.file_list.extend(self.files[0])
-            self.file_list.extend(self.files[1])
-        shuffle(self.file_list)
-
+        dirs = os.listdir(self.data_directory)
+        if self.n_classes is None:
+            self.n_classes = len(dirs)
+        for d in os.listdir(self.data_directory):
+            if not os.path.isdir(os.path.join(self.data_directory, d)):
+                raise ValueError("Non-directory object exists in data_directory")
+        dirs = [os.path.join(self.data_directory, d) for d in dirs \
+                if self._check_if_directory_is_in_targets(d)]
+        self.dirs = dirs
+        if not self.balance and not self.balance_examples_per_batch:
+            self.n_files = self._unbalanced_file_list(dirs, first=True)
+            self._on_epoch_end = self._unbalanced_file_list
+            # all training examples, randomly selected
+            # number of files in an epoch is the sum of the files
+            # for each class
+            return
+        elif self.balance:
+            self.n_files = self._balanced_file_list(dirs, first=True)
+            self._on_epoch_end = self._balanced_file_list
+            # balanced file list with random selection
+            # i.e. the number of files in an epoch
+            # is n classes * min number of training examples for any class
+            return
+        if self.balance_examples_per_batch:
+            self.n_files = self._balanced_queue(dirs, first=True)
+            self._on_epoch_end = self._balanced_queue
+            # all training examples, fed to the network in sequential order 
+            # i.e. 1, 2, 3, 4, 1, 2, 3, 4
+            # the number of files in an epoch is 
+            # n classes * min number of training examples for any class
+            return
 
     def __len__(self):
+        
         return int(np.ceil(self.n_files / self.batch_size))
 
 
     def on_epoch_end(self):
-        self.file_list = []
-        self.file_list.extend(sample(self.files[0], self.n_minority))
-        self.file_list.extend(sample(self.files[1], self.n_minority))
-        shuffle(self.file_list)
-        self.n_files = len(self.file_list)
+        # Recreates the file list
+        self._on_epoch_end(self.dirs, first=False)
 
 
     def __getitem__(self, idx):
-        batch = self.file_list[idx * self.batch_size:(idx + 1)*self.batch_size]
+        # print("suspicious:", idx)
+        # model.fit_generator does not pull batches in order of batch.
+        batch = self.files[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
-        self.batch=batch
+        self.batch = batch
         if self.n_classes == 2:
-            processed = self._binary_labels_and_features(data_tiles)
+            batch_x, batch_y = self._binary_labels_and_features(data_tiles)
         else:
-            processed = self._labels_and_features(data_tiles)
+            batch_x, batch_y = self._labels_and_features(data_tiles)
 
-        batch_y = processed[1]
-        batch_x = processed[0]
         return batch_x, batch_y
     
 
-    def _from_pickle(self, filename):
-        with open(filename, 'rb') as f:
-            data = pickle.load(f)
-        return data
 
-
-    def _labels_and_features(self, data_tiles):
-        features = []
-        one_hots = []
-        for tile in data_tiles:
-            data = tile['data']
-            one_hot = tile['one_hot'].astype(np.int)
-            one_hot[0, 0, :] = 0
-            class_code = tile['class_code']
-            data, one_hot = _augment_data(data, one_hot)
-            features.append(data)
-            one_hots.append(one_hot)
-        return [np.asarray(features)], [np.asarray(one_hots)]
-
-
-    def _binary_labels_and_features(self, data_tiles):
-        features = []
-        one_hots = []
-        bad_shape = False
-        for cnt, tile in enumerate(data_tiles):
-            data = tile['data']
-            one_hot = tile['one_hot'].astype(np.int)
-            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 
-            for i in range(one_hot.shape[2]):
-                if i == 1:
-                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 1
-                else:
-                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
-            neg_examples = np.where(binary_one_hot == 0)
-            n_neg = len(neg_examples[0])
-            n_pos = len(np.where(binary_one_hot == 1)[0])
-            if n_neg != 0:
-                xs = np.random.choice(neg_examples[0], n_neg - n_pos, replace=False)
-                ys = np.random.choice(neg_examples[1], n_neg - n_pos, replace=False)
-                binary_one_hot[xs, ys] = -1
-            if self.training:
-                data, binary_one_hot = _augment_data(data, binary_one_hot, binary=True)
-            binary_one_hot = np.expand_dims(binary_one_hot, 2)
-            features.append(data)
-            one_hots.append(binary_one_hot)
-        return [np.asarray(features)], [np.asarray(one_hots)]
-
-
-class BinaryDataSequence(Sequence):
-
-    def __init__(self, batch_size, minority_file_list, majority_file_list, total_files=None,
-            training=True, balance_pixels=False, erode=False, balance_files=False):
-        # this requires a file list of training data.
-        self.training = training
-        self.balance_pixels = balance_pixels
-        self.batch_size = batch_size
-        self.erode = erode
-        self.minority_file_list = minority_file_list
-        self.majority_file_list = majority_file_list
-        need_to_resample = True
-        assert(len(self.majority_file_list) >= len(self.minority_file_list))
-        if total_files is not None:
-            self.total_files = total_files
-            self.total_files = min(len(self.minority_file_list), total_files)
-        elif balance_files:
-            self.total_files = len(self.minority_file_list)
+    def _unbalanced_file_list(self, dirs, first):
+        if first:
+            self.files = []
+            for d in dirs:
+                self.files.extend(glob(os.path.join(d, "*pkl")))
+            return len(self.files)
         else:
-            self.file_list = self.minority_file_list + self.majority_file_list
-            self.total_files = len(self.majority_file_list) + len(self.minority_file_list)
-            self.file_subset = np.random.choice(self.file_list, self.total_files, replace=False)
-            need_to_resample = False
-
-        if need_to_resample:
-            self.file_subset = list(np.random.choice(self.minority_file_list, self.total_files,
-                replace=False))
-            self.file_subset.extend(list(np.random.choice(self.majority_file_list, self.total_files,
-                replace=False)))
-
-        assert(len(self.minority_file_list) <= len(self.file_subset))
-
-
-        shuffle(self.file_subset)
-        self.idx = 0
-
-
-    def __len__(self):
-        return int(np.ceil(self.total_files / self.batch_size))
-
-
-    def on_epoch_end(self):
-        if self.training:
-            # resample from corpus
-            self.file_subset = list(np.random.choice(self.minority_file_list, self.total_files,
-                replace=False))
-            self.file_subset.extend(list(np.random.choice(self.majority_file_list, self.total_files,
-                replace=False)))
-            shuffle(self.file_subset)
-        else:
-            # don't resample from corpus
-            shuffle(self.file_subset)
-
-
-    def __getitem__(self, idx):
-        batch = self.file_subset[idx * self.batch_size:(idx + 1)*self.batch_size]
-        data_tiles = [self._from_pickle(x) for x in batch]
-        processed = self._binary_labels_and_features(data_tiles)
-        batch_y = processed[1]
-        batch_x = processed[0]
-        return batch_x, batch_y
+            shuffle(self.files)
     
+    
+    def _balanced_file_list(self, dirs, first):
+        if first:
+            self.file_dict = {}
+            self.n_minority = np.inf
+            for d in dirs:
+                files = glob(os.path.join(d, "*pkl"))
+                shuffle(files)
+                self.file_dict[d] = files
+                if len(files) < self.n_minority:
+                    self.n_minority = len(files)
+            self.files = []
+            for key in self.file_dict:
+                self.files.extend(sample(self.file_dict[key], self.n_minority, replace=False))
+            return len(self.files)
+        else:
+            self.files = []
+            for key in self.file_dict:
+                self.files.extend(sample(self.file_dict[key], self.n_minority, replace=False))
+            shuffle(self.files)
 
-    def _from_pickle(self, filename):
-        with open(filename, 'rb') as f:
-            data = pickle.load(f)
-        return data
-
-
-    def _apply_weights(self, one_hot):
-        for i in range(self.n_classes):
-            one_hot[:, :, i] *= self.class_weights[i]
-
-
-    def _binary_labels_and_features(self, data_tiles):
-        features = []
-        one_hots = []
-        if not self.training:
-            np.random.seed(0)
-        for tile in data_tiles:
-            data = tile['data']
-            one_hot = tile['one_hot'].astype(np.int)
-            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 
-            for i in range(one_hot.shape[2]):
-                if i == 1:
-                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 1
-                else:
-                    binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
-            if self.training:
-                data, binary_one_hot = _augment_data(data, binary_one_hot, binary=True)
-            if self.training and self.balance_pixels:
-                neg_examples = np.where(binary_one_hot == 0)
-                n_neg = len(neg_examples[0])
-                n_pos = len(np.where(binary_one_hot == 1)[0])
-                if n_neg > n_pos:
-                    idx = np.random.choice(np.arange(n_neg), n_neg - n_pos, replace=False)
-                    xs = neg_examples[0][idx]
-                    ys = neg_examples[1][idx]
-                    binary_one_hot[xs, ys] = -1
-
-            if self.erode:
-                binary_one_hot = erosion(binary_one_hot)
-                binary_one_hot = erosion(binary_one_hot)
-
-            binary_one_hot = np.expand_dims(binary_one_hot, 2)
-            features.append(data)
-            one_hots.append(binary_one_hot)
-        return [np.asarray(features)], [np.asarray(one_hots)]
+    
+    def _balanced_queue(self, dirs, first):
+        self.file_dict = {}
+        self.n_minority = np.inf
+        for d in dirs:
+            files = glob(os.path.join(d, "*pkl"))
+            shuffle(files)
+            self.file_dict[d] = files
+            if len(files) < self.n_minority:
+                self.n_minority = len(files)
+        if not first:
+            for key in self.file_dict:
+                shuffle(self.file_dict[key])
+        self.files = []
+        to_empty = self.file_dict.copy()
+        while True:
+            try:
+                for key in sorted(to_empty):
+                    # python3 supports ordered iteration over dict keys.
+                    # this may not work perfectly when
+                    # fitting a generator with use_multiprocessing == True
+                    self.files.append(to_empty[key].pop())
+            except IndexError as e:
+                break
+        return len(self.files)
 
 
 def _flip_lr(feature_tile, one_hot, binary=False):

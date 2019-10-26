@@ -76,6 +76,13 @@ def mask_rasters():
     m = ('cloud_fmask.tif', )# , 'water_fmask.tif')
     return m
 
+def irrigated_path_rows_mt():
+    ls = [(37, 28), (39, 27), (42, 26), (42, 27), (41, 28), (41, 27), (41, 26), (40, 27),
+            (40, 28), (39, 28), (39, 29), (38, 26), (38, 28), (34, 27), (35, 27), (36, 26), 
+            (36, 27), (36, 28), (37, 26)]
+    return ls
+
+
 
 if __name__ == '__main__':
     pass

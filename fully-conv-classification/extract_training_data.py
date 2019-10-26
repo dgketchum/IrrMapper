@@ -19,7 +19,7 @@ from multiprocessing import Pool
 from collections import defaultdict
 
 from runspec import landsat_rasters, climate_rasters, mask_rasters, assign_shapefile_class_code, assign_shapefile_year
-from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr, paths_mapping_single_scene
+from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr, paths_mapping_single_scene, mean_of_three, median_of_three
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
 
 
@@ -93,15 +93,15 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0, ta
     return class_mask
 
 
-def extract_training_data_over_path_row(shapefiles, path, row, year, image_directory,
-        training_data_directory, n_classes, assign_shapefile_class_code, path_map_func=None,
+def extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
+        training_data_root_directory, n_classes, assign_shapefile_class_code, path_map_func=None,
         preprocessing_func=None, tile_size=608):
 
     if path_map_func is None:
         path_map_func = paths_map_multiple_scenes
 
-    if not isinstance(shapefiles, list):
-        shapefiles = [shapefiles]
+    if not isinstance(test_train_shapefiles, dict):
+        raise ValueError("expected dict, got {}".format(type(test_train_shapefiles)))
     
     path_row_year = str(path) + '_' + str(row) +  '_' + str(year)
     image_path = os.path.join(image_directory, path_row_year)
@@ -111,34 +111,38 @@ def extract_training_data_over_path_row(shapefiles, path, row, year, image_direc
     mask_file = _random_tif_from_directory(image_path)
     mask, mask_meta = load_raster(mask_file)
     mask = np.zeros_like(mask).astype(np.int)
-    first = True
-    class_labels = None
-    for f in shapefiles:
-        class_code = assign_shapefile_class_code(f)
-        print(f, class_code)
-        out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
-        if first:
-            class_labels = out
-            class_labels[~class_labels.mask] = class_code
-            first = False
-        else:
-            class_labels[~out.mask] = class_code
     try:
         image_stack = stack_rasters_multiprocess(image_path_maps, target_geo=mask_meta, target_shape=mask.shape)
     except RasterioIOError as e:
         print("Redownload images for", path_row_year)
         print(e)
         return
-    if preprocessing_func is not None:
-        image_stack = preprocessing_func(image_path_map, image_stack)
+    image_stack = median_of_three(image_path_maps, image_stack, mask.shape)
+    for key, shapefiles in test_train_shapefiles.items():
+        if key.lower() not in ('test', 'train'):
+            raise ValueError("expected key to be one of case-insenstive {test, train},\
+            got {}".format(key))
 
-    class_labels = concatenate_fmasks(image_path, class_labels, mask_meta) 
-    image_stack = np.swapaxes(image_stack, 0, 2)
-    class_labels = np.swapaxes(class_labels, 0, 2)
-    class_labels = np.squeeze(class_labels)
-    tiles_y, tiles_x = _target_indices_from_class_labels(class_labels, tile_size)
-    _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
-            n_classes, tiles_x, tiles_y, tile_size)
+        training_data_directory = os.path.join(training_data_root_directory, key)
+        first = True
+        class_labels = None
+        for f in shapefiles:
+            class_code = assign_shapefile_class_code(f)
+            print(f, class_code)
+            out, _ = mask_raster_to_shapefile(f, mask_file, return_binary=False)
+            if first:
+                class_labels = out
+                class_labels[~class_labels.mask] = class_code
+                first = False
+            else:
+                class_labels[~out.mask] = class_code
+        class_labels = concatenate_fmasks(image_path, class_labels, mask_meta) 
+        image_stack = np.swapaxes(image_stack, 0, 2)
+        class_labels = np.swapaxes(class_labels, 0, 2)
+        class_labels = np.squeeze(class_labels)
+        tiles_y, tiles_x = _target_indices_from_class_labels(class_labels, tile_size)
+        _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
+                n_classes, tiles_x, tiles_y, tile_size)
 
 
 def _target_indices_from_class_labels(class_labels, tile_size):
@@ -313,53 +317,28 @@ def make_border_labels(mask, border_width):
     dm[dm > border_width] = 0
     return dm
 
-def _mean_of_three_images(paths_map, image_stack):
-    # for each key in image_stack (sorted):
-    # ...climate...landsat...static...
-    pass
-
 
 if __name__ == '__main__':
     
-    sd = glob('shapefile_data/test/*.shp')
-    idd = '/home/thomas/share/image_data/'
-    td = '/home/thomas/ssd/multiclass_no_border_labels/test/'
+    image_directory = '/home/thomas/share/image_data/'
+    shapefiles = glob('shapefile_data/test/*.shp') + glob('shapefile_data/train/*.shp')
+    training_root_directory = '/home/thomas/ssd/test_extract/'
     n_classes = 4
-
     done = set()
 
-    for i, f in enumerate(sd):
+    for f in shapefiles:
         if f in done:
             continue
-        ffg = all_matching_shapefiles(f, 'shapefile_data/test/', assign_shapefile_year)
-        for e in ffg:
+        test_shapefiles = all_matching_shapefiles(f, 'shapefile_data/test/', assign_shapefile_year)
+        train_shapefiles = all_matching_shapefiles(f, 'shapefile_data/train/', assign_shapefile_year)
+        for e in test_shapefiles + train_shapefiles:
             done.add(e)
         bs = os.path.splitext(os.path.basename(f))[0]
         _, path, row = bs[-7:].split("_")
         year = assign_shapefile_year(f)
         print("extracting data for", path, row, year)
         paths_map_func = paths_map_multiple_scenes
-        extract_training_data_over_path_row(ffg, path, row, year, idd, td, n_classes,
-           assign_shapefile_class_code, path_map_func=paths_map_func)
+        test_train_shapefiles = {'test':test_shapefiles, 'train':train_shapefiles}
+        extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
+                training_root_directory, n_classes, assign_shapefile_class_code, path_map_func=paths_map_func)
 
-
-    # TODO: rewrite this to take advantage of test train data in same path/row
-    sd = glob('shapefile_data/train/*.shp')
-    td = '/home/thomas/ssd/multiclass_no_border_labels/train/'
-    n_classes = 4
-
-    done = set()
-
-    for i, f in enumerate(sd):
-        if f in done:
-            continue
-        ffg = all_matching_shapefiles(f, 'shapefile_data/train/', assign_shapefile_year)
-        for e in ffg:
-            done.add(e)
-        bs = os.path.splitext(os.path.basename(f))[0]
-        _, path, row = bs[-7:].split("_")
-        year = assign_shapefile_year(f)
-        print("extracting data for", path, row, year)
-        paths_map_func = paths_map_multiple_scenes
-        extract_training_data_over_path_row(ffg, path, row, year, idd, td, n_classes,
-           assign_shapefile_class_code, path_map_func=paths_map_func)

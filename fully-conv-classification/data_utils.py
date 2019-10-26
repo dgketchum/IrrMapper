@@ -3,13 +3,13 @@ import geopandas as gpd
 import json
 import pdb
 import datetime
+import numpy as np
 
 from fiona import open as fopen
 from glob import glob
 from lxml import html 
 from requests import get
 from copy import deepcopy
-from numpy import zeros, asarray, array, reshape, nan, sqrt, std, uint16
 from shapely.geometry import shape
 from collections import defaultdict
 from rasterio import float32, open as rasopen
@@ -166,36 +166,47 @@ def paths_map_multiple_scenes(image_directory, satellite=8):
 
     return band_map
 
-def mean_of_scenes(paths_map, target_geo, target_shape):
 
-    rasters = _load_rasters(paths_map, target_geo, target_shape)
-    n_scenes = len(paths_map['B1.TIF'])
-    num_rasters = len(rasters)
+def mean_of_three(paths_map, image_stack, target_shape, satellite=8):
+
+    # iterate over paths_map
+    # iterate over each raster in paths_map
+
     j = 0
-    image_stack = np.zeros((num_rasters, target_shape[1], target_shape[2]))
+    out_image_stack = np.zeros((19, target_shape[1], target_shape[2]))
+    out_idx = 0
     for band in sorted(paths_map.keys()):
-        feature_rasters = paths_map[band]
-        empty = np.zeros(target_shape)
-        for feature_raster in feature_raster:
-            empty += rasters[feature_raster]
-        image_stack[j] = empty/n_scenes
-    return image_stack
+        if band in landsat_rasters()[satellite]:
+            for sub_band in paths_map[band]:
+                out_image_stack[out_idx] += image_stack[j]
+                j += 1
+            out_image_stack[out_idx] /= 3
+            out_idx += 1
+        else:
+            out_image_stack[out_idx] = image_stack[j]
+            out_idx += 1
+
+    return out_image_stack
 
 
-def median_of_scenes(paths_map, target_geo, target_shape):
+def median_of_three(paths_map, image_stack, target_shape, satellite=8):
 
-    rasters = _load_rasters(paths_map, target_geo, target_shape)
-    n_scenes = len(paths_map['B1.TIF'])
-    num_rasters = len(rasters)
     j = 0
-    image_stack = np.zeros((num_rasters, target_shape[1], target_shape[2]))
+    out_image_stack = np.zeros((19, target_shape[1], target_shape[2]))
+    out_idx = 0
     for band in sorted(paths_map.keys()):
-        feature_rasters = paths_map[band]
-        empty = np.zeros(target_shape)
-        for feature_raster in feature_raster:
-            empty += rasters[feature_raster]
-        image_stack[j] = empty/n_scenes
-    return image_stack
+        if band in landsat_rasters()[satellite]:
+            slc = np.zeros((3, target_shape[1], target_shape[2]))
+            for i, sub_band in enumerate(paths_map[band]):
+                slc[i] = image_stack[j]
+                j += 1
+            out_image_stack[out_idx] = np.median(slc, axis=0)
+            out_idx += 1
+        else:
+            out_image_stack[out_idx] = image_stack[j]
+            out_idx += 1
+
+    return out_image_stack
 
 
 def map_bands_to_indices(target_bands, satellite=8):
@@ -286,7 +297,7 @@ def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
             for feature_raster in feature_rasters:
                 arr = rasters[feature_raster]
                 if first:
-                    stack = zeros((num_rasters, target_shape[1], target_shape[2]), uint16)
+                    stack = np.zeros((num_rasters, target_shape[1], target_shape[2]), np.uint16)
                     stack[j, :, :] = arr
                     j += 1
                     first = False
@@ -299,7 +310,7 @@ def stack_rasters_multiprocess(paths_map, target_geo, target_shape):
 
             # somehow select
             if first:
-                stack = zeros((num_rasters, target_shape[1], target_shape[2]), uint16)
+                stack = np.zeros((num_rasters, target_shape[1], target_shape[2]), np.uint16)
                 stack[j, :, :] = arr
                 j += 1
                 first = False
@@ -329,7 +340,7 @@ def stack_rasters(paths_map, target_geo, target_shape):
             with rasopen(feature_raster, mode='r') as src:
                 arr = src.read()
             if first:
-                stack = zeros((num_rasters, target_shape[1], target_shape[2]), uint16)
+                stack = np.zeros((num_rasters, target_shape[1], target_shape[2]), np.uint16)
                 stack[j, :, :] = arr
                 j += 1
                 first = False
@@ -390,7 +401,7 @@ def clip_raster(evaluated, path, row, outfile=None):
         out = out.to_crs(src.crs)
         features = get_features(out)
         # if crop == true for mask, you have to update the metadata.
-        out_image, out_transform = mask(src, shapes=features, crop=True, nodata=nan)
+        out_image, out_transform = mask(src, shapes=features, crop=True, nodata=np.nan)
         meta = src.meta.copy()
         count = out_image.shape[0]
 

@@ -59,25 +59,6 @@ def mask_raster_to_features(raster, features, features_meta):
     return out_image, meta
 
 
-def generate_class_mask(shapefile, master_raster, nodata=-1):
-    ''' Generates a mask with 1 everywhere 
-    shapefile data is present and a no_data value everywhere else.
-    no_data is -1 in this case, as it is never a valid class label.
-    Switching coordinate reference systems is important here, or 
-    else the masking won't work.
-    '''
-    shp = gpd.read_file(shapefile)
-    shp = shp[shp.geometry.notnull()]
-    with rasopen(master_raster, 'r') as src:
-        shp = shp.to_crs(src.crs)
-        features = get_features(shp)
-        out_image, out_transform = mask(src, shapes=features, nodata=-1)
-        out_image[out_image != -1] = 1 
-        out_image[out_image == -1] = 0
-        meta = src.meta
-    return out_image, meta
-
-
 def get_shapefile_lat_lon(shapefile):
     ''' Center of shapefile'''
     with fopen(shapefile, "r") as src:

@@ -16,6 +16,12 @@ from random import sample, shuffle
 from glob import glob
 
 
+def softmax(arr, count_dim=0):
+    arr = np.exp(arr)
+    arr /= (np.sum(arr, axis=count_dim, keepdims=True))
+    return arr
+
+
 def make_temporary_directory(model_directory=None):
     if model_directory is None:
         model_directory = './models/'
@@ -110,7 +116,7 @@ def _preprocess_masks_and_calculate_cmat(y_true, y_pred, n_classes=2):
     y_pred = y_pred
     if n_classes > 2:
         y_pred = np.squeeze(y_pred)
-        y_pred = softmax(y_pred)
+        y_pred = softmax(y_pred, count_dim=2)
         y_pred = np.argmax(y_pred, axis=2)
         y_true = np.argmax(y_true, axis=2)
         y_pred = y_pred[mask]
@@ -120,13 +126,15 @@ def _preprocess_masks_and_calculate_cmat(y_true, y_pred, n_classes=2):
         y_pred = y_pred[mask]
         y_true = y_true[mask]
 
-        cmat = confusion_matrix(y_true, y_pred,
-                labels=labels)
+    cmat = confusion_matrix(y_true, y_pred,
+            labels=labels)
 
     return cmat
 
 def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classes=2):
     out_cmat = np.zeros((n_classes, n_classes))
+    if not len(valid_generator):
+        raise ValueError("Length of validation generator is 0")
     with Pool(batch_size) as pool:
         for batch_x, y_true in valid_generator:
             y_true = y_true[0]
@@ -155,26 +163,9 @@ def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classe
         return cmat, recall_dict, precision_dict
 
 
-def lr_schedule(epoch, initial_learning_rate):
+def lr_schedule(epoch, initial_learning_rate, efold=50):
     lr = initial_learning_rate
-    if epoch > 15:
-        lr /= 256
-    elif epoch > 13:
-        lr /= 128
-    elif epoch > 11:
-        lr /= 64
-    elif epoch > 9:
-        lr /= 32.
-    elif epoch > 7:
-        lr /= 16.
-    elif epoch > 5:
-        lr /= 8.
-    elif epoch > 3:
-        lr /= 4.
-    elif epoch > 1:
-        lr /= 2.
-    print('Learning rate: ', lr)
-    return float(lr)
+    return float(lr*np.exp(-epoch/efold))
 
 
 def save_model_info(root_directory, loss_func, accuracy, loss, class_weights, classes_to_augment,
