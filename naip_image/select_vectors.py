@@ -51,44 +51,53 @@ def get_naip_polygon(bbox):
                     [bbox[2], bbox[1]]])
 
 
-def visualize_geometries(geometries, state='montana', out_dir=None, year=None):
+def get_scene_overview(geometries, state='montana', out_dir=None, year=None):
 
     for g in geometries:
+
         naip_args = dict([('dst_crs', '4326'),
                           ('centroid', (g.centroid.y, g.centroid.x)),
                           ('buffer', 1000),
                           ('year', year)])
+
         naip = ApfoNaip(**naip_args)
         array, profile = naip.get_image(state)
-        naip.save(array, profile, TEMP_TIF, crs=naip_args['dst_crs'])
+        naip.save(array, profile, TEMP_TIF)
         naip_geometry = get_naip_polygon(naip.bbox)
         src = rasterio.open(TEMP_TIF)
+
         vectors = [geo for geo in geometries if geo.intersects(naip_geometry)]
         fig, ax = plt.subplots()
         rasterio.plot.show((src, 1), cmap='viridis', ax=ax)
+
         patches = [PolygonPatch(feature, edgecolor="red", facecolor="none",
                                 linewidth=1.) for feature in vectors]
+
         ax.add_collection(cplt.PatchCollection(patches, match_original=True))
         ax.set_xlim(naip_geometry.bounds[0], naip_geometry.bounds[2])
         ax.set_ylim(naip_geometry.bounds[1], naip_geometry.bounds[3])
+
         name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         _dir = os.path.join(out_dir, name)
         os.mkdir(_dir)
+
         fig_name = os.path.join(_dir, '{}_overview.png'.format(name))
         plt.savefig(fig_name)
         os.rename(TEMP_TIF, os.path.join(_dir, '{}_multi.tif'.format(name)))
         naip_bool_name = os.path.join(_dir, '{}_bool.tif'.format(name))
+
         meta = src.meta.copy()
         meta.update(compress='lzw')
         meta.update(nodata=0)
         meta.update(count=1)
+
         bool_values = [(f, 1) for f in vectors]
+
         with rasterio.open(naip_bool_name, 'w', **meta) as out:
             burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
-                               out_shape=(array.shape[1], array.shape[2]), transform=out.transform)
+                               out_shape=(array.shape[1], array.shape[2]), all_touched=False)
             out.write(burned, 1)
-    else:
-        pass
+        break
 
 
 if __name__ == '__main__':
@@ -96,9 +105,9 @@ if __name__ == '__main__':
     extraction = os.path.join(home, 'field_extraction')
     tables = os.path.join(extraction, 'training_data')
     shape_dir = os.path.join(extraction, 'raw_shapefiles')
-    shapes = os.path.join(shape_dir, 'ID_2009.shp')
-    yr = shapes.split('.')[0][-4:]
+    shapes = os.path.join(shape_dir, 'ID_Irr_2009.shp')
+    yr = 2009
     geos = get_geometries(shapes)
-    visualize_geometries(geos, state='ID', out_dir=tables, year=yr)
+    get_scene_overview(geos, state='ID', out_dir=tables, year=yr)
 
 # ========================= EOF ====================================================================

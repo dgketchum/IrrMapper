@@ -138,9 +138,6 @@ class ApfoNaip(NaipImage):
                 kwargs['buffer'] = 1000
             self.bbox = bbox = BufferPoint().buffer_meters(lat, lon, kwargs['buffer'])
 
-        if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
-            raise BadCoordinatesError('{} is not a good latitude'.format(bbox[0]))
-
         if 'year' in kwargs.keys():
             y = int(kwargs['year'])
             yr_ep = str(int((datetime(y, 1, 1, 0, 0, 0) - datetime(1970, 1, 1)).total_seconds()))
@@ -185,6 +182,7 @@ class ApfoNaip(NaipImage):
         req = get(url, verify=False, stream=True)
         if req.status_code != 200:
             raise ValueError('Bad response {} from NAIP API request.'.format(req.status_code))
+
         with open(self.temp_file, 'wb') as f:
             for chunk in req.iter_content(chunk_size=1024):
                 if chunk:
