@@ -141,6 +141,6 @@ if __name__ == '__main__':
     shapes = os.path.join(shape_dir, 'ID_Irr_2009.shp')
     yr = 2009
     geos = get_geometries(shapes)
-    get_training_image(geos, state='ID', out_dir=tables, year=yr, n=5)
+    get_training_image(geos, state='ID', out_dir=tables, year=yr, n=500)
     # clean_out_training_data(tables)
 # ========================= EOF ====================================================================
