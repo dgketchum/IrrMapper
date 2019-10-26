@@ -36,6 +36,19 @@ from naip_image.naip import ApfoNaip
 TEMP_TIF = os.path.join(os.path.dirname(__file__), 'temp', 'temp_tile_geo.tif')
 
 
+def convert_bytes(num):
+    for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
+        if num < 1024.0:
+            return num, x
+        num /= 1024.0
+
+
+def file_size(file_path):
+    if os.path.isfile(file_path):
+        file_info = os.stat(file_path)
+        return convert_bytes(file_info.st_size)
+
+
 def get_geometries(shp, **filter_attrs):
     gdf = read_file(shp)
     df = DataFrame(gdf)
@@ -51,8 +64,8 @@ def get_naip_polygon(bbox):
                     [bbox[2], bbox[1]]])
 
 
-def get_scene_overview(geometries, state='montana', out_dir=None, year=None):
-
+def get_training_image(geometries, state='montana', out_dir=None, year=None, n=10):
+    ct = 0
     for g in geometries:
 
         naip_args = dict([('dst_crs', '4326'),
@@ -78,26 +91,46 @@ def get_scene_overview(geometries, state='montana', out_dir=None, year=None):
         ax.set_ylim(naip_geometry.bounds[1], naip_geometry.bounds[3])
 
         name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        _dir = os.path.join(out_dir, name)
-        os.mkdir(_dir)
-
-        fig_name = os.path.join(_dir, '{}_overview.png'.format(name))
+        fig_name = os.path.join(out_dir, 'overview', '{}_overview.png'.format(name))
         plt.savefig(fig_name)
-        os.rename(TEMP_TIF, os.path.join(_dir, '{}_multi.tif'.format(name)))
-        naip_bool_name = os.path.join(_dir, '{}_bool.tif'.format(name))
+        fs, unit = file_size(fig_name)
 
-        meta = src.meta.copy()
-        meta.update(compress='lzw')
-        meta.update(nodata=0)
-        meta.update(count=1)
+        if fs < 300 and unit == 'KB':
+            print(fs, unit)
+            os.remove(fig_name)
 
-        bool_values = [(f, 1) for f in vectors]
+        else:
+            os.rename(TEMP_TIF, os.path.join(out_dir, 'image', '{}_multi.tif'.format(name)))
+            naip_bool_name = os.path.join(out_dir, 'boolean', '{}_bool.tif'.format(name))
 
-        with rasterio.open(naip_bool_name, 'w', **meta) as out:
-            burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
-                               out_shape=(array.shape[1], array.shape[2]), all_touched=False)
-            out.write(burned, 1)
-        break
+            meta = src.meta.copy()
+            meta.update(compress='lzw')
+            meta.update(nodata=0)
+            meta.update(count=1)
+
+            bool_values = [(f, 1) for f in vectors]
+
+            with rasterio.open(naip_bool_name, 'w', **meta) as out:
+                burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
+                                   out_shape=(array.shape[1], array.shape[2]), transform=out.transform,
+                                   all_touched=False)
+                out.write(burned, 1)
+            ct += 1
+
+        if ct >= n:
+            break
+
+
+def clean_out_training_data(parent_dir):
+    views = os.path.join(parent_dir, 'overview')
+    boolean = os.path.join(parent_dir, 'boolean')
+    image = os.path.join(parent_dir, 'image')
+
+    keep = [x[:6] for x in os.listdir(views)]
+    remove = [x for x in os.listdir(boolean) if x[:6] not in keep]
+    [os.remove(os.path.join(boolean, x)) for x in remove]
+    remove = [x for x in os.listdir(image) if x[:6] not in keep]
+    [os.remove(os.path.join(image, x)) for x in remove]
 
 
 if __name__ == '__main__':
@@ -108,6 +141,6 @@ if __name__ == '__main__':
     shapes = os.path.join(shape_dir, 'ID_Irr_2009.shp')
     yr = 2009
     geos = get_geometries(shapes)
-    get_scene_overview(geos, state='ID', out_dir=tables, year=yr)
-
+    get_training_image(geos, state='ID', out_dir=tables, year=yr, n=5)
+    # clean_out_training_data(tables)
 # ========================= EOF ====================================================================

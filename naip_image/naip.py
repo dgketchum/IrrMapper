@@ -148,7 +148,7 @@ class ApfoNaip(NaipImage):
 
         self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP_Historical/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&time={b}&bbox={a}' \
-                              '&imageSR=102100&bboxSR=102100&size=1024,1024' \
+                              '&imageSR=4326&bboxSR=4326&size=2048,2048' \
                               '&format=tiff&pixelType=U8' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}', b=epoch)
 
@@ -168,15 +168,8 @@ class ApfoNaip(NaipImage):
         :return:
         """
 
-        coords = {x: y for x, y in zip(['west', 'south', 'east', 'north'], self.bbox)}
-
-        w, s, e, n = GeoBounds(**coords).to_web_mercator()
-        self.web_mercator_bounds = (w, s, e, n)
-
-        bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
-
         naip_str = '{}_NAIP'.format(state)
-        query = self.usda_query_str.format(naip_str, bbox_str)
+        query = self.usda_query_str.format(naip_str, self.bbox)
         url = '{}{}'.format(self.naip_base_url, query)
 
         req = get(url, verify=False, stream=True)
