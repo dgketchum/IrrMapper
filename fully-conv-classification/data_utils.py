@@ -398,7 +398,7 @@ def clip_raster(evaluated, path, row, outfile=None):
     out = out[out['ROW'] == row]
 
     with rasopen(evaluated, 'r') as src:
-        out = out.to_crs(src.crs)
+        out = out.to_crs(src.crs['init'])
         features = get_features(out)
         # if crop == true for mask, you have to update the metadata.
         out_image, out_transform = mask(src, shapes=features, crop=True, nodata=np.nan)

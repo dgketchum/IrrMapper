@@ -158,12 +158,12 @@ def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classe
             precision_dict[i] = 0
             recall_dict[i] = 0
         for i in range(n_classes):
-            recall_dict[i] = out_cmat[i, i] / np.sum(out_cmat[i, :])
-            precision_dict[i] = out_cmat[i, i] / np.sum(out_cmat[:, i])
+            precision_dict[i] = out_cmat[i, i] / np.sum(out_cmat[i, :]) # row i
+            recall_dict[i] = out_cmat[i, i] / np.sum(out_cmat[:, i]) # column i
         return cmat, recall_dict, precision_dict
 
 
-def lr_schedule(epoch, initial_learning_rate, efold=50):
+def lr_schedule(epoch, initial_learning_rate, efold):
     lr = initial_learning_rate
     return float(lr*np.exp(-epoch/efold))
 

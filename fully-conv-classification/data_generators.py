@@ -26,12 +26,14 @@ from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, fi
 
 class SatDataGenerator(Sequence):
 
-    def __init__(self, batch_size, n_classes, balance_pixels_per_batch=False, training=True):
+    def __init__(self, batch_size, n_classes, balance_pixels_per_batch=False, training=True,
+            apply_irrigated_weights=False):
 
         self.batch_size = batch_size
         self.n_classes = n_classes
         self.training = training
         self.balance_pixels_per_batch = balance_pixels_per_batch
+        self.apply_irrigated_weights = apply_irrigated_weights
 
     def _get_files(self):
         # Required override.
@@ -65,6 +67,8 @@ class SatDataGenerator(Sequence):
         for tile in data_tiles:
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
+            if self.apply_irrigated_weights:
+                one_hot[:, :, 0] *= 50
             class_code = tile['class_code']
             if self.balance_pixels_per_batch:
                 one_hot = self._balance_pixels(one_hot, min_count)
@@ -93,9 +97,12 @@ class SatDataGenerator(Sequence):
         else:
             for i in range(one_hot.shape[2]):
                 ys, xs = np.where(one_hot[:, :, i] == 1)
+                if len(ys) == min_count:
+                    continue
                 if len(ys):
-                    ys = np.random.choice(ys, size=int(len(ys)-min_count), replace=False)
-                    xs = np.random.choice(xs, size=int(len(xs)-min_count), replace=False)
+                    n_to_choose = int(len(ys) - min_count) # 0 out all but min_count pixels
+                    ys = np.random.choice(ys, size=n_to_choose, replace=False)
+                    xs = np.random.choice(xs, size=n_to_choose, replace=False)
                     one_hot[ys, xs, i] = 0
             
         return one_hot
@@ -106,7 +113,6 @@ class SatDataGenerator(Sequence):
         for tile in data_tiles:
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
-            binary_one_hot = np.ones((one_hot.shape[0], one_hot.shape[1])).astype(np.int)*-1 
             nodata_mask = np.sum(one_hot, axis=2) 
             argmaxed = np.argmax(one_hot, axis=2) 
             argmaxed[nodata_mask == 0] = -1
@@ -137,7 +143,6 @@ class SatDataGenerator(Sequence):
                     binary_one_hot[:, :][one_hot[:, :, i] == 1] = 0
             
             if self.balance_pixels_per_batch:
-
                 one_hot = self._balance_pixels(one_hot, min_count, binary=True)
 
             if self.training:
@@ -157,7 +162,7 @@ class DataGenerator(SatDataGenerator):
     I want the following functionality:
        Easily switch between binary/multiclass classification
 
-       Can focus on examples from one class (dict of target_classes) 
+       Can focus on examples from one class (list of target_classes) 
        Can apply arbitary morphological operations to the input labels
 
        Able to feed in examples without any preprocessing (unbalanced)
@@ -168,13 +173,15 @@ class DataGenerator(SatDataGenerator):
     '''
     def __init__(self, data_directory, batch_size, n_classes=None, training=True,
             target_classes=None, balance=False, balance_examples_per_batch=False,
-            balance_pixels_per_batch=False):
+            balance_pixels_per_batch=False, apply_irrigated_weights=False,
+            steps_per_epoch=None):
         # Assert that all three can't be true
         super().__init__(batch_size, n_classes, balance_pixels_per_batch, training)
         self.data_directory = data_directory
         self.balance = balance
         self.balance_examples_per_batch = balance_examples_per_batch
         self.target_classes = target_classes
+        self.steps_per_epoch = steps_per_epoch
         self._get_files()
 
 
@@ -228,7 +235,8 @@ class DataGenerator(SatDataGenerator):
             return
 
     def __len__(self):
-        
+        if self.steps_per_epoch is not None:
+            return self.steps_per_epoch
         return int(np.ceil(self.n_files / self.batch_size))
 
 
@@ -238,8 +246,7 @@ class DataGenerator(SatDataGenerator):
 
 
     def __getitem__(self, idx):
-        # print("suspicious:", idx)
-        # model.fit_generator does not pull batches in order of batch.
+        # model.fit_generator does not pull batches in order.
         batch = self.files[idx * self.batch_size:(idx + 1)*self.batch_size]
         data_tiles = [self._from_pickle(x) for x in batch]
         self.batch = batch
@@ -274,12 +281,12 @@ class DataGenerator(SatDataGenerator):
                     self.n_minority = len(files)
             self.files = []
             for key in self.file_dict:
-                self.files.extend(sample(self.file_dict[key], self.n_minority, replace=False))
+                self.files.extend(sample(self.file_dict[key], self.n_minority))
             return len(self.files)
         else:
             self.files = []
             for key in self.file_dict:
-                self.files.extend(sample(self.file_dict[key], self.n_minority, replace=False))
+                self.files.extend(sample(self.file_dict[key], self.n_minority))
             shuffle(self.files)
 
     

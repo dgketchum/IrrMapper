@@ -246,8 +246,6 @@ def min_data_tiles_to_cover_labels(shapefiles, path, row, year, image_directory,
     plt.plot([min_x, max_x], [max_y, max_y], 'b', linewidth=2)
     plt.plot([min_x, max_x], [min_y, min_y], 'b', linewidth=2)
 
-
-
     y_min = [min_x] * len(tiles_y)
     y_max = [max_x] * len(tiles_y)
     for t, mn, mx in zip(tiles_y, y_min, y_max):
@@ -259,7 +257,7 @@ def min_data_tiles_to_cover_labels(shapefiles, path, row, year, image_directory,
         plt.plot([t, t], [mn, mx], 'r')
 
     plt.imshow(class_labels[0])
-    plt.title(frac)
+    plt.title('path/row: {} {} percent data pixels: {:.3f}'.format(path, row, frac))
     plt.colorbar()
     plt.show()
 
@@ -338,7 +336,8 @@ if __name__ == '__main__':
         year = assign_shapefile_year(f)
         print("extracting data for", path, row, year)
         paths_map_func = paths_map_multiple_scenes
-        test_train_shapefiles = {'test':test_shapefiles, 'train':train_shapefiles}
-        extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
-                training_root_directory, n_classes, assign_shapefile_class_code, path_map_func=paths_map_func)
+        min_data_tiles_to_cover_labels(train_shapefiles, path, row, 2013, image_directory)
+        # test_train_shapefiles = {'test':test_shapefiles, 'train':train_shapefiles}
+        # extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
+        #        training_root_directory, n_classes, assign_shapefile_class_code, path_map_func=paths_map_func)
 
