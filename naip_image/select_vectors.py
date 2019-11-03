@@ -64,8 +64,16 @@ def get_naip_polygon(bbox):
                     [bbox[2], bbox[1]]])
 
 
-def get_training_image(geometries, state='montana', out_dir=None, year=None, n=10):
+def get_training_scenes(geometries, instance_label=False, state='MT', out_dir=None, year=None, n=10):
+
     ct = 0
+
+    overview = os.path.join(out_dir, 'overview')
+    image = os.path.join(out_dir, 'image')
+    labels = os.path.join(out_dir, 'labels')
+
+    [os.mkdir(x) for x in [overview, image, labels] if not os.path.exists(x)]
+
     for g in geometries:
 
         naip_args = dict([('dst_crs', '4326'),
@@ -91,7 +99,7 @@ def get_training_image(geometries, state='montana', out_dir=None, year=None, n=1
         ax.set_ylim(naip_geometry.bounds[1], naip_geometry.bounds[3])
 
         name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        fig_name = os.path.join(out_dir, 'overview', '{}_overview.png'.format(name))
+        fig_name = os.path.join(overview, '{}.png'.format(name))
         plt.savefig(fig_name)
         fs, unit = file_size(fig_name)
 
@@ -100,18 +108,18 @@ def get_training_image(geometries, state='montana', out_dir=None, year=None, n=1
             os.remove(fig_name)
 
         else:
-            os.rename(TEMP_TIF, os.path.join(out_dir, 'image', '{}_multi.tif'.format(name)))
-            naip_bool_name = os.path.join(out_dir, 'boolean', '{}_bool.tif'.format(name))
+            os.rename(TEMP_TIF, os.path.join(image, '{}.tif'.format(name)))
+            naip_bool_name = os.path.join(labels, '{}.tif'.format(name))
 
             meta = src.meta.copy()
             meta.update(compress='lzw')
             meta.update(nodata=0)
             meta.update(count=1)
 
-            bool_values = [(f, 1) for f in vectors]
+            label_values = [(f, 1) for f in vectors]
 
             with rasterio.open(naip_bool_name, 'w', **meta) as out:
-                burned = rasterize(shapes=bool_values, fill=0, default_value=0, dtype=uint8,
+                burned = rasterize(shapes=label_values, fill=0, dtype=uint8,
                                    out_shape=(array.shape[1], array.shape[2]), transform=out.transform,
                                    all_touched=False)
                 out.write(burned, 1)
@@ -123,12 +131,12 @@ def get_training_image(geometries, state='montana', out_dir=None, year=None, n=1
 
 def clean_out_training_data(parent_dir):
     views = os.path.join(parent_dir, 'overview')
-    boolean = os.path.join(parent_dir, 'boolean')
+    labels = os.path.join(parent_dir, 'labels')
     image = os.path.join(parent_dir, 'image')
 
     keep = [x[:6] for x in os.listdir(views)]
-    remove = [x for x in os.listdir(boolean) if x[:6] not in keep]
-    [os.remove(os.path.join(boolean, x)) for x in remove]
+    remove = [x for x in os.listdir(labels) if x[:6] not in keep]
+    [os.remove(os.path.join(labels, x)) for x in remove]
     remove = [x for x in os.listdir(image) if x[:6] not in keep]
     [os.remove(os.path.join(image, x)) for x in remove]
 
@@ -136,11 +144,11 @@ def clean_out_training_data(parent_dir):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     extraction = os.path.join(home, 'field_extraction')
-    tables = os.path.join(extraction, 'training_data')
+    tables = os.path.join(extraction, 'training_data', 'WA')
     shape_dir = os.path.join(extraction, 'raw_shapefiles')
-    shapes = os.path.join(shape_dir, 'ID_Irr_2009.shp')
-    yr = 2009
+    shapes = os.path.join(shape_dir, 'WA_2017.shp')
+    yr = 2017
     geos = get_geometries(shapes)
-    get_training_image(geos, state='ID', out_dir=tables, year=yr, n=500)
+    get_training_scenes(geos, instance_label=True, state='WA', out_dir=tables, year=yr, n=100)
     # clean_out_training_data(tables)
 # ========================= EOF ====================================================================
