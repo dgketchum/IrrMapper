@@ -17,7 +17,7 @@
 import os
 from datetime import datetime
 
-from bounds import GeoBounds, BufferPoint
+from bounds import BufferPoint
 from numpy import empty, uint8
 from rasterio import Env
 from rasterio import open as rasopen
