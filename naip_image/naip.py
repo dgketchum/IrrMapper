@@ -160,11 +160,7 @@ class ApfoNaip(NaipImage):
     def get_image(self, state):
         """ Get NAIP imagery from states excluding Hawaii and Alaska
 
-        Current hack in this method and in GeoBounds is hard-coded epsg: 3857 'web mercator',
-        though the NAIP service provides epsg: 102100 a deprecated ESRI SRS'
-
         :param state: e.g. 'ND'
-        :param size: tuple of horizontal by vertical size in pixels, e.g., (512, 512)
         :return:
         """
 
