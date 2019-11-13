@@ -49,12 +49,10 @@ def file_size(file_path):
         return convert_bytes(file_info.st_size)
 
 
-def get_geometries(shp, **filter_attrs):
+def get_geometries(shp, n=100):
     gdf = read_file(shp)
+    gdf = gdf.head(n=n)
     df = DataFrame(gdf)
-    if 'select' in filter_attrs.keys():
-        _drop = [x for x in df.columns if x not in filter_attrs['select']]
-        df.drop(columns=_drop, inplace=True)
     df = df.sample(frac=1.)
     return df['geometry']
 
@@ -101,34 +99,36 @@ def get_training_scenes(geometries, instance_label=False, state='MT', out_dir=No
         name = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         fig_name = os.path.join(overview, '{}.png'.format(name))
         plt.savefig(fig_name)
+        plt.close(fig)
+
         fs, unit = file_size(fig_name)
+        if fs < 300 and unit == 'KB':
+            print(fs, unit)
+            os.remove(fig_name)
 
-    # if fs < 300 and unit == 'KB':
-    #     print(fs, unit)
-    #     os.remove(fig_name)
-
-    # else:
-        os.rename(TEMP_TIF, os.path.join(image, '{}.tif'.format(name)))
-        naip_bool_name = os.path.join(labels, '{}.tif'.format(name))
-
-        meta = src.meta.copy()
-        meta.update(compress='lzw')
-        meta.update(nodata=0)
-        meta.update(count=1)
-
-        if instance_label:
-            label_values = [(f, i) for i, f in enumerate(vectors)]
         else:
-            label_values = [(f, 1) for f in vectors]
+            os.rename(TEMP_TIF, os.path.join(image, '{}.tif'.format(name)))
+            naip_bool_name = os.path.join(labels, '{}.tif'.format(name))
 
-        with rasterio.open(naip_bool_name, 'w', **meta) as out:
-            burned = rasterize(shapes=label_values, fill=0, dtype=uint8,
-                               out_shape=(array.shape[1], array.shape[2]), transform=out.transform,
-                               all_touched=False)
-            out.write(burned, 1)
-        ct += 1
+            meta = src.meta.copy()
+            meta.update(compress='lzw')
+            meta.update(nodata=0)
+            meta.update(count=1)
 
-        plt.close()
+            if instance_label:
+                label_values = [(f, i) for i, f in enumerate(vectors)]
+            else:
+                label_values = [(f, 1) for f in vectors]
+
+            with rasterio.open(naip_bool_name, 'w', **meta) as out:
+                burned = rasterize(shapes=label_values, fill=0, dtype=uint8,
+                                   out_shape=(array.shape[1], array.shape[2]), transform=out.transform,
+                                   all_touched=False)
+                out.write(burned, 1)
+            ct += 1
+
+            plt.close()
+
         if ct >= n:
             break
 
@@ -150,14 +150,21 @@ if __name__ == '__main__':
     extraction = os.path.join(home, 'field_extraction')
     states = [('AZ', 2015), ('CA', 2018), ('CO', 2017), ('MT', 2017), ('NM', 2018),
               ('NV', 2017), ('OR', 2016), ('UT', 2018), ('WY', 2017)]
-    for state, year in states[1:]:
-        tables = os.path.join(extraction, 'training_data', '{}'.format(state))
-        if not os.path.exists(tables):
-            os.mkdir(tables)
-        shape_dir = os.path.join(home, 'IrrigationGIS', 'openET', 'Master')
-        shapes = os.path.join(shape_dir, '{}.geojson'.format(state))
-        print(shapes)
-        geos = get_geometries(shapes)
-        get_training_scenes(geos, instance_label=True, state='WA', out_dir=tables, year=year, n=100)
+    for state, year in states[2:]:
+        try:
+            tables = os.path.join(extraction, 'training_data', '{}'.format(state))
+            if not os.path.exists(tables):
+                os.mkdir(tables)
+            shape_dir = os.path.join(home, 'IrrigationGIS', 'openET', '{}'.format(state))
+            shapes = os.path.join(shape_dir, '{}.shp'.format(state.lower()))
+            target_number = 500
+            if not os.path.exists(shapes):
+                raise ValueError('{} does not exist'.format(shapes))
+
+            geos = get_geometries(shapes, n=5 * target_number)
+            get_training_scenes(geos, instance_label=True, state='{}'.format(state),
+                                out_dir=tables, year=year, n=target_number)
+        except Exception as e:
+            print(state, e)
     # clean_out_training_data(tables)
 # ========================= EOF ====================================================================

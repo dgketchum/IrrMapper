@@ -26,6 +26,11 @@ from rasterio.warp import reproject, Resampling, calculate_default_transform
 from requests import get
 
 
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+print('Disabling urllib3.exceptions.InsecureRequestWarning')
+
+
 class BadCoordinatesError(ValueError):
     pass
 
