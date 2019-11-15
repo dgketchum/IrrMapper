@@ -24,7 +24,7 @@ from copy import deepcopy
 from warnings import warn
 
 from fiona import open as fopen
-from numpy import linspace, max, nan, unique
+from numpy import linspace, max, nan, unique, ndarray
 from numpy.random import shuffle
 from pandas import DataFrame, Series
 from pyproj import Proj, transform
@@ -60,7 +60,7 @@ class PixelTrainingArray(object):
 
     def __init__(self, root=None, geography=None, paths_map=None, masks=None,
             instances=None, from_dict=None, pkl_path=None,
-            overwrite_array=False, overwrite_points=False):
+            overwrite_array=False, overwrite_points=False, kernel_size=None):
 
         """
 
@@ -101,6 +101,7 @@ class PixelTrainingArray(object):
             self.path_row_dir = os.path.join(self.root, str(geography.path), str(geography.row))
             self.year_dir = os.path.join(self.path_row_dir, str(geography.year))
             self.is_binary = None
+            self.kernel_size = kernel_size
 
             self.features = None
             self.data = None
@@ -128,7 +129,10 @@ class PixelTrainingArray(object):
             self.save_sample_points()
 
         if self.overwrite_array:
-            self.populate_data_array()
+            if self.kernel_size is not None:
+                self.populate_raster_data_array()
+            else:
+                self.populate_data_array()
 
     def create_sample_points(self):
         """ Create a clipped training set from polygon shapefiles.
@@ -151,7 +155,7 @@ class PixelTrainingArray(object):
 
         for class_code, _dict in self.geography.attributes.items():
             print(_dict['ltype'])
-            polygons = self._get_polygons(_dict['path'])
+            polygons = self._get_polygons(_dict['path']) # this is a hardcoded shapefile name.
             _dict['instance_count'] = 0
 
             if len(polygons) > self.m_instances:
@@ -212,6 +216,33 @@ class PixelTrainingArray(object):
 
         self._check_targets(targets)
 
+    def populate_raster_data_array(self):
+
+        for key, val in self.paths_map.items():
+            s = self._grid_raster_extract(val, _name=key)
+            print('Extracting {}'.format(key))
+            self.extracted_points = self.extracted_points.join(s, how='outer')
+
+        for key, val in self.masks.items():
+            s = self._grid_raster_extract(val, _name=key)
+            print('Extracting {}'.format(key))
+            self.extracted_points = self.extracted_points.join(s, how='outer')
+
+        data_array, targets = self._purge_raster_array()
+        data = {'df': data_array,
+                'features': data_array.columns.values,
+                'data': data_array.values,
+                'target_values': targets,
+                'paths_map': self.paths_map}
+
+        print('feature dimensions: {}'.format(data_array.shape))
+        for key, val in data.items():
+            setattr(self, key, val)
+
+        self.to_pickle(data)
+
+        self._check_targets(targets)
+
     def save_sample_points(self):
 
         points_schema = {
@@ -247,12 +278,45 @@ class PixelTrainingArray(object):
 
         self._check_targets(self.target_values)
 
-    def _purge_array(self):
-
-        data_array = deepcopy(self.extracted_points)
+    def _purge_raster_array(self):
+        data_array = deepcopy(self.extracted_points) # extracted pixels would
+        # be a better name
         target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
         data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
+        try:
+            for msk in self.masks.keys():
+                # TODO: make the below calculation vectorized
+                for idx, sub_raster in enumerate(data_array[msk]):
+                    if sub_raster[self.kernel_size // 2][self.kernel_size // 2] == 1.:
+                        data_array.loc[idx, :] = nan # make whole row NaN
+        except TypeError as e:
+            print(sub_raster, msk, idx)
+            data_array.loc[idx, :] = nan
 
+        try:
+            for bnd in self.paths_map.keys():
+                for idx, sub_raster in enumerate(data_array[bnd]):
+                    if sub_raster[self.kernel_size // 2][self.kernel_size // 2] == 0.:
+                        data_array.loc[idx, :] = nan
+        except TypeError as e:
+            print(sub_raster, msk, idx)
+            data_array.loc[idx, :] = nan
+
+        data_array = data_array.join(target_vals, how='outer')
+
+        data_array.dropna(axis=0, inplace=True)
+        data_array.drop(self.masks, axis=1, inplace=True)
+        target_vals = data_array.POINT_TYPE.values
+
+        data_array = data_array.drop(['POINT_TYPE'],
+                                     axis=1, inplace=False)
+        return data_array, target_vals
+
+    def _purge_array(self):
+        data_array = deepcopy(self.extracted_points) # extracted pixels would
+        # be a better name
+        target_vals = Series(data_array.POINT_TYPE.values, name='POINT_TYPE')
+        data_array.drop(['X', 'Y', 'FID', 'POINT_TYPE'], axis=1, inplace=True)
         for msk in self.masks.keys():
             data_array[data_array[msk] == 1.] = nan
 
@@ -294,7 +358,6 @@ class PixelTrainingArray(object):
             self.is_binary = False
 
     def _point_raster_extract(self, raster, _name):
-
         with rasopen(raster, 'r') as rsrc:
             rass_arr = rsrc.read()
             rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
@@ -307,6 +370,31 @@ class PixelTrainingArray(object):
             try:
                 raster_val = rass_arr[int(r), int(c)]
                 s[ind] = float(raster_val)
+            except IndexError:
+                s[ind] = None
+        return s
+
+    def _grid_raster_extract(self, raster, _name):
+        """
+        Open the raster. Store the points in a Series - a labeled
+        numpy array. Then in _purge array, we iterate over the masks
+        and the paths_map and drop pixels where masks = 1 and pixels where bound = 0.
+        """
+
+        with rasopen(raster, 'r') as rsrc:
+            rass_arr = rsrc.read()
+            rass_arr = rass_arr.reshape(rass_arr.shape[1], rass_arr.shape[2])
+            affine = rsrc.transform
+
+        s = Series(index=range(0, self.extracted_points.shape[0]), name=_name, dtype=object)
+        for ind, row in self.extracted_points.iterrows():
+            x, y = self._geo_point_to_projected_coords(row['X'], row['Y'])
+            c, r = ~affine * (x, y)
+            try:
+                ofs = self.kernel_size // 2
+                rr = int(r); cc = int(c)
+                raster_subgrid = rass_arr[rr-ofs:rr+ofs+1, cc-ofs:cc+ofs+1] # possible issues: edges of image
+                s[ind] = raster_subgrid
             except IndexError:
                 s[ind] = None
 
