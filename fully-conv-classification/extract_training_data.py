@@ -11,14 +11,16 @@ import matplotlib.pyplot as plt
 from glob import glob
 from random import sample, shuffle, choice
 from scipy.ndimage.morphology import distance_transform_edt
-from rasterio import open as rasopen
+from rasterio import open as rasopen, band
 from rasterio.errors import RasterioIOError
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from skimage import transform
 from sat_image.warped_vrt import warp_single_image
 from multiprocessing import Pool 
 from collections import defaultdict
 
-from runspec import landsat_rasters, climate_rasters, mask_rasters, assign_shapefile_class_code, assign_shapefile_year
+from runspec import (landsat_rasters, climate_rasters, mask_rasters, assign_shapefile_class_code,
+        assign_shapefile_year, cdl_crop_values, cdl_non_crop_values)
 from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr, paths_mapping_single_scene, mean_of_three, median_of_three
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
 
@@ -32,11 +34,12 @@ def distance_map(mask):
 
 class DataTile(object):
 
-    def __init__(self, data, one_hot, class_code):
+    def __init__(self, data, one_hot, class_code, cdl_mask):
         self.dict = {}
         self.dict['data'] = data
         self.dict['one_hot'] = one_hot
         self.dict['class_code'] = class_code
+        self.dict['cdl'] = cdl_mask
 
     def to_pickle(self, training_directory):
         if not os.path.isdir(training_directory):
@@ -93,6 +96,36 @@ def concatenate_fmasks(image_directory, class_mask, class_mask_geo, nodata=0, ta
     return class_mask
 
 
+def reproject_if_needed(source, target):
+    with rasopen(target, 'r') as dst:
+        dst_crs = dst.meta['crs']
+
+    with rasopen(source) as src:
+        if src.meta['crs'] == dst_crs:
+            return source
+        transform, width, height = calculate_default_transform(
+            src.crs, dst_crs, src.width, src.height, *src.bounds)
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': dst_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+
+        with rasopen(source, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=band(src, i),
+                    destination=band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest)
+    return source
+
+
 def extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
         training_data_root_directory, n_classes, assign_shapefile_class_code, path_map_func=None,
         preprocessing_func=None, tile_size=608):
@@ -111,13 +144,18 @@ def extract_training_data_over_path_row(test_train_shapefiles, path, row, year, 
     mask_file = _random_tif_from_directory(image_path)
     mask, mask_meta = load_raster(mask_file)
     mask = np.zeros_like(mask).astype(np.int)
+    cdl_path = os.path.join(image_path, 'cdl_mask.tif')
+    cdl_raster, cdl_meta = load_raster(cdl_path)
+    if mask.shape != cdl_raster.shape:
+        cdl_raster = warp_single_image(cdl_path, mask_meta)
+    cdl_raster = np.swapaxes(cdl_raster, 0, 2)
     try:
         image_stack = stack_rasters_multiprocess(image_path_maps, target_geo=mask_meta, target_shape=mask.shape)
+        image_stack = np.swapaxes(image_stack, 0, 2)
     except RasterioIOError as e:
         print("Redownload images for", path_row_year)
         print(e)
         return
-    image_stack = median_of_three(image_path_maps, image_stack, mask.shape)
     for key, shapefiles in test_train_shapefiles.items():
         if key.lower() not in ('test', 'train'):
             raise ValueError("expected key to be one of case-insenstive {test, train},\
@@ -137,12 +175,11 @@ def extract_training_data_over_path_row(test_train_shapefiles, path, row, year, 
             else:
                 class_labels[~out.mask] = class_code
         class_labels = concatenate_fmasks(image_path, class_labels, mask_meta) 
-        image_stack = np.swapaxes(image_stack, 0, 2)
         class_labels = np.swapaxes(class_labels, 0, 2)
         class_labels = np.squeeze(class_labels)
         tiles_y, tiles_x = _target_indices_from_class_labels(class_labels, tile_size)
-        _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
-                n_classes, tiles_x, tiles_y, tile_size)
+        _save_training_data_from_indices(image_stack, class_labels, cdl_raster,
+                training_data_directory, n_classes, tiles_x, tiles_y, tile_size)
 
 
 def _target_indices_from_class_labels(class_labels, tile_size):
@@ -159,6 +196,8 @@ def _target_indices_from_class_labels(class_labels, tile_size):
 
 
 def _assign_class_code_to_tile(class_label_tile):
+    if np.any(class_label_tile == 3):
+        return 3
     if np.all(class_label_tile != 0):
         unique, unique_count = np.unique(class_label_tile, return_counts=True)
         unique = unique[:-1] # assume np.ma.masked is last.
@@ -168,8 +207,8 @@ def _assign_class_code_to_tile(class_label_tile):
     return 0
 
 
-def _save_training_data_from_indices(image_stack, class_labels, training_data_directory, 
-        n_classes, indices_y, indices_x, tile_size):
+def _save_training_data_from_indices(image_stack, class_labels, cdl_raster,
+        training_data_directory, n_classes, indices_y, indices_x, tile_size):
     out = []
     for i in indices_x:
         for j in indices_y:
@@ -181,8 +220,10 @@ def _save_training_data_from_indices(image_stack, class_labels, training_data_di
                 continue
             class_code = _assign_class_code_to_tile(class_label_tile)
             sub_one_hot = _one_hot_from_labels(class_label_tile, n_classes)
+            sub_cdl = cdl_raster[i:i+tile_size, j:j+tile_size, :]
             sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
-            dt = DataTile(sub_image_stack, sub_one_hot, class_code)
+            sub_image_stack = image_stack[i:i+tile_size, j:j+tile_size, :]
+            dt = DataTile(sub_image_stack, sub_one_hot, class_code, sub_cdl)
             out.append(dt)
             if len(out) > 50:
                 with Pool() as pool:
@@ -320,7 +361,10 @@ if __name__ == '__main__':
     
     image_directory = '/home/thomas/share/image_data/'
     shapefiles = glob('shapefile_data/test/*.shp') + glob('shapefile_data/train/*.shp')
-    training_root_directory = '/home/thomas/ssd/test_extract/'
+    training_root_directory = '/home/thomas/share/multiclass_with_separate_fallow_directory_and_cdl/'
+    if not os.path.isdir(training_root_directory):
+        os.makedirs(training_root_directory)
+
     n_classes = 4
     done = set()
 
@@ -336,8 +380,7 @@ if __name__ == '__main__':
         year = assign_shapefile_year(f)
         print("extracting data for", path, row, year)
         paths_map_func = paths_map_multiple_scenes
-        min_data_tiles_to_cover_labels(train_shapefiles, path, row, 2013, image_directory)
-        # test_train_shapefiles = {'test':test_shapefiles, 'train':train_shapefiles}
-        # extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
-        #        training_root_directory, n_classes, assign_shapefile_class_code, path_map_func=paths_map_func)
+        test_train_shapefiles = {'test':test_shapefiles, 'train':train_shapefiles}
+        extract_training_data_over_path_row(test_train_shapefiles, path, row, year, image_directory,
+                training_root_directory, n_classes, assign_shapefile_class_code, path_map_func=paths_map_func)
 

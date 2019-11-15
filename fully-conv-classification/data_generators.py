@@ -22,18 +22,23 @@ from sys import getsizeof, exit
 
 from data_utils import load_raster, paths_map_multiple_scenes, stack_rasters, stack_rasters_multiprocess, download_from_pr
 from shapefile_utils import get_shapefile_path_row, mask_raster_to_shapefile, filter_shapefile_overlapping, mask_raster_to_features
+from runspec import cdl_crop_values, cdl_non_crop_values
 
 
 class SatDataGenerator(Sequence):
 
     def __init__(self, batch_size, n_classes, balance_pixels_per_batch=False, training=True,
-            apply_irrigated_weights=False):
+            apply_irrigated_weights=False, augment_data=False, use_cdl=False):
 
         self.batch_size = batch_size
         self.n_classes = n_classes
+        self.use_cdl = use_cdl
         self.training = training
         self.balance_pixels_per_batch = balance_pixels_per_batch
         self.apply_irrigated_weights = apply_irrigated_weights
+        self.augment_data = augment_data
+        if not self.training:
+            self.augment_data = False
 
     def _get_files(self):
         # Required override.
@@ -60,22 +65,31 @@ class SatDataGenerator(Sequence):
 
     def _labels_and_features(self, data_tiles):
         features = []
+        crop = list(cdl_crop_values().keys())
+        if self.use_cdl:
+            cdls = []
         one_hots = []
         if self.balance_pixels_per_batch:
             min_count = self._count_pixels(data_tiles)
-        
         for tile in data_tiles:
             data = tile['data']
             one_hot = tile['one_hot'].astype(np.int)
+            if self.use_cdl:
+                cdl = tile['cdl'].astype(np.int)
+                cdl = np.isin(cdl, crop)
+                cdls.append(cdl)
             if self.apply_irrigated_weights:
                 one_hot[:, :, 0] *= 50
             class_code = tile['class_code']
             if self.balance_pixels_per_batch:
                 one_hot = self._balance_pixels(one_hot, min_count)
-            if self.training:
+            if self.augment_data:
                 data, one_hot = _augment_data(data, one_hot)
             features.append(data)
             one_hots.append(one_hot)
+
+        if self.use_cdl:
+            return [np.asarray(features)], [np.asarray(one_hots), np.asarray(cdls)]
 
         return [np.asarray(features)], [np.asarray(one_hots)]
 
@@ -145,7 +159,7 @@ class SatDataGenerator(Sequence):
             if self.balance_pixels_per_batch:
                 one_hot = self._balance_pixels(one_hot, min_count, binary=True)
 
-            if self.training:
+            if self.augment_data:
                 data, binary_one_hot = _augment_data(data, binary_one_hot, binary=True)
             binary_one_hot = np.expand_dims(binary_one_hot, 2)
             features.append(data)
@@ -174,14 +188,15 @@ class DataGenerator(SatDataGenerator):
     def __init__(self, data_directory, batch_size, n_classes=None, training=True,
             target_classes=None, balance=False, balance_examples_per_batch=False,
             balance_pixels_per_batch=False, apply_irrigated_weights=False,
-            steps_per_epoch=None):
+            steps_per_epoch=None, augment_data=False, use_cdl=False):
         # Assert that all three can't be true
-        super().__init__(batch_size, n_classes, balance_pixels_per_batch, training)
+        super().__init__(batch_size, n_classes, balance_pixels_per_batch, training, augment_data)
         self.data_directory = data_directory
         self.balance = balance
         self.balance_examples_per_batch = balance_examples_per_batch
         self.target_classes = target_classes
         self.steps_per_epoch = steps_per_epoch
+        self.use_cdl = use_cdl
         self._get_files()
 
 
@@ -241,7 +256,8 @@ class DataGenerator(SatDataGenerator):
 
 
     def on_epoch_end(self):
-        # Recreates the file list
+        # Recreates the file list if you're training,
+        # otherwise the validation file list stays the same.
         self._on_epoch_end(self.dirs, first=False)
 
 
@@ -264,9 +280,20 @@ class DataGenerator(SatDataGenerator):
             self.files = []
             for d in dirs:
                 self.files.extend(glob(os.path.join(d, "*pkl")))
+            shuffle(self.files)
+            self.entire_corpus = self.files.copy()
+            if not self.training and self.steps_per_epoch is not None:
+                self.entire_corpus = self.files.copy()
+                self.files = self.entire_corpus[:self.steps_per_epoch*self.batch_size]
+            elif not self.training:
+                self.files = self.entire_corpus
             return len(self.files)
         else:
-            shuffle(self.files)
+            shuffle(self.entire_corpus)
+            if self.steps_per_epoch is None:
+                self.files = self.entire_corpus
+            else:
+                self.files = self.entire_corpus[:self.steps_per_epoch*self.batch_size]
     
     
     def _balanced_file_list(self, dirs, first):
@@ -289,8 +316,8 @@ class DataGenerator(SatDataGenerator):
                 self.files.extend(sample(self.file_dict[key], self.n_minority))
             shuffle(self.files)
 
-    
     def _balanced_queue(self, dirs, first):
+        # do this until the majority class file list is empty
         self.file_dict = {}
         self.n_minority = np.inf
         for d in dirs:

@@ -20,8 +20,7 @@ from runspec import irrigated_path_rows_mt
 from data_utils import (save_raster, stack_rasters, stack_rasters_multiprocess,
         paths_map_multiple_scenes, load_raster, clip_raster, paths_mapping_single_scene,
         mean_of_three)
-from losses import (multiclass_acc, masked_binary_xent, dice_loss, binary_acc, binary_focal_loss,
-        masked_categorical_xent)
+from losses import *
 from extract_training_data import concatenate_fmasks
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
@@ -128,8 +127,12 @@ if __name__ == '__main__':
 
     if not args.use_gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+    mfl = multiclass_focal_loss()
+
     custom_objects = {'mb':masked_binary_xent, 'multiclass_acc':multiclass_acc,
-            'binary_acc':binary_acc, 'masked_categorical_xent':masked_categorical_xent}
+            'binary_acc':binary_acc, 'masked_categorical_xent':masked_categorical_xent,
+            'multiclass_FL':mfl}
     model_paths = args.model
     if args.evaluate_all_mt:
         for path, row in irrigated_path_rows_mt():

@@ -2,19 +2,62 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 import time
+import heapq
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle
+import pdb
 from scipy.special import expit
 from sklearn.metrics import confusion_matrix
 from tensorflow.keras.models import load_model
-from collections import defaultdict
+from sys import stdout
+from tensorflow.keras.callbacks import Callback
+from collections import defaultdict, namedtuple
 from multiprocessing import Pool
 from random import sample, shuffle
 from glob import glob
 
+
+class F1Score(Callback):
+
+    # this is really heavy handed!
+    # have to evaluate the set twice 
+    def __init__(self, validation_data, n_classes, model_out_path, batch_size=4, two_headed_net=False):
+        super(F1Score, self).__init__()
+        self.validation_data = validation_data
+        self.batch_size = batch_size
+        self.n_classes = n_classes
+        self.model_out_path = os.path.splitext(model_out_path)[0]
+        self.two_headed_net = two_headed_net
+        if self.two_headed_net:
+            self.model_out_path += "epoch-{}-f1-{}.h5"
+        else:
+            self.model_out_path += "epoch-{}-f1-{}.h5"
+        self.f1_scores = []
+
+    def on_train_begin(self, logs={}):
+        pass
+    
+    def on_epoch_end(self, epochs, logs):
+        # 5.4.1 For each validation batch
+        cmat, prec, recall = confusion_matrix_from_generator(self.validation_data,
+                batch_size=self.batch_size, model=self.model, n_classes=self.n_classes,
+                multi_output=self.two_headed_net)
+        print('n pixels per class:', np.sum(cmat, axis=1)) 
+        print(prec)
+        print(recall)
+        precision_irrigated = prec[0]
+        recall_irrigated = recall[0]
+        f1 = 2*(precision_irrigated * recall_irrigated) / (precision_irrigated + recall_irrigated)
+        if np.isnan(f1): 
+            return 
+        outp = self.model_out_path.format(epochs, f1)
+        print('saving', outp)
+        if not os.path.isfile(outp):
+            self.model.save(outp) # maybe get some space savings
+        return
 
 def softmax(arr, count_dim=0):
     arr = np.exp(arr)
@@ -131,14 +174,16 @@ def _preprocess_masks_and_calculate_cmat(y_true, y_pred, n_classes=2):
 
     return cmat
 
-def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classes=2):
+
+def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classes=2,
+        print_mat=False, multi_output=False):
     out_cmat = np.zeros((n_classes, n_classes))
     if not len(valid_generator):
         raise ValueError("Length of validation generator is 0")
     with Pool(batch_size) as pool:
-        for batch_x, y_true in valid_generator:
-            y_true = y_true[0]
-            preds = model.predict(batch_x)
+        for cnt, (batch_x, y_true) in enumerate(valid_generator):
+            y_true = y_true[0] # pull irrigated ground truth
+            preds = model.predict(batch_x)[0] 
             sz = batch_x[0].shape[0]
             try:
                 y_trues = [np.squeeze(y_true[i]) for i in range(sz)]
@@ -150,8 +195,10 @@ def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classe
                 [n_classes]*batch_size))
             for cmat in cmats:
                 out_cmat += cmat
+            stdout.write('{}/{}\r'.format(cnt, len(valid_generator)))
 
-        print(out_cmat)
+        if print_mat:
+            print(out_cmat)
         precision_dict = {}
         recall_dict = {}
         for i in range(n_classes):
@@ -160,7 +207,7 @@ def confusion_matrix_from_generator(valid_generator, batch_size, model, n_classe
         for i in range(n_classes):
             precision_dict[i] = out_cmat[i, i] / np.sum(out_cmat[i, :]) # row i
             recall_dict[i] = out_cmat[i, i] / np.sum(out_cmat[:, i]) # column i
-        return cmat, recall_dict, precision_dict
+        return out_cmat, recall_dict, precision_dict
 
 
 def lr_schedule(epoch, initial_learning_rate, efold):

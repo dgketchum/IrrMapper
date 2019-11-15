@@ -19,7 +19,8 @@ def get_features(gdf):
 
 
 def mask_raster_to_shapefile(shapefile, raster, return_binary=True):
-    ''' Generates a mask with 1 everywhere 
+    ''' 
+    Generates a mask with 1 everywhere 
     shapefile data is present and a no_data value everywhere else.
     no_data is -1 in this case, as it is never a valid class label.
     Switching coordinate reference systems is important here, or 
@@ -43,7 +44,6 @@ def mask_raster_to_shapefile(shapefile, raster, return_binary=True):
 def mask_raster_to_features(raster, features, features_meta):
     # This function is useful when you don't have access to the 
     # file from which the features came or if the file doesn't exist.
-
     gdf = gpd.GeoDataFrame.from_features(features, features_meta) # do I need
     # the whole metadata?
     gdf = gdf[gdf.geometry.notnull()]

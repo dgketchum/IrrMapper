@@ -1,5 +1,6 @@
 import keras.backend as K
 import tensorflow as tf
+from sklearn.metrics import confusion_matrix
 
 _epsilon = tf.convert_to_tensor(K.epsilon(), tf.float32)
 
@@ -30,6 +31,19 @@ def binary_focal_loss(gamma=2, alpha=0.25):
     return bfl
 
 
+def precision_and_recall(y_true, y_pred):
+    y_true_sum = tf.math.reduce_sum(y_true, axis=-1)
+    mask = tf.not_equal(y_true_sum, 0)
+    y_pred = tf.nn.softmax(y_pred, axis=-1)
+    y_pred = tf.argmax(y_pred, axis=-1)
+    y_true = tf.argmax(y_true, axis=-1)
+    y_pred = tf.boolean_mask(y_pred, mask)
+    y_true = tf.boolean_mask(y_true, mask)
+    # precision: out of everything I predicted irrigated, what was actually irrigated?
+    return 1
+
+
+
 def multiclass_focal_loss(gamma=2, alpha=0.25):
 
 
@@ -42,7 +56,7 @@ def multiclass_focal_loss(gamma=2, alpha=0.25):
         # xen = -y_true * tf.math.log(probabilities) # all 0s where y_true is all 0s
         # loss = alpha*tf.math.pow(1-probabilities, gamma) * xen 
         # return tf.math.reduce_mean(loss)
-        probabilities = tf.nn.softmax(y_pred)
+        probabilities = tf.nn.softmax(y_pred, axis=-1)
         xen = -y_true * tf.math.log(probabilities) # all 0s where y_true is all 0s
         complement = tf.dtypes.cast(tf.equal(y_true, 0), tf.float32)
         negative_probabilities = -tf.math.pow(complement*probabilities,
@@ -89,6 +103,7 @@ def masked_binary_xent(pos_weight=1.0):
     return mb
 
 
+
 def masked_categorical_xent(y_true, y_pred):
     # One_hot matrix is all zeros along depth if there isn't
     # a data pixel there. Accordingly, we 
@@ -96,10 +111,10 @@ def masked_categorical_xent(y_true, y_pred):
     # wait what? I don't need to even mask this!
     # the one_hot matrix contains depthwise 0s 
     # where there isn't data...
-    # y_true_sum = tf.math.reduce_sum(y_true, axis=-1)
-    # mask = tf.not_equal(y_true_sum, 0)
-    # y_true = tf.boolean_mask(y_true, mask)
-    # y_pred = tf.boolean_mask(y_pred, mask)
+    y_true_sum = tf.math.reduce_sum(y_true, axis=-1)
+    mask = tf.not_equal(y_true_sum, 0)
+    y_true = tf.boolean_mask(y_true, mask)
+    y_pred = tf.boolean_mask(y_pred, mask)
     return tf.nn.softmax_cross_entropy_with_logits_v2(y_true, y_pred)
 
 
@@ -111,7 +126,7 @@ def binary_acc(y_true, y_pred):
     return K.mean(K.equal(y_true, K.round(y_pred)))
 
 
-def multiclass_acc(y_true, y_pred):
+def m_acc(y_true, y_pred):
     y_true_sum = tf.reduce_sum(y_true, axis=-1)
     mask = tf.not_equal(y_true_sum, 0)
     y_pred = tf.nn.softmax(y_pred)

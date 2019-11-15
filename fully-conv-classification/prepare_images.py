@@ -87,8 +87,8 @@ class ImageStack(object):
         self.exclude_rasters = []
 
         if year and not start and not end:
-            self.start = '{}-01-01'.format(self.year)
-            self.end = '{}-12-30'.format(self.year)
+            self.start = '{}-05-01'.format(self.year)
+            self.end = '{}-10-15'.format(self.year)
 
     def build_training(self):
         self.get_landsat(fmask=True)
@@ -136,10 +136,10 @@ class ImageStack(object):
                     latitude=self.lat, longitude=self.lon, output_path=self.root,
                     max_cloud_percent=self.max_cloud)
 
-        #l g.select_scenes(100)
-        # print('this should download after')
-        # self.scenes = g.selected_scenes
-        g.download(list_type='all')
+        g.select_scenes(self.n)
+        self.scenes = g.selected_scenes
+        g.download(list_type='selected')
+        # g.download(list_type='all')
         self.image_dirs = [x[0] for x in os.walk(self.root) if
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
 

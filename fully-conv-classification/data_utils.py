@@ -10,19 +10,55 @@ from glob import glob
 from lxml import html 
 from requests import get
 from copy import deepcopy
-from shapely.geometry import shape
+from shapely.geometry import shape, mapping
 from collections import defaultdict
 from rasterio import float32, open as rasopen
+from shapely.geometry import shape, Polygon, mapping
 from rasterio.mask import mask
 from pickle import load
 from multiprocessing import Pool
+from sat_image.image import Landsat8
 
 from prepare_images import ImageStack
+from crop_data_layer import CropDataLayer as Cdl
 from shapefile_utils import get_features
 from sat_image.warped_vrt import warp_single_image
 from runspec import landsat_rasters, static_rasters, climate_rasters
 
 WRS2 = '../spatial_data/wrs2_descending_usa.shp'
+
+def download_cdl_over_path_row(path, row, year, image_directory):
+
+    out_dir = os.path.join(image_directory, '_'.join([str(path), str(row), str(year)]))
+    cdl_mask = os.path.join(out_dir, "cdl_mask.tif")
+    if os.path.isfile(cdl_mask):
+        print("cdl already downloaded for {} {} {}".format(path, row, year))
+        return
+
+    sub_dirs = os.listdir(out_dir)
+    if not len(sub_dirs):
+        raise ValueError("images not downloaded for {} {} {}".format(path, row, year))
+
+    print(path, row, year)
+    for r in sub_dirs:
+        if os.path.isdir(os.path.join(out_dir, r)):
+            if 'climate' not in r:
+                random_landsat_dir = os.path.join(out_dir, r)
+                break
+
+    landsat = glob(os.path.join(random_landsat_dir, "*TIF"))[0]
+    landsat_pic = landsat
+    landsat = Landsat8(random_landsat_dir)
+    try:
+        polygon = landsat.get_tile_geometry()
+        cdl = Cdl(year=year, target_profile=landsat.profile)
+        cdl.get_mask(clip_geometry=polygon, out_file=cdl_mask)
+    except Exception as e:
+        print(e.args)
+        print(landsat_pic)
+
+
+
 
 def download_images_over_shapefile(shapefile, image_directory, year):
     '''Downloads p/r corresponding to the location of 
@@ -391,11 +427,16 @@ def all_rasters(image_directory, satellite=8):
     return band_map
 
 
+def _get_path_row_geometry(path, row):
+    shp = gpd.read_file(WRS2)
+    out = shp[shp['PATH'] == int(path)]
+    out = out[out['ROW'] == int(row)]
+    return out
+
+
 def clip_raster(evaluated, path, row, outfile=None):
 
-    shp = gpd.read_file(WRS2)
-    out = shp[shp['PATH'] == path]
-    out = out[out['ROW'] == row]
+    out = _get_path_row_geometry(path, row)
 
     with rasopen(evaluated, 'r') as src:
         out = out.to_crs(src.crs['init'])
@@ -425,13 +466,14 @@ def load_raster(raster_name):
         meta = src.meta.copy()
     return arr, meta
 
+prs =  [[34, 26], [36, 27], [37,28], [34,27], [39,26], [37,29], [42,27], [41,28], [39,29], [36,28], [40,27], [37,26], [35,26], [38,29], [40,28], [38,27], [35,27], [42,26], [41,26], [40,29], [34,29], [35,29], [38,26], [36,26], [39,28], [41,27], [38,28], [37,27], [36,29], [35,28], [43,26], [39,27], [40,26], [43,27], [34,28]]
+
 if __name__ == "__main__":
 
     from runspec import landsat_rasters, climate_rasters
-    for path in range(34, 44):
-        for row in range(26, 30):
-            for sat in [7, 8]:
-                for year in [2012, 2013, 2014, 2015]:
-                    if year < 2012 and sat == 8:
-                        continue
-                    download_from_pr(path, row, year, '/home/thomas/share/landsat_test/', 7)
+
+    year = 2013
+    for path, row in prs:
+         # download_from_pr(int(path), int(row), int(year), '/home/thomas/share/image_data/')
+         download_cdl_over_path_row(path, row, year, '/home/thomas/share/image_data/')
+
