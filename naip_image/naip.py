@@ -16,15 +16,13 @@
 
 import os
 
-from numpy import empty, uint8, float32
+from bounds import GeoBounds, BufferPoint
+from numpy import empty, uint8
 from rasterio import Env
 from rasterio import open as rasopen
 from rasterio.crs import CRS
 from rasterio.warp import reproject, Resampling, calculate_default_transform
 from requests import get
-
-from naip_image.naip_services import get_naip_key
-from sat_image.bounds import GeoBounds
 
 
 class BadCoordinatesError(ValueError):
@@ -50,19 +48,20 @@ class NaipImage(object):
 
     def save(self, array, geometry, output_filename, crs=None):
         array = array.reshape(geometry['count'], array.shape[1], array.shape[2])
-        geometry['dtype'] = float32
+        geometry['dtype'] = uint8
 
         if crs:
             dst_crs = CRS({'init': 'epsg:{}'.format(crs)})
             if geometry['crs'] != dst_crs:
-                self.reproject_multiband(dst_crs)
+                self.reproject_multiband(output_filename, dst_crs)
+                return None
 
         with rasopen(output_filename, 'w', **geometry) as dst:
             dst.write(array)
 
         return None
 
-    def reproject_multiband(self, dst_crs):
+    def reproject_multiband(self, file_name, dst_crs):
         with Env(CHECK_WITH_INVERT_PROJ=True):
             with rasopen(self.temp_file) as src:
                 profile = src.profile
@@ -73,19 +72,18 @@ class NaipImage(object):
                 profile.update({
                     'crs': dst_crs,
                     'transform': dst_affine,
-                    'affine': dst_affine,
                     'width': dst_width,
                     'height': dst_height
                 })
 
-                with rasopen(self.temp_proj_file, 'w', **profile) as dst:
+                with rasopen(file_name, 'w', **profile) as dst:
                     for i in range(1, src.count + 1):
                         src_array = src.read(i)
                         dst_array = empty((dst_height, dst_width), dtype=uint8)
 
                         reproject(src_array,
                                   src_crs=src.crs,
-                                  src_transform=src.affine,
+                                  src_transform=src.transform,
                                   destination=dst_array,
                                   dst_transform=dst_affine,
                                   dst_crs=dst_crs,
@@ -118,7 +116,7 @@ class ApfoNaip(NaipImage):
 
     """
 
-    def __init__(self, bbox, **kwargs):
+    def __init__(self, bbox=None, **kwargs):
         """
             :param bbox: (west, south, east, north) tuple in geographic coordinates
         """
@@ -130,12 +128,21 @@ class ApfoNaip(NaipImage):
         self.bbox = bbox
         self.dst_crs = None
 
-        if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
-            raise BadCoordinatesError
+        if not bbox and not kwargs['centroid']:
+            raise NotImplementedError('Must provide either a bounding box (w, s, e, n) or centroid in Geographic')
+        if 'centroid' in kwargs.keys():
+            lat = kwargs['centroid'][0]
+            lon = kwargs['centroid'][1]
+            if 'buffer' not in kwargs.keys():
+                kwargs['buffer'] = 1000
+            self.bbox = bbox = BufferPoint().buffer_meters(lat, lon, kwargs['buffer'])
 
-        self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/'
+        if abs(bbox[0]) > 180 or abs(bbox[1]) > 90:
+            raise BadCoordinatesError('{} is not a good latitude'.format(bbox[0]))
+
+        self.naip_base_url = 'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP_Historical/'
         self.usda_query_str = '{a}/ImageServer/exportImage?f=image&bbox={a}' \
-                              '&imageSR=102100&bboxSR=102100&size=1000,1000' \
+                              '&imageSR=102100&bboxSR=102100&size=1024,1024' \
                               '&format=tiff&pixelType=U8' \
                               '&interpolation=+RSP_BilinearInterpolation'.format(a='{}')
 
@@ -150,7 +157,7 @@ class ApfoNaip(NaipImage):
         Current hack in this method and in GeoBounds is hard-coded epsg: 3857 'web mercator',
         though the NAIP service provides epsg: 102100 a deprecated ESRI SRS'
 
-        :param state: lower case state str, e.g. 'south_dakota'
+        :param state: e.g. 'ND'
         :param size: tuple of horizontal by vertical size in pixels, e.g., (512, 512)
         :return:
         """
@@ -162,7 +169,7 @@ class ApfoNaip(NaipImage):
 
         bbox_str = self.bounds_fmt.format(w=w, s=s, e=e, n=n)
 
-        naip_str = get_naip_key(state)
+        naip_str = '{}_NAIP'.format(state)
         query = self.usda_query_str.format(naip_str, bbox_str)
         url = '{}{}'.format(self.naip_base_url, query)
 
@@ -193,8 +200,6 @@ class ApfoNaip(NaipImage):
 
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    box = (-109.9849, 46.46738, -109.93647, 46.498625)
-    naip = ApfoNaip(box)
-    naip.get_image('montana')
+    pass
 
 # ========================= EOF ================================================================

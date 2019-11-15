@@ -14,8 +14,8 @@
 # limitations under the License.
 # =============================================================================================
 
+import os
 import unittest
-
 from rasterio import open as rasopen
 
 from naip_image.naip import ApfoNaip
@@ -26,13 +26,25 @@ class AfpoNaipTestCase(unittest.TestCase):
         self.box = (-109.9849, 46.46738, -109.93647, 46.498625)
         self.dst_srs = '26912'
         self.kwargs = dict([('dst_crs', self.dst_srs)])
-        with rasopen('data/naip_test/wheatland_tile.tif', 'r') as src:
+        self.kwargs_centroid = dict([('dst_crs', self.dst_srs), ('centroid', ((self.box[1] + self.box[3]) / 2,
+                                                                 ((self.box[0] + self.box[2]) / 2))),
+                                     ('buffer', 1700)])
+        self.tile_loc = os.path.join(os.path.dirname(__file__), 'data', 'wheatland_tile.tif')
+
+        with rasopen(self.tile_loc, 'r') as src:
             self.profile = src.profile
             self.array = src.read()
 
-    def test_image_reference(self):
+    def test_image_reference_bbox(self):
         naip = ApfoNaip(self.box, **self.kwargs)
-        array, profile = naip.get_image('montana')
+        array, profile = naip.get_image('MT')
+        self.assertAlmostEqual(array.mean(), self.array.mean(), delta=3.)
+        naip.close()
+
+    def test_image_reference_centroid(self):
+        naip = ApfoNaip(**self.kwargs_centroid)
+        array, profile = naip.get_image('MT')
+        naip.save(array, profile, self.tile_loc.replace('wheatland_tile', 'centroid_test'))
         self.assertAlmostEqual(array.mean(), self.array.mean(), delta=3.)
         naip.close()
 
