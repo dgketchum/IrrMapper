@@ -33,7 +33,7 @@ def mlp(data, model_path):
     :return:
     """
 
-    x = normalize_feature_array(data.data)
+    x = data.data
     labels = data.target_values
     y = get_dummies(labels.reshape((labels.shape[0],))).values
     N = len(unique(data.target_values))
@@ -100,12 +100,6 @@ def multilayer_perceptron(x, weights, biases):
     out_layer = tf.nn.sigmoid(out_layer)
     return out_layer
 
-
-def normalize_feature_array(data):
-    scaler = StandardScaler()
-    scaler = scaler.fit(data)
-    data = scaler.transform(data)
-    return data
 
 
 def get_size(start_path='.'):

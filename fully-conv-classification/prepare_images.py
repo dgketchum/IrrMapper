@@ -1,4 +1,4 @@
-# =============================================================================================
+#  =============================================================================================
 # Copyright 2018 dgketchum
 #
 # Licensed under the Apache License, Version 2 (the "License");
@@ -20,25 +20,25 @@ import sys
 
 abspath = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(abspath)
-from numpy import mean, datetime64
+from numpy import datetime64, arange, zeros
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from landsat.google_download import GoogleDownload
 from sat_image.image import Landsat5, Landsat7, Landsat8
 from sat_image.fmask import Fmask
 from sat_image.warped_vrt import warp_vrt
 from met.thredds import GridMet, TopoWX
+from shutil import rmtree
 from bounds import RasterBounds, GeoBounds
 from dem import AwsDem
-from ssebop_app.image import get_image
 from functools import partial
-from pyproj import Proj, transform as pytransform
+from pyproj import Proj, transform as pytransform, CRS as pyCRS
 from shapely.geometry import shape, Polygon, mapping
 from shapely.ops import transform
 from rasterio import open as rasopen, float32
 from rasterio.crs import CRS
 from pixel_classification.crop_data_layer import CropDataLayer as Cdl
-from pixel_classification.runspec import landsat_rasters, static_rasters, ancillary_rasters, mask_rasters, climate_rasters
+from pixel_classification.runspec import (static_rasters, ancillary_rasters, mask_rasters, landsat_rasters)
 from sklearn.preprocessing import StandardScaler
 from geopandas.geodataframe import GeoDataFrame
 
@@ -47,7 +47,8 @@ class ImageStack(object):
     Prepare a stack of images from Landsat, terrain, etc. Save stack in identical geometry.
     """
 
-    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None, max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None):
+    def __init__(self, satellite, path=None, row=None, lat=None, lon=None, root=None,
+            max_cloud_pct=None, start=None, end=None, year=None, n_landsat=None):
 
         self.landsat_mapping = {'LT5': Landsat5, 'LE7': Landsat7, 'LC8': Landsat8}
         self.landsat_mapping_abv = {5: 'LT5', 7: 'LE7', 8: 'LC8'}
@@ -62,7 +63,7 @@ class ImageStack(object):
         self.lon = lon
         self.year = year
 
-        self.max_cloud = max_cloud_pct
+        self.max_cloud = 100
         self.start = start
         self.end = end
         self.root = root
@@ -80,9 +81,8 @@ class ImageStack(object):
 
         self.cdl_tif = None
         self.cdl_mask = None
-
+        self.climate_targets = ['pr', 'pet', 'tmmn', 'tmmx', 'etr']
         self.n = n_landsat
-
         self.ancillary_rasters = []
         self.exclude_rasters = []
 
@@ -93,18 +93,18 @@ class ImageStack(object):
     def build_training(self):
         self.get_landsat(fmask=True)
         self.profile = self.landsat.rasterio_geometry
-        self.get_precip()
-        self.get_et()
+        self.get_climate_timeseries()
         self.get_terrain()
         self.paths_map, self.masks = self._order_images()
 
     def build_evaluating(self):
-        self.get_landsat(fmask=False)
-        self.profile = self.landsat.rasterio_geometry
-        #self.get_et()
-        #self.get_precip()
+        # Multiprocessing on this may not be plausible.
+        self.get_landsat(fmask=True)
+        self.profile = self.landsat.rasterio_geometry # fix this?
+        # self.get_climate_timeseries()
+        # The above line stopped working for unknown reasons.
+        # Maybe due to mismatched CRS?
         self.get_terrain()
-        self.paths_map, self.masks = self._order_images() # paths map is just path-> location
         # in filesystem.
 
     def get_cdl(self):
@@ -128,16 +128,18 @@ class ImageStack(object):
         the root directory.
         """
         if self.lat is None:
-            g = GoogleDownload(self.start, self.end, self.sat, path=self.path, row=self.row,
-                               output_path=self.root, max_cloud_percent=self.max_cloud)
+            g = GoogleDownload(self.start, self.end, self.sat, 
+                    path=self.path, row=self.row, output_path=self.root, 
+                    max_cloud_percent=self.max_cloud)
         else:
-            g = GoogleDownload(self.start, self.end, self.sat, latitude=self.lat, longitude=self.lon,
-                               output_path=self.root, max_cloud_percent=self.max_cloud)
+            g = GoogleDownload(self.start, self.end, self.sat,
+                    latitude=self.lat, longitude=self.lon, output_path=self.root,
+                    max_cloud_percent=self.max_cloud)
 
         g.select_scenes(self.n)
         self.scenes = g.selected_scenes
         g.download(list_type='selected')
-
+        # g.download(list_type='all')
         self.image_dirs = [x[0] for x in os.walk(self.root) if
                            os.path.basename(x[0])[:3] in self.landsat_mapping.keys()]
 
@@ -145,46 +147,67 @@ class ImageStack(object):
         if fmask:
             [self._make_fmask(d) for d in self.image_dirs]
 
-    def get_precip(self):
+    def _get_bounds(self):
         poly_in = self.landsat.get_tile_geometry()
         poly_in = Polygon(poly_in[0]['coordinates'][0])
+        crs = pyCRS(self.profile['crs']['init'])
         project = partial(
                 pytransform, 
-                Proj(self.profile['crs']),
-                Proj(init='epsg:32612'))
+                Proj(crs),
+                Proj(crs))
+        # The above is not needed.
         for_bounds = partial(
                 pytransform, 
-                Proj(self.profile['crs']),
-                Proj(init='epsg:4326'))
-        dates = self.scenes['DATE_ACQUIRED'].values
-        # Change the coordinate system
-        # The issue: the CRSs for the bounding box and for the mask are different.
-        # In _project, the incorrect CRS was making it throw an error.
-        # the fix? Inputting bounds in a unprojected CRS and 
-        # a projected shape for masking.
+                Proj(crs),
+                Proj('epsg:4326'))
         poly = transform(project, poly_in)
         poly_bounds = transform(for_bounds, poly_in)
         poly = Polygon(poly.exterior.coords)
         geometry = [mapping(poly)] 
-        geometry[0]['crs'] = CRS({'init':'epsg:32612'})
+        geometry[0]['crs'] = CRS(self.profile['crs'])
         bounds = poly_bounds.bounds
-        for date in dates:
-            outfile = os.path.join(self.root, 'precip_{}.tif'.format(date))
-            if not os.path.isfile(outfile):
-                print("Get {}".format(outfile))
-                d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
-                bds = GeoBounds(wsen=bounds)
-                gm = GridMet(variable='pr', clip_feature=geometry,
-                        bbox=bds, target_profile=self.profile, date=d)
-                out = gm.get_data_subset()
-                gm.save_raster(out, self.landsat.rasterio_geometry, outfile)
+        return bounds, geometry
+
+
+    def get_climate_timeseries(self):
+        bounds, geometry = self._get_bounds()
+        print(bounds, geometry)
+        dates = self.scenes['DATE_ACQUIRED'].values
+        all_dates = arange(datetime(self.year, 3, 1), max(dates)+1,
+                timedelta(days=1)).astype(datetime64)
+        for target in self.climate_targets:
+            out_arr = None
+            first = True
+            last = None
+            check = [os.path.isfile(os.path.join(self.root, 'climate_rasters', '{}_{}.tif'.format(q, target))) for q in dates]
+            if False in check:
+                for date in all_dates:
+                    d = datetime.utcfromtimestamp(date.tolist()/1e9) # convert to a nicer format.
+                    bds = GeoBounds(wsen=bounds)
+                    gm = GridMet(variable=target, clip_feature=geometry,
+                            bbox=bds, target_profile=self.profile, date=d)
+                    out = gm.get_data_subset_nonconform()
+                    if first:
+                        out_arr = zeros(out.shape)
+                        first = False
+                    out_arr += out
+                    if date in dates:
+                        out_dir = 'climate_rasters'
+                        out_dir = os.path.join(self.root, out_dir)
+                        if not os.path.isdir(out_dir):
+                            os.mkdir(out_dir)
+                        outfile = os.path.join(out_dir, '{}_{}.tif'.format(date, target))
+                        print("Saving {}".format(outfile))
+                        out_final = gm.conform(out_arr)
+                        gm.save_raster(out_final, self.landsat.rasterio_geometry, outfile)
+                        rmtree(gm.temp_dir)
 
 
     def get_terrain(self):
         """
         Get digital elevation maps from amazon web services
         save in the project root directory with filenames enumerated
-        in the next three lines.
+        in the next three lines (slope, aspect, elevation_diff).
 
         """
 
@@ -206,7 +229,6 @@ class ImageStack(object):
             dem.terrain(attribute='aspect',
                         out_file=aspect_name, save_and_return=True)
             elev = dem.terrain(attribute='elevation')
-            elev = elev - mean(elev)
             dem.save(elev, geometry=dem.target_profile, output_filename=dif_elev)
 
     def get_et(self):

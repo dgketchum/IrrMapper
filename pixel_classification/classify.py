@@ -20,7 +20,7 @@ from copy import deepcopy
 from datetime import datetime
 from multiprocessing import cpu_count
 
-from multiprocess.pool import Pool
+from multiprocessing.pool import Pool
 from numpy.core.multiarray import concatenate
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -122,7 +122,7 @@ class Classifier(object):
 
         self.final_shape = 1, stack.shape[1], stack.shape[2]
         stack = stack.reshape((stack.shape[0], stack.shape[1] * stack.shape[2]))
-        stack[stack == 0.] = np.nan
+        stack[stack == 0.] = np.nan # for "borders"
 
         if mask_path:
             ms = self.mask.shape
@@ -223,10 +223,12 @@ class Classifier(object):
                 first = False
             else:
                 try:
-                    stack[i, :, :] = self.normalize_image_channel(arr)
+                    stack[i, :, :] = arr
                 except ValueError:
+                    import pprint
+                    pprint.pprint(first_geo)
                     arr = warp_single_image(self.feature_ras, first_geo)
-                    stack[i, :, :] = self.normalize_image_channel(arr)
+                    stack[i, :, :] = arr
 
         return stack
 

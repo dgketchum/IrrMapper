@@ -29,14 +29,15 @@ from pixel_classification.tf_multilayer_perceptron import mlp
 from pixel_classification.classify import classify_multiproc
 from pixel_classification.target_path_rows import get_path_rows
 
+
 OBJECT_MAP = {'MT': Montana,
               'NV': Nevada,
               'OR': Oregon,
               'UT': Utah,}
               # 'WA': Washington}
 
-
 def concatenate_training_data(existing, training_array):
+
     existing_array = existing['data']
     add_array = training_array.data
     new_array = vstack((existing_array, add_array))
@@ -79,8 +80,13 @@ def model_training_scenes(project, n_images, training, model):
         i = ImageStack(root=project_state_dir, satellite=geo.sat, path=geo.path, row=geo.row,
                        n_landsat=n_images, year=geo.year, max_cloud_pct=70)
         i.build_training()
+
+        p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=10000, masks=i.masks,
+                overwrite_array=True, overwrite_points=True, pkl_path=geo_data_path)
+
         p = Pta(root=i.root, geography=geo, paths_map=i.paths_map, instances=5000, masks=i.masks,
                 overwrite_array=False, overwrite_points=False, pkl_path=geo_data_path)
+
         p.extract_sample()
 
         if first:
@@ -93,14 +99,14 @@ def model_training_scenes(project, n_images, training, model):
         print('Shape {}: {}'.format(key, p.data.shape))
 
     p = Pta(from_dict=training_data)
-    p.to_pickle(training_data, os.path.join(project, 'data.pkl'))
+    p.to_pickle(training_data, os.path.join(project, 'data_kernel31.pkl'.format()))
     mlp(p, model)
     print('Model saved to {} '.format(model))
 
 
 def classify_scene(path, row, sat, year, eval_directory, model, n_images, result=None):
     print('Time: {}'.format(datetime.now()))
-    print('Classfiy path {} row {} sat {} year {}'.format(path, row, sat, year))
+    print('Classify path {} row {} sat {} year {}'.format(path, row, sat, year))
     sub = os.path.join(eval_directory, '{}_{}_{}'.format(path, row, year))
     if not os.path.isdir(sub):
         os.mkdir(sub)
@@ -115,7 +121,7 @@ def classify_scene(path, row, sat, year, eval_directory, model, n_images, result
         path_row_year_dir = '{}_{}_{}'.format(path, row, year)
         result = os.path.join(eval_directory, path_row_year_dir, tif)
 
-    classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result)
+    classify_multiproc(model, stack_data=i, mask=i.cdl_mask, result=result, array_outfile="a_recognizable_name")
     print('Time: {}'.format(datetime.now()))
 
 
@@ -139,7 +145,13 @@ if __name__ == '__main__':
     model_data = os.path.join(abspath, 'model_data')
     model_name = os.path.join(model_data, 'model-mt.ckpt'.format(n_images))
     t_project_dir = os.path.join(model_data, 'allstates_3')
-
+    c_project_dir = os.path.join(model_data, 'stacks')
     model_training_scenes(t_project_dir, n_images, training_dir, model_name)
+
+    classify_scene(path=39, row=27, sat=8, year=2015, eval_directory=c_project_dir,
+                   n_images=3, model=model_name)
+
+
+
 
 # ========================= EOF ====================================================================

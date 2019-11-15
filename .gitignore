@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.condaauto
 env/
 build/
 develop-eggs/
@@ -111,3 +112,30 @@ spatial_data/MT
 tests/data
 gee_training.py
 model_data/
+fully-conv-classification/*shp
+fully-conv-classification/*dbf
+fully-conv-classification/*cpg
+fully-conv-classification/*prj
+fully-conv-classification/*sh
+fully-conv-classification/*tif
+fully-conv-classification/*txt
+fully-conv-classification/*shx
+fully-conv-classification/compare_model_outputs/
+fully-conv-classification/binary/
+fully-conv-classification/all_models/
+fully-conv-classification/models/
+fully-conv-classification/copy_files.py
+fully-conv-classification/examine_dates.py
+fully-conv-classification/evaluated_over_mt/
+fully-conv-classification/evaluated_images/
+fully-conv-classification/no_expit/
+fully-conv-classification/tags
+fully-conv-classification/random_tifs/
+fully-conv-classification/random_majority_files/
+fully-conv-classification/model_ensemble.py
+fully-conv-classification/hyperparameters/
+fully-conv-classification/mean_of_three/
+fully-conv-classification/ensemble_models/
+fully-conv-classification/precision_and_recall_multiple_files.py
+fully-conv-classification/plot_cmat.py
+fully-conv-classification/shapefile_data/
