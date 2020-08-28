@@ -1,12 +1,17 @@
+"""
+Credits to  https://github.com/VSainteuf/pytorch-psetae
+author: Vivien Sainte Fare Garnot
+paper: https://arxiv.org/pdf/2007.00586.pdf
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
 
-from models.pse import PixelSetEncoder
-from models.tae import TemporalAttentionEncoder
-from models.ltae import LTAE
-from models.decoder import get_decoder
+from models.ltae_pse.pse import PixelSetEncoder
+from models.ltae_pse.tae import TemporalAttentionEncoder
+from models.ltae_pse.ltae import LTAE
+from models.ltae_pse.decoder import get_decoder
 
 
 class PseLTae(nn.Module):
