@@ -3,8 +3,7 @@ import os
 import scipy.ndimage.measurements as mnts
 import numpy as np
 from numpy import zeros_like, array, sort, sum, where, nan, swapaxes, count_nonzero
-from numpy import nanmean, iinfo, uint32, sqrt, save, isnan, all, mean, any, int16
-from map.trainer.training_utils import make_test_dataset
+from numpy import nanmean, iinfo, uint32, sqrt, save, isnan, all, any, load
 import pickle as pkl
 
 # dates are generic, dates of each year as below, but data is from many years
@@ -38,7 +37,7 @@ def write_pixel_set(out, recs, n_samples=10000):
     """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
-    dataset = make_test_dataset(recs, True).batch(1)
+    l = [os.path.join(recs, x) for x in os.listdir(recs)]
     count = 0
     nan_pix = 0
     nan_geom = 0
@@ -46,9 +45,10 @@ def write_pixel_set(out, recs, n_samples=10000):
     mean_, std_ = 0, 0
     M2 = 0
     label_dict, size_dict, geom = {}, {}, {}
-    for j, (features, labels) in enumerate(dataset):
-        labels = labels.numpy().squeeze()
-        features = features.numpy().squeeze()
+    for j, f in enumerate(l):
+        a = load(f)
+        labels = a[:, :, -4:]
+        features = a[:, :, :-4]
 
         bbox_slices = {}
         for i in range(labels.shape[2]):
@@ -155,47 +155,11 @@ def display_box(labels, slices):
     plt.show()
 
 
-def date_parser(filepath):
-    """
-    returns the date (as int) from the file name of an S2 image
-    """
-    filename = os.path.split(filepath)[-1]
-    return int(str(filename).split('.')[0])
-
-
-def list_extension(folder, extension='tif'):
-    """
-    Lists files in folder with the specified extension
-    """
-    return [f for f in os.listdir(folder) if str(f).endswith(extension)]
-
-
-def get_dates(input_folder):
-    tifs = list_extension(input_folder, '.tif')
-    tifs = sort(tifs)
-    dates = [int(t.replace('.tif', '')) for t in tifs]
-
-    ndates = len(dates)
-
-    date_index = dict(zip(dates, range(ndates)))
-
-    print('{} dates found in input folder '.format(ndates))
-    tifs = [os.path.join(input_folder, f) for f in tifs]
-
-    return tifs, date_index
-
-
-def prepare_output(output_path):
-    os.makedirs(output_path, exist_ok=True)
-    os.makedirs(os.path.join(output_path, 'DATA'), exist_ok=True)
-    os.makedirs(os.path.join(output_path, 'META'), exist_ok=True)
-
-
 if __name__ == '__main__':
     home = os.path.expanduser('~')
-    pixel_sets = os.path.join(home, 'IrrigationGIS', 'pixel_sets')
-    tf_recs = os.path.join(home, 'IrrigationGIS', 'tfrecords')
-
-    write_pixel_set(pixel_sets, tf_recs, label_names=['CODE_GROUP'])
+    parent = os.path.join(home, 'PycharmProjects', 'IrrMapper')
+    npy_recs = os.path.join(parent, 'data', 'npy')
+    pixel_sets = os.path.join(parent, 'data', 'pixel_sets')
+    write_pixel_set(pixel_sets, npy_recs)
 
 # ========================= EOF ====================================================================
