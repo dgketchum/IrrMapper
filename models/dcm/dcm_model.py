@@ -11,19 +11,18 @@ paper: https://www.sciencedirect.com/science/article/pii/S0034425720303163
 code: https://github.com/Lab-IDEAS/DeepCropMapping
 """
 import os
-from pprint import pprint
+import json
+from pathlib import Path
 
-from numpy import array, append, where, count_nonzero, zeros_like
-from pandas import read_csv
-
+import numpy as np
 import torch
 from torch import nn
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-from map.dcm.dcm_helper import DCMHelper
-from map.dcm.utils import PrettyLogger
+from models.dcm.dcm_helper import DCMHelper
+from models.dcm.utils import PrettyLogger
 DEVICE = torch.device("cuda")
 
 
@@ -60,27 +59,33 @@ def train(net, x_train, x_test, y_train, y_test):
     return None
 
 
-def run_model(csv):
-    df = read_csv(csv)
-    labels = df['POINT_TYPE'].values
-    coords = df[['LAT_GCS', 'Lon_GCS']].values
-    years = df['YEAR'].values
-    df.drop(columns=['Unnamed: 0.1', 'LAT_GCS', 'Lon_GCS', 'POINT_TYPE', 'YEAR'], inplace=True)
-    df[df > 0.0] = df.div(10000.)
-    df[df < 0.0] = 0.0
-    bands = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7']
-    doy_features = [['{}{}'.format(str(y).rjust(3, '0'), x) for x in bands] for y in range(1, 367)]
+def run_model(data_dir):
+    features = None
+    np_data = os.path.join(data_dir, 'DATA')
+    meta_data = os.path.join(data_dir, 'META')
+    _files = [os.path.join(np_data, x) for x in os.listdir(np_data)]
+    with open(os.path.join(meta_data, 'labels.json'), 'r') as file:
+        label = json.loads(file.read())['label_4class']
+    label = [v for k, v in label.items()]
+    first = True
+    count = 0
+    labels = []
+    for j, (f, l) in enumerate(zip(_files, label), start=1):
+        a = np.load(f)
+        labels.extend([l for _ in range(a.shape[-1])])
+        count += a.shape[-1]
+        if first:
+            first = False
+            features = a[:, :6, :]
+        else:
+            features = np.append(features, a[:, :6, :], axis=-1)
+        if count > 100000:
+            break
 
-    doy_data = [df[dv].values for dv in doy_features[135:267]]
-    doy_coords = [where(x[:, :2] > 0.0, coords, zeros_like(coords)) for x in doy_data]
-    data = [append(x, c, axis=1) for x, c in zip(doy_data, doy_coords)]
-    data = array(data).swapaxes(0, 1)
-
-    # info_ = append(count_nonzero(data[:, :, 0], axis=1).reshape((df.shape[0], 1)),
-    #                years.reshape((df.shape[0], 1)), axis=1)
-    # info_ = info_[info_[:, 0].argsort()]
-
-    x, x_test, y, y_test = train_test_split(data, labels, test_size=0.33,
+    features = np.swapaxes(features, 0, 2)
+    features = np.swapaxes(features, 1, 2)
+    print(len(labels), features.shape)
+    x, x_test, y, y_test = train_test_split(features, labels, test_size=0.33,
                                             random_state=None)
 
     x = helper.input_x(x)
@@ -99,7 +104,7 @@ def run_model(csv):
 
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
-    bands = os.path.join(home, 'IrrigationGIS', 'EE_extracts', 'concatenated', 'sr_series.csv')
-    run_model(bands)
+    path = Path(__file__).parents
+    PSE = os.path.join(path[2], 'data', 'pixel_sets')
+    run_model(PSE)
 # ========================= EOF ====================================================================

@@ -103,5 +103,6 @@ ENV/
 .idea/*
 /.idea
 
-data/
+data/*
+/home/dgketchum/PycharmProjects/IrrMapper/models/ltae_pse/*.json
 

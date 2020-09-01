@@ -5,14 +5,14 @@ Credits to  https://github.com/Lab-IDEAS/DeepCropMapping
 Deep Crop Mapper module
 
 Credits:
-The module from the works of Jinfan Xu et al. on pixel-based crop type mapping.
+The module from the work of Jinfan Xu et al. on pixel-based crop type mapping.
 
 paper: https://www.sciencedirect.com/science/article/pii/S0034425720303163
 code: https://github.com/Lab-IDEAS/DeepCropMapping
 """
 from datetime import datetime
 import logging
-from colorama import Fore, Back, Style
+# from colorama import Fore, Back, Style
 
 
 def record_time(record_list, func, args, time_format="%Y%m%d-%H:%M:%S"):
@@ -70,8 +70,8 @@ class PrettyLogger(object):
         logger.setLevel(self._level)
         console_handler = logging.StreamHandler()
         console_handler.setLevel(self._level)
-        colored_formatter = ColoredFormatter()
-        console_handler.setFormatter(colored_formatter)
+        # colored_formatter = ColoredFormatter()
+        # console_handler.setFormatter(colored_formatter)
         if clear_prev_handlers:
             logger.handlers.clear()
         logger.addHandler(console_handler)

@@ -1,9 +1,9 @@
 import json
 import os
 import scipy.ndimage.measurements as mnts
-import numpy as np
-from numpy import zeros_like, array, sort, sum, where, nan, swapaxes, count_nonzero
-from numpy import nanmean, iinfo, uint32, sqrt, save, isnan, all, any, load
+import warnings
+from numpy import zeros_like, array, newaxis, sum, where, nan, swapaxes, count_nonzero
+from numpy import nanmean, iinfo, uint32, sqrt, save, isnan, all, any, load, repeat
 import pickle as pkl
 
 # dates are generic, dates of each year as below, but data is from many years
@@ -33,7 +33,7 @@ structure = array([
 ])
 
 
-def write_pixel_set(out, recs, n_samples=10000):
+def write_pixel_set(out, recs):
     """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
@@ -44,6 +44,8 @@ def write_pixel_set(out, recs, n_samples=10000):
     invalid_pix = 0
     mean_, std_ = 0, 0
     M2 = 0
+    # [757 128 329 986]
+    obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     label_dict, size_dict, geom = {}, {}, {}
     for j, f in enumerate(l):
         a = load(f)
@@ -52,12 +54,13 @@ def write_pixel_set(out, recs, n_samples=10000):
 
         bbox_slices = {}
         for i in range(labels.shape[2]):
-            _class = i + 1
+            _class = i
             lab = labels[:, :, i].copy()
             if lab.max():
                 bbox_slices[i] = mnts.find_objects(mnts.label(lab, structure=structure)[0])
                 for b in bbox_slices[i]:
-                    lab_mask = np.repeat(lab[b][:, :, np.newaxis], features.shape[-1], axis=2)
+                    obj_ct[_class] += 1
+                    lab_mask = repeat(lab[b][:, :, newaxis], features.shape[-1], axis=2)
                     nan_label = lab_mask.copy()
                     nan_label[:, :, :] = iinfo(uint32).min
                     c = where(lab_mask, features[b], nan_label)
@@ -100,37 +103,36 @@ def write_pixel_set(out, recs, n_samples=10000):
                     geom[count] = geo
                     label_dict[count] = _class
                     size_dict[count] = c.shape[2]
-                    if count % 10000 == 0:
+                    if count % 100 == 0:
                         print('count: {}'.format(count))
 
                     save(os.path.join(out, 'DATA', '{}'.format(count)), c)
 
-        # display_box(labels, bbox_slices)
-        if count > n_samples:
-            print('final pse shape: {}'.format(c.shape))
-            print('count of pixel sets: {}'.format(count))
-            print('mean: {}'.format(list(mean_[:, 6])))
-            print('std: {}'.format(list(std_[:, 6])))
-            print('nan arrays: {}'.format(nan_pix))
-            print('nan geom: {}'.format(nan_geom))
-            print('invalid (2.0) pixel values: {}'.format(invalid_pix))
+    print('objects count: {}'.format(obj_ct))
+    print('final pse shape: {}'.format(c.shape))
+    print('count of pixel sets: {}'.format(count))
+    print('mean: {}'.format(list(mean_[:, 6])))
+    print('std: {}'.format(list(std_[:, 6])))
+    print('nan arrays: {}'.format(nan_pix))
+    print('nan geom: {}'.format(nan_geom))
+    print('invalid (2.0) pixel values: {}'.format(invalid_pix))
 
-            with open(os.path.join(out, 'S2-2017-T31TFM-meanstd.pkl'), 'wb') as handle:
-                pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
+    with open(os.path.join(out, 'S2-2017-T31TFM-meanstd.pkl'), 'wb') as handle:
+        pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
-            label_dict = {'label_4class': label_dict}
-            with open(os.path.join(out, 'META', 'labels.json'), 'w') as file:
-                file.write(json.dumps(label_dict, indent=4))
+    label_dict = {'label_4class': label_dict}
+    with open(os.path.join(out, 'META', 'labels.json'), 'w') as file:
+        file.write(json.dumps(label_dict, indent=4))
 
-            with open(os.path.join(out, 'META', 'dates.json'), 'w') as file:
-                file.write(json.dumps(DATES, indent=4))
+    with open(os.path.join(out, 'META', 'dates.json'), 'w') as file:
+        file.write(json.dumps(DATES, indent=4))
 
-            with open(os.path.join(out, 'META', 'sizes.json'), 'w') as file:
-                file.write(json.dumps(size_dict, indent=4))
+    with open(os.path.join(out, 'META', 'sizes.json'), 'w') as file:
+        file.write(json.dumps(size_dict, indent=4))
 
-            with open(os.path.join(out, 'META', 'geomfeat.json'), 'w') as file:
-                file.write(json.dumps(geom, indent=4))
-            exit()
+    with open(os.path.join(out, 'META', 'geomfeat.json'), 'w') as file:
+        file.write(json.dumps(geom, indent=4))
+    exit()
 
 
 def display_box(labels, slices):
@@ -162,4 +164,4 @@ if __name__ == '__main__':
     pixel_sets = os.path.join(parent, 'data', 'pixel_sets')
     write_pixel_set(pixel_sets, npy_recs)
 
-# ========================= EOF ====================================================================
+# ========================= EOF ================================================================

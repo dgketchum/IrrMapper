@@ -1,8 +1,7 @@
 """
-
 Credits to  https://github.com/Lab-IDEAS/DeepCropMapping
 
-Deep Crop Mapper module
+Deep Crop Mapper
 
 Credits:
 The module from the works of Jinfan Xu et al. on pixel-based crop type mapping.
@@ -23,8 +22,8 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from map.dcm.dcm import DCM
-from map.dcm.utils import record_time
+from models.dcm.dcm import DCM
+from models.dcm.utils import record_time
 
 
 SEED = 313
