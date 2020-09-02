@@ -18,14 +18,14 @@ import torch.nn.functional as F
 
 class DCM(nn.Module):
     def __init__(
-            self, seed, input_feature_size, hidden_size, num_layers,
+            self, seed, input_dim, hidden_size, num_layers,
             bidirectional, dropout, num_classes
     ):
         super().__init__()
         self._set_reproducible(seed)
 
         self.lstm = nn.LSTM(
-            input_size=input_feature_size,
+            input_size=input_dim,
             hidden_size=hidden_size,
             num_layers=num_layers,
             bidirectional=bidirectional,
