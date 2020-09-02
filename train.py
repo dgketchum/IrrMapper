@@ -1,5 +1,3 @@
-
-
 import os
 import json
 import pickle as pkl
@@ -14,8 +12,12 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.metrics import confusion_matrix
 
-from models.ltae_pse.stclassifier import PseTae, PseLTae
-from models.ltae_pse.dataset import PixelSetData
+from models.ltae_pse.stclassifier import PseLTae
+from models.ltae_pse.pse_dataset import PixelSetData
+from models.dcm.pixel_dataset import pixel_data
+from models.dcm.dcm import DCM
+from models.temp_cnn.temp_cnn import TempConv
+
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
 from learning.metrics import mIou, confusion_matrix_analysis
@@ -33,7 +35,7 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
         y = y.to(device)
 
         optimizer.zero_grad()
-        out = model(x)
+        out, att = model(x)
         loss = criterion(out, y.long())
         loss.backward()
         optimizer.step()
@@ -45,7 +47,8 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
         loss_meter.add(loss.item())
 
         if (i + 1) % config['display_step'] == 0:
-            print('Step [{}/{}], Loss: {:.4f}, Acc : {:.2f}'.format(i + 1, len(data_loader), loss_meter.value()[0],
+            print('Step [{}/{}], Loss: {:.4f}, Acc : {:.2f}'.format(i + 1, len(data_loader),
+                                                                    loss_meter.value()[0],
                                                                     acc_meter.value()[0]))
 
     epoch_metrics = {'train_loss': loss_meter.value()[0],
@@ -70,7 +73,7 @@ def evaluation(model, criterion, loader, device, config, mode='val'):
         y = y.to(device)
 
         with torch.no_grad():
-            prediction = model(x)
+            prediction, att = model(x)
             loss = criterion(prediction, y)
 
         acc_meter.add(prediction, y)
@@ -166,49 +169,60 @@ def main(config):
     torch.manual_seed(config['rdm_seed'])
     prepare_output(config)
 
-    # mean_std.shape = 24, 10 i.e., CxT
-    mean_std = pkl.load(open(config['dataset_folder'] + '/S2-2017-T31TFM-meanstd.pkl', 'rb'))
+    mean_std = pkl.load(open(config['dataset_folder'] + '/meanstd.pkl', 'rb'))
     extra = 'geomfeat' if config['geomfeat'] else None
-
-    dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],
-                      sub_classes=config['subset'],
-                      norm=mean_std,
-                      extra_feature=extra)
 
     device = torch.device(config['device'])
 
-    loaders = get_loaders(dt, config['kfold'], config)
-    for fold, (train_loader, val_loader, test_loader) in enumerate(loaders):
+    loaders = None
+
+    if config['dcm']:
+        dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std, extra_feature=None)
+        loaders = get_loaders(dt, config['kfold'], config)
+    if config['tcnn']:
+        dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std,
+                        extra_feature=None)
+
+        loaders = get_loaders(dt, config['kfold'], config)
+    if config['ltae']:
+        dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],
+                          sub_classes=config['subset'],
+                          norm=mean_std,
+                          extra_feature=extra)
+
+        loaders = get_loaders(dt, config['kfold'], config)
+
+    for fold, (train_loader, val_loader, test_loader) in enumerate(loaders[:1]):
         print('Starting Fold {}'.format(fold + 1))
         print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
 
-        if config['tae']:
-            model_config = dict(input_dim=config['input_dim'], mlp1=config['mlp1'], pooling=config['pooling'],
-                                mlp2=config['mlp2'], n_head=config['n_head'], d_k=config['d_k'], mlp3=config['mlp3'],
-                                dropout=config['dropout'], T=config['T'], len_max_seq=config['lms'],
-                                positions=dt.date_positions if config['positions'] == 'bespoke' else None,
-                                mlp4=config['mlp4'], d_model=config['d_model'])
-            if config['geomfeat']:
-                model_config.update(with_extra=True, extra_size=4)
-            else:
-                model_config.update(with_extra=False, extra_size=None)
-            model = PseTae(**model_config)
+        if config['dcm']:
+            model_config = dict(input_dim=config['input_dim'], hidden_size=config['hidden_size'], seed=config['seed'],
+                                num_layers=config['num_layers'], bidirectional=config['bidirectional'],
+                                dropout=config['dropout'], num_classes=config['num_classes'])
+            model = DCM(**model_config)
 
-        else:
+        elif config['tcnn']:
+            model_config = dict(input_dim=config['input_dim'], nker=config['nker'], seq_len=config['sequence_len'],
+                                nfc=config['mlp3'])
+            model = TempConv(**model_config)
+
+        elif config['ltae']:
             model_config = dict(input_dim=config['input_dim'], mlp1=config['mlp1'], pooling=config['pooling'],
                                 mlp2=config['mlp2'], n_head=config['n_head'], d_k=config['d_k'], mlp3=config['mlp3'],
                                 dropout=config['dropout'], T=config['T'], len_max_seq=config['lms'],
                                 positions=dt.date_positions if config['positions'] == 'bespoke' else None,
-                                mlp4=config['mlp4'], d_model=config['d_model'])
+                                mlp4=config['mlp4'], d_model=config['d_model'], return_att=True)
             if config['geomfeat']:
                 model_config.update(with_extra=True, extra_size=config['geom_dim'])
             else:
                 model_config.update(with_extra=False, extra_size=None)
             model = PseLTae(**model_config)
 
-        config['N_params'] = model.param_ratio()
-        with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
+        # config['N_params'] = model.param_ratio()
+
+        with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
+            _file.write(json.dumps(config, indent=4))
 
         model = model.to(device)
         model.apply(weight_init)
@@ -262,7 +276,8 @@ if __name__ == '__main__':
         # Set-up parameters
         parser.add_argument('--dataset_folder', default='', type=str,
                             help='Path to the folder where the results are saved.')
-        parser.add_argument('--res_dir', default='./results', help='Path to the folder where the results should be stored')
+        parser.add_argument('--res_dir', default='./results',
+                            help='Path to the folder where the results should be stored')
         parser.add_argument('--num_workers', default=8, type=int, help='Number of data loading workers')
         parser.add_argument('--rdm_seed', default=1, type=int, help='Random seed')
         parser.add_argument('--device', default='cuda', type=str,
@@ -306,23 +321,20 @@ if __name__ == '__main__':
 
         # Classifier
         parser.add_argument('--num_classes', default=20, type=int, help='Number of classes')
-        parser.add_argument('--mlp4', default='[128, 64, 32, 20]', type=str, help='Number of neurons in the layers of MLP4')
+        parser.add_argument('--mlp4', default='[128, 64, 32, 20]', type=str,
+                            help='Number of neurons in the layers of MLP4')
 
     config = parser.parse_args()
     config = vars(config)
 
     # bypass command line for debugging
     path = Path(__file__).parents
-    sentinel = False
-    if sentinel:
-        # run original configuration on their toy data
-        config['dataset_folder'] = '/home/dgketchum/PycharmProjects/ltae/S2-2017-T31TFM-PixelSet-TOY'
-        config['nomenclature'] = 'label_44class'
-        config['geom_dim'] = 4
-        config['subset'] = [1, 3, 4, 5, 6, 8, 9, 12, 13, 14, 16, 18, 19, 23, 28, 31, 33, 34, 36, 39]
 
-    else:
-        # non-default parameters for irrigation problem
+    config['dcm'] = False
+    config['ltae'] = False
+    config['tcnn'] = True
+
+    if config['ltae']:
         config['dataset_folder'] = os.path.join(path[0], 'data', 'pixel_sets')
         config['mlp1'] = '[7, 32, 64]'
         config['input_dim'] = 7
@@ -337,6 +349,41 @@ if __name__ == '__main__':
         with open(os.path.join(path[0], 'models', 'ltae_pse', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
             # exit()
+
+    if config['dcm']:
+        config['batch_size'] = 7168
+        config['dataset_folder'] = os.path.join(path[0], 'data', 'pixels')
+        config['input_dim'] = 7
+        config['nomenclature'] = 'label_4class'
+        config['geom_feat'] = 0
+        config['hidden_size'] = 256
+        config['num_layers'] = 2
+        config['bidirectional'] = True
+        config['seed'] = 121
+        config['lr'] = 0.00025
+        config['num_classes'] = 4
+        config['res_dir'] = os.path.join(path[0], 'models', 'ltae_pse', 'results')
+        with open(os.path.join(path[0], 'models', 'ltae_pse', 'config.json'), 'w') as file:
+            file.write(json.dumps(config, indent=4))
+
+    if config['tcnn']:
+        config['batch_size'] = 7168
+        config['dataset_folder'] = os.path.join(path[0], 'data', 'pixels')
+        config['input_dim'] = 7
+        config['sequence_len'] = 13
+        config['nomenclature'] = 'label_4class'
+        config['geom_feat'] = 0
+        config['hidden_size'] = 256
+        config['nker'] = '[16, 16, 16]'
+        config['mlp3'] = '[16, 16]'
+        config['num_layers'] = 2
+        config['bidirectional'] = True
+        config['seed'] = 121
+        config['lr'] = 0.00025
+        config['num_classes'] = 4
+        config['res_dir'] = os.path.join(path[0], 'models', 'ltae_pse', 'results')
+        with open(os.path.join(path[0], 'models', 'ltae_pse', 'config.json'), 'w') as file:
+            file.write(json.dumps(config, indent=4))
 
     for k, v in config.items():
         if 'mlp' in k or k == 'nker':
