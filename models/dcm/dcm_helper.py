@@ -133,7 +133,7 @@ class DCMHelper(object):
     def build_model(self):
         return DCM(
             seed=self.seed,
-            input_feature_size=self.input_feature_size,
+            input_dim=self.input_feature_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             bidirectional=self.bidirectional,
