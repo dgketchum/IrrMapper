@@ -1,7 +1,6 @@
 import json
 import os
 import scipy.ndimage.measurements as mnts
-import warnings
 import numpy as np
 import pickle as pkl
 
@@ -116,7 +115,7 @@ def write_pixel_set(out, recs):
     print('nan geom: {}'.format(nan_geom))
     print('invalid (2.0) pixel values: {}'.format(invalid_pix))
 
-    with open(os.path.join(out, 'S2-2017-T31TFM-meanstd.pkl'), 'wb') as handle:
+    with open(os.path.join(out, 'meanstd.pkl'), 'wb') as handle:
         pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
     label_dict = {'label_4class': label_dict}
