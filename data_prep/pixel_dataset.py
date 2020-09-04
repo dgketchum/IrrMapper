@@ -1,8 +1,3 @@
-"""
-Credits to  https://github.com/VSainteuf/pytorch-psetae
-author: Vivien Sainte Fare Garnot
-paper: https://arxiv.org/pdf/2007.00586.pdf
-"""
 import torch
 from torch.utils import data
 
@@ -31,18 +26,7 @@ def pixel_data(folder, labels, norm, extra_feature):
 
 class PixelDataChunk(data.Dataset):
     def __init__(self, _file, labels, norm=None, extra_feature=None):
-        """
 
-        Args:
-            folder (str): path to the main folder of the dataset, formatted as indicated in the readme
-            labels (str): name of the nomenclature to use in the labels.json file
-            sub_classes (list): If provided, only the samples from the given list of classes are considered.
-            (Can be used to remove classes with too few samples)
-            norm (tuple): (mean,std) tuple to use for normalization
-            extra_feature (str): name of the additional static feature file to use
-            jitter (tuple): if provided (sigma, clip) values for the addition random gaussian noise
-            return_id (bool): if True, the id of the yielded item is also returned (useful for inference)
-        """
         super(PixelDataChunk, self).__init__()
 
         self.data_src = _file
@@ -73,18 +57,7 @@ class PixelDataChunk(data.Dataset):
         return self.len
 
     def __getitem__(self, item):
-        """
-        Returns a Pixel-Set sequence tensor with its pixel mask and optional additional features.
-        For each item npixel pixels are randomly dranw from the available pixels.
-        If the total number of pixel is too small one arbitrary pixel is repeated. The pixel mask keeps track of true
-        and repeated pixels.
-        Returns:
-              (Pixel-Set, Pixel-Mask) or ((Pixel-Set, Pixel-Mask), Extra-features) with:
-                Pixel-Set: Sequence_length x Channels x npixel
-                Pixel-Mask : Sequence_length x npixel
-                Extra-features : Sequence_length x Number of additional features
 
-        """
         x = self.data[:, :, item]
         y = self.target[item]
 
@@ -105,5 +78,4 @@ class PixelDataChunk(data.Dataset):
             data = (data, ef)
 
         return data, torch.from_numpy(np.array(y, dtype=int))
-
 
