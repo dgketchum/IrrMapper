@@ -14,28 +14,28 @@ from models.temp_cnn.temp_cnn import TempConv
 from models.conv_lstm.conv_lstm import ConvLSTM
 
 
-def get_loader(config):
+def get_loaders(config):
     mean_std = pkl.load(open(config['dataset_folder'] + '/meanstd.pkl', 'rb'))
     extra = 'geomfeat' if config['geomfeat'] else None
     if config['dcm']:
         dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std, extra_feature=None)
-    loaders = get_loaders(dt, config['kfold'], config)
+        loaders = _dataloader_split(dt, config['kfold'], config)
 
     if config['tcnn']:
         dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std,
                         extra_feature=None)
-        loaders = get_loaders(dt, config['kfold'], config)
+        loaders = _dataloader_split(dt, config['kfold'], config)
 
     if config['ltae']:
         dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],
                           sub_classes=config['subset'],
                           norm=mean_std,
                           extra_feature=extra)
-        loaders = get_loaders(dt, config['kfold'], config)
+        loaders = _dataloader_split(dt, config['kfold'], config)
 
     if config['clstm']:
         dt = ImageDataset(config['dataset_folder'], norm=mean_std)
-        loaders = get_loaders(dt, config['kfold'], config)
+        loaders = _dataloader_split(dt, config['kfold'], config)
 
     return loaders
 
@@ -73,7 +73,7 @@ def get_model(config):
     return model
 
 
-def get_loaders(dt, config):
+def _dataloader_split(dt, config):
     indices = list(range(len(dt)))
     np.random.shuffle(indices)
 
