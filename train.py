@@ -52,6 +52,10 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
                                                                         loss_meter.value()[0],
                                                                         acc))
         else:
+            if config['mode'] == 'irr':
+                y = y[:, 0]
+            else:
+                y = y[:, 2]
             y_true.extend(list(map(int, y)))
             x = recursive_todevice(x, device)
             y = y.to(device)
@@ -63,7 +67,6 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
             pred = out.detach()
             y_p = pred.argmax(dim=1).cpu().numpy()
             y_pred.extend(list(y_p))
-            acc_meter.add(pred, y)
             loss_meter.add(loss.item())
 
             if (i + 1) % config['display_step'] == 0:
@@ -71,11 +74,8 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
                                                                         loss_meter.value()[0],
                                                                         acc_meter.value()[0]))
 
-    epoch_metrics = {'train_loss': loss_meter.value()[0],
-                     'train_accuracy': acc_meter.value()[0],
-                     'train_IoU': mIou(y_true, y_pred, n_classes=config['num_classes'])}
-
-    return epoch_metrics
+    print('loss', loss)
+    return None
 
 
 def evaluation(model, criterion, loader, device, config, mode='val'):
@@ -123,15 +123,15 @@ def prepare_output(config):
         os.makedirs(os.path.join(config['res_dir'], 'Fold_{}'.format(fold)), exist_ok=True)
 
 
-def checkpoint(fold, log, config):
-    with open(os.path.join(config['res_dir'], 'Fold_{}'.format(fold), 'trainlog.json'), 'w') as outfile:
+def checkpoint(log, config):
+    with open(os.path.join(config['res_dir'], 'trainlog.json'), 'w') as outfile:
         json.dump(log, outfile, indent=4)
 
 
 def save_results(fold, metrics, conf_mat, config):
-    with open(os.path.join(config['res_dir'], 'Fold_{}'.format(fold), 'test_metrics.json'), 'w') as outfile:
+    with open(os.path.join(config['res_dir'], 'test_metrics.json'), 'w') as outfile:
         json.dump(metrics, outfile, indent=4)
-    pkl.dump(conf_mat, open(os.path.join(config['res_dir'], 'Fold_{}'.format(fold), 'conf_mat.pkl'), 'wb'))
+    pkl.dump(conf_mat, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
 
 
 def overall_performance(config):
@@ -155,77 +155,70 @@ def main(config):
 
     device = torch.device(config['device'])
 
-    loaders = get_loaders(config)
+    train_loader, test_loader, val_loader = get_loaders(config)
+    print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
 
-    for fold, (train_loader, val_loader, test_loader) in enumerate(loaders):
-        print('Starting Fold {}'.format(fold + 1))
-        print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
+    model = get_model(config)
 
-        model = get_model(config)
+    # config['N_params'] = model.param_ratio()
 
-        # config['N_params'] = model.param_ratio()
+    with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
+        _file.write(json.dumps(config, indent=4))
 
-        with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
-            _file.write(json.dumps(config, indent=4))
+    model = model.to(device)
+    model.apply(weight_init)
+    optimizer = torch.optim.Adam(model.parameters())
+    criterion = FocalLoss(config['gamma'])
+    # criterion = CrossEntropyLoss()
 
-        model = model.to(device)
-        model.apply(weight_init)
-        optimizer = torch.optim.Adam(model.parameters())
-        criterion = FocalLoss(config['gamma'])
-        # criterion = CrossEntropyLoss()
+    for epoch in range(1, config['epochs'] + 1):
+        print('EPOCH {}/{}'.format(epoch, config['epochs']))
 
-        trainlog = {}
-        best_mIoU = 0
-
-        for epoch in range(1, config['epochs'] + 1):
-            print('EPOCH {}/{}'.format(epoch, config['epochs']))
-
-            model.train()
-            train_metrics = train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
-            print('Validation . . . ')
-            model.eval()
-            val_metrics = evaluation(model, criterion, val_loader, device=device, config=config, mode='val')
-
-            print('Loss {:.4f},  Acc {:.2f},  IoU {:.4f}'.format(val_metrics['val_loss'], val_metrics['val_accuracy'],
-                                                                 val_metrics['val_IoU']))
-
-            trainlog[epoch] = {**train_metrics, **val_metrics}
-            checkpoint(fold + 1, trainlog, config)
-
-            if val_metrics['val_IoU'] >= best_mIoU:
-                best_mIoU = val_metrics['val_IoU']
-                torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
-                            'optimizer': optimizer.state_dict()},
-                           os.path.join(config['res_dir'], 'Fold_{}'.format(fold + 1), 'model.pth.tar'))
-
-        print('Testing best epoch . . .')
-        model.load_state_dict(
-            torch.load(os.path.join(config['res_dir'], 'Fold_{}'.format(fold + 1), 'model.pth.tar'))['state_dict'])
+        model.train()
+        train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
+        print('Validation . . . ')
         model.eval()
+        val_metrics = evaluation(model, criterion, val_loader, device=device, config=config, mode='val')
 
-        print('Testing best epoch . . .')
-        model.load_state_dict(
-            torch.load(os.path.join(config['res_dir'], 'Fold_{}'.format(fold + 1), 'model.pth.tar'))['state_dict'])
-        model.eval()
+        # trainlog[epoch] = {**train_metrics, **val_metrics}
+        # checkpoint(trainlog, config)
 
-        test_metrics, conf_mat = evaluation(model, criterion, test_loader, device=device, mode='test', config=config)
+        # if val_metrics['val_IoU'] >= best_mIoU:
+        #     best_mIoU = val_metrics['val_IoU']
+        #     torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
+        #                 'optimizer': optimizer.state_dict()},
+        #                os.path.join(config['res_dir'], 'model.pth.tar'))
 
-        print('Loss {:.4f},  Acc {:.2f},  IoU {:.4f}'.format(test_metrics['test_loss'], test_metrics['test_accuracy'],
-                                                             test_metrics['test_IoU']))
-        save_results(fold + 1, test_metrics, conf_mat, config)
+    print('Testing best epoch . . .')
+    model.load_state_dict(
+        torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
+    model.eval()
+
+    test_metrics, conf_mat = evaluation(model, criterion, test_loader,
+                                        device=device, mode='test', config=config)
+    save_results(test_metrics, conf_mat, config)
 
     overall_performance(config)
 
 
 if __name__ == '__main__':
 
-    config = {'rdm_seed': 1, 'epochs': 100, 'display_step': 50,
-              'num_classes': 4, 'nomenclature': 'label_4class',
-              'kfold': 5, 'input_dim': 7, 'geomfeat': None,
-              'device': 'cuda:0', 'num_workers': 4,
+    config = {'mode': 'irr',
+              'rdm_seed': 1,
+              'epochs': 100,
+              'display_step': 50,
+              'num_classes': 4,
+              'nomenclature': 'label_4class',
+              'kfold': 5,
+              'input_dim': 7,
+              'geomfeat': None,
+              'device': 'cuda:0',
+              'num_workers': 4,
               'pooling': 'mean_std',
-              'dropout': 0.2, 'gamma': 1,
-              'ltae': True, 'dcm': False, 'tcnn': False, 'clstm': False}
+              'dropout': 0.2,
+              'gamma': 1,
+              'validation_folder': os.path.join(path[0], 'data', 'npy', 'valid'),
+              'ltae': False, 'dcm': False, 'tcnn': False, 'clstm': True}
 
     if config['ltae']:
         config['dataset_folder'] = os.path.join(path[0], 'data', 'pixel_sets')
@@ -290,5 +283,5 @@ if __name__ == '__main__':
             v = v.replace(']', '')
             config[k] = list(map(int, v.split(',')))
 
-    pprint.pprint(config)
+    # pprint.pprint(config)
     main(config)
