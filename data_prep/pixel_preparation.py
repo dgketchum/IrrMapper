@@ -31,7 +31,7 @@ structure = np.array([
 ])
 
 
-def write_pixel_set(out, recs):
+def write_pixel_sets(out, recs):
     """Iterate through each image of fenp.ature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
@@ -44,11 +44,12 @@ def write_pixel_set(out, recs):
     M2 = 0
     # [757 128 329 986]
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-    label_dict, size_dict, geom = {}, {}, {}
+    label_dict, cdl_label_dict, size_dict, geom = {}, {}, {}, {}
     for j, f in enumerate(l):
         a = np.load(f)
-        labels = a[:, :, -4:]
-        features = a[:, :, :-4]
+        labels = a[:, :, 98:]
+        features = a[:, :, :96]
+        cdl_label = a[:, :, 96:98]
 
         bbox_slices = {}
         for i in range(labels.shape[2]):
@@ -57,34 +58,48 @@ def write_pixel_set(out, recs):
             if lab.max():
                 bbox_slices[i] = mnts.find_objects(mnts.label(lab, structure=structure)[0])
                 for b in bbox_slices[i]:
+
+                    # features
                     obj_ct[_class] += 1
                     lab_mask = np.repeat(lab[b][:, :, np.newaxis], features.shape[-1], axis=2)
                     nan_label = lab_mask.copy()
                     nan_label[:, :, :] = np.iinfo(np.uint32).min
-                    c = np.where(lab_mask, features[b], nan_label)
-                    c[c == np.iinfo(np.uint32).min] = np.nan
+                    feat = np.where(lab_mask, features[b], nan_label)
+                    feat[feat == np.iinfo(np.uint32).min] = np.nan
 
-                    # geometric features (lat, lon, elev)
-                    geo = list(np.nanmean(c[:, :, -3:], axis=(0, 1)))
+                    # geometric features (lat, lon, elev, slope, aspect)
+                    geo = list(np.nanmean(feat[:, :, 91:96], axis=(0, 1)))
 
                     # pse.shape = T x C x S
-                    c = c[:, :, :BANDS]
-                    c = c.reshape(c.shape[0] * c.shape[1], BANDS)
-                    nan_mask = np.all(np.isnan(c), axis=1)
-                    c = c[~nan_mask]
-                    c = c.reshape(c.shape[0], len(DATES.keys()), CHANNELS)
-                    c = np.swapaxes(c, 0, 2)
-                    c = np.swapaxes(c, 0, 1)
+                    feat = feat[:, :, :BANDS]
+                    feat = feat.reshape(feat.shape[0] * feat.shape[1], BANDS)
+                    nan_mask = np.all(np.isnan(feat), axis=1)
+                    feat = feat[~nan_mask]
+                    feat = feat.reshape(feat.shape[0], len(DATES.keys()), CHANNELS)
+                    feat = np.swapaxes(feat, 0, 2)
+                    feat = np.swapaxes(feat, 0, 1)
+
+                    # cdl label
+                    lab_mask = np.repeat(lab[b][:, :, np.newaxis], cdl_label.shape[-1], axis=2)
+                    nan_label = lab_mask.copy()
+                    nan_label[:, :, :] = np.iinfo(np.uint32).min
+                    cdl = np.where(lab_mask, cdl_label[b], nan_label)
+                    cdl[cdl == np.iinfo(np.uint32).min] = np.nan
+
+                    cdl = cdl.reshape(cdl.shape[0] * cdl.shape[1], 2)
+                    nan_mask = np.all(np.isnan(cdl), axis=1)
+                    cdl = cdl[~nan_mask]
+                    cdl = np.swapaxes(cdl, 0, 1)
 
                     if np.count_nonzero(np.isnan(geo)):
                         nan_geom += 1
                         continue
 
-                    if np.count_nonzero(np.isnan(c)):
+                    if np.count_nonzero(np.isnan(feat)):
                         nan_pix += 1
                         continue
 
-                    if any(c[:, 0, :] == 2.0):
+                    if np.any(feat[:, 0, :] == 2.0):
                         invalid_pix += 1
                         continue
 
@@ -92,25 +107,25 @@ def write_pixel_set(out, recs):
 
                     # update mean and std
                     # mean_std.shape =  C x T
-                    delta = np.nanmean(c, axis=2) - mean_
+                    delta = np.nanmean(feat, axis=2) - mean_
                     mean_ = mean_ + delta / count
-                    delta2 = np.nanmean(c, axis=2) - mean_
+                    delta2 = np.nanmean(feat, axis=2) - mean_
                     M2 = M2 + delta * delta2
                     std_ = np.sqrt(M2 / (count - 1))
 
                     geom[count] = geo
                     label_dict[count] = _class
-                    size_dict[count] = c.shape[2]
+                    cdl_label_dict[count] = _class
+                    size_dict[count] = feat.shape[2]
                     if count % 100 == 0:
                         print('count: {}'.format(count))
 
-                    np.save(os.path.join(out, 'DATA', '{}'.format(count)), c)
+                    np.save(os.path.join(out, 'DATA', '{}'.format(count)), feat)
+                    np.save(os.path.join(out, 'DATA', '{}_cdl'.format(count)), cdl)
 
     print('objects count: {}'.format(obj_ct))
-    print('final pse shape: {}'.format(c.shape))
+    print('final pse shape: {}'.format(feat.shape))
     print('count of pixel sets: {}'.format(count))
-    print('mean: {}'.format(list(mean_[:, 6])))
-    print('std: {}'.format(list(std_[:, 6])))
     print('nan arrays: {}'.format(nan_pix))
     print('nan geom: {}'.format(nan_geom))
     print('invalid (2.0) pixel values: {}'.format(invalid_pix))
@@ -130,7 +145,6 @@ def write_pixel_set(out, recs):
 
     with open(os.path.join(out, 'META', 'geomfeat.json'), 'w') as file:
         file.write(json.dumps(geom, indent=4))
-    exit()
 
 
 def write_pixel_blocks(data_dir, out, n_subset=100000):
@@ -138,10 +152,9 @@ def write_pixel_blocks(data_dir, out, n_subset=100000):
 
     np_data = os.path.join(data_dir, 'DATA')
     meta_data = os.path.join(data_dir, 'META')
-    _files = [os.path.join(np_data, x) for x in os.listdir(np_data)]
+    _files = sorted([os.path.join(np_data, x) for x in os.listdir(np_data) if not x.endswith('_cdl.npy')])
     with open(os.path.join(meta_data, 'labels.json'), 'r') as file:
         label = json.loads(file.read())['label_4class']
-    label = [v for k, v in label.items()]
 
     first = True
     count = 0
@@ -149,7 +162,8 @@ def write_pixel_blocks(data_dir, out, n_subset=100000):
     features, labels = None, []
     for j, (f, l) in enumerate(zip(_files, label), start=1):
         a = np.load(f)
-        labels.extend([l for _ in range(a.shape[-1])])
+        c = np.load(f.replace('.npy', '_cdl.npy'))
+        labels.extend([(label[str(j)], c[1, i], c[0, i]) for i in range(a.shape[-1])])
         if first:
             features = a
             start_ind = count
@@ -171,8 +185,18 @@ def write_pixel_blocks(data_dir, out, n_subset=100000):
 if __name__ == '__main__':
     home = os.path.expanduser('~')
     parent = os.path.join(home, 'PycharmProjects', 'IrrMapper')
-    pixel_dst = os.path.join(parent, 'data', 'pixels')
+
+    npy = os.path.join(parent, 'data', 'npy')
+    pixels = os.path.join(parent, 'data', 'pixels')
     pixel_sets = os.path.join(parent, 'data', 'pixel_sets')
-    write_pixel_blocks(pixel_sets, pixel_dst)
+
+    for split in ['train', 'test', 'valid']:
+
+        np_images = os.path.join(npy, split)
+        pixel_dst = os.path.join(pixels, split)
+        pixel_set_dst = os.path.join(pixel_sets, split)
+
+        write_pixel_sets(pixel_set_dst, np_images)
+        write_pixel_blocks(pixel_set_dst, pixel_dst)
 
 # ========================= EOF ================================================================
