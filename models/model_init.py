@@ -2,7 +2,6 @@ import numpy as np
 import pickle as pkl
 
 import torch.utils.data as data
-from sklearn.model_selection import KFold
 
 from data_prep.pse_dataset import PixelSetData
 from data_prep.pixel_dataset import pixel_data
@@ -15,29 +14,35 @@ from models.conv_lstm.conv_lstm import ConvLSTM
 
 
 def get_loaders(config):
+    train, test, valid = None, None, None
+    train_loc, test_loc = '{}/train'.format(config['dataset_folder']), '{}/test'.format(config['dataset_folder'])
+    valid_loc = config['validation_folder']
+    data_locations = [train_loc, test_loc, valid_loc]
+
     mean_std = pkl.load(open(config['dataset_folder'] + '/meanstd.pkl', 'rb'))
     extra = 'geomfeat' if config['geomfeat'] else None
+
     if config['dcm']:
         dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std, extra_feature=None)
-        loaders = _dataloader_split(dt, config['kfold'], config)
+        train, test = get_dataloader(dt, config)
 
     if config['tcnn']:
         dt = pixel_data(config['dataset_folder'], labels=config['nomenclature'], norm=mean_std,
                         extra_feature=None)
-        loaders = _dataloader_split(dt, config['kfold'], config)
+        train, test = get_dataloader(dt, config)
 
     if config['ltae']:
         dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],
                           sub_classes=config['subset'],
                           norm=mean_std,
                           extra_feature=extra)
-        loaders = _dataloader_split(dt, config['kfold'], config)
+        train, test = get_dataloader(dt, config)
 
     if config['clstm']:
-        dt = ImageDataset(config['dataset_folder'], norm=mean_std)
-        loaders = _dataloader_split(dt, config['kfold'], config)
+        dt = (ImageDataset(loc, norm=mean_std) for loc in data_locations)
+        train, test, valid = (get_dataloader(d, config) for d in dt)
 
-    return loaders
+    return train, test, valid
 
 
 def get_model(config):
@@ -73,38 +78,14 @@ def get_model(config):
     return model
 
 
-def _dataloader_split(dt, config):
+def get_dataloader(dt, config):
     indices = list(range(len(dt)))
     np.random.shuffle(indices)
-
-    kf = KFold(n_splits=config['kfold'], shuffle=False)
-    indices_seq = list(kf.split(list(range(len(dt)))))
-    ntest = len(indices_seq[0][1])
-
-    loader_seq = []
-    for trainval, test_indices in indices_seq:
-        trainval = [indices[i] for i in trainval]
-        test_indices = [indices[i] for i in test_indices]
-
-        validation_indices = trainval[-ntest:]
-        train_indices = trainval[:-ntest]
-
-        train_sampler = data.sampler.SubsetRandomSampler(train_indices)
-        validation_sampler = data.sampler.SubsetRandomSampler(validation_indices)
-        test_sampler = data.sampler.SubsetRandomSampler(test_indices)
-
-        train_loader = data.DataLoader(dt, batch_size=config['batch_size'],
-                                       sampler=train_sampler,
-                                       num_workers=config['num_workers'])
-        validation_loader = data.DataLoader(dt, batch_size=config['batch_size'],
-                                            sampler=validation_sampler,
-                                            num_workers=config['num_workers'])
-        test_loader = data.DataLoader(dt, batch_size=config['batch_size'],
-                                      sampler=test_sampler,
-                                      num_workers=config['num_workers'])
-
-        loader_seq.append((train_loader, validation_loader, test_loader))
-    return loader_seq
+    sampler = data.sampler.SubsetRandomSampler(indices)
+    loader = data.DataLoader(dt, batch_size=config['batch_size'],
+                             sampler=sampler,
+                             num_workers=config['num_workers'])
+    return loader
 
 
 if __name__ == '__main__':
