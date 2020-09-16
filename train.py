@@ -1,32 +1,25 @@
 import os
 import json
 import pickle as pkl
-import pprint
 from pathlib import Path
 
 import torch
 import torchnet as tnt
 from torch.nn import CrossEntropyLoss
 import numpy as np
-from sklearn.metrics import confusion_matrix
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
 from learning.metrics import mIou, confusion_matrix_analysis
+from utils import plot_prediction
 
 from models.model_init import get_loaders, get_model
-
 
 path = Path(__file__).parents
 
 
-def train_epoch(model, optimizer, criterion, data_loader, device, config):
-    acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
-    loss_meter = tnt.meter.AverageValueMeter()
-    y_true = []
-    y_pred = []
-
-    for i, (x, y) in enumerate(data_loader):
+def train_epoch(model, optimizer, criterion, loader, device, config):
+    for i, (x, y) in enumerate(loader):
 
         if config['clstm']:
             y_true = y
@@ -39,75 +32,39 @@ def train_epoch(model, optimizer, criterion, data_loader, device, config):
             loss.backward()
             optimizer.step()
 
-            pred = out[0][0]
-            y_pred = torch.argmax(pred, dim=1)
-            label = torch.sum(y, dim=1)
-            mask = label.bool()
-            label = torch.sum(y, dim=1)[mask]
-            pred = torch.argmax(pred, dim=1)[mask]
-            loss_meter.add(loss.item())
+            pred = torch.argmax(out[0][0], dim=1)
+            label = torch.argmax(y, dim=1)
+            iou = intersection_union(pred, label)
             if (i + 1) % config['display_step'] == 0:
-                acc = torch.sum(pred == label).float() / torch.sum(pred != label).float() * 100
-                print('Step [{}/{}], Loss: {:.4f}, Acc : {:.2f}'.format(i + 1, len(data_loader),
-                                                                        loss_meter.value()[0],
-                                                                        acc))
-        else:
-            if config['mode'] == 'irr':
-                y = y[:, 0]
-            else:
-                y = y[:, 2]
-            y_true.extend(list(map(int, y)))
-            x = recursive_todevice(x, device)
-            y = y.to(device)
-            optimizer.zero_grad()
-            out, att = model(x)
-            loss = criterion(out, y.long())
-            loss.backward()
-            optimizer.step()
-            pred = out.detach()
-            y_p = pred.argmax(dim=1).cpu().numpy()
-            y_pred.extend(list(y_p))
-            loss_meter.add(loss.item())
-
-            if (i + 1) % config['display_step'] == 0:
-                print('Step [{}/{}], Loss: {:.4f}, Acc : {:.2f}'.format(i + 1, len(data_loader),
-                                                                        loss_meter.value()[0],
-                                                                        acc_meter.value()[0]))
-
-    print('loss', loss)
-    return None
+                print('Step [{}/{}], Loss: {:.4f}, IoU : {:.2f}'.format(i + 1, len(loader), loss.item(), iou))
 
 
-def evaluation(model, criterion, loader, device, config, mode='val'):
-    y_true = []
-    y_pred = []
+def evaluation(model, criterion, loader, device, config, mode='val', plot=False):
 
-    acc_meter = tnt.meter.ClassErrorMeter(accuracy=True)
-    loss_meter = tnt.meter.AverageValueMeter()
-
-    for (x, y) in loader:
-        y_true.extend(list(map(int, y)))
+    for i, (x, y) in enumerate(loader):
         x = recursive_todevice(x, device)
         y = y.to(device)
 
         with torch.no_grad():
-            prediction, att = model(x)
-            loss = criterion(prediction, y)
+            out, att = model(x)
+            loss = CrossEntropyLoss()(out[0][0], y.argmax(dim=1))
+            if mode == 'val':
+                pred = torch.argmax(out[0][0], dim=1)
+                label = torch.argmax(y, dim=1)
+                if plot:
+                    plot_prediction(pred.cpu().numpy(), label.cpu().numpy())
+                iou = intersection_union(pred, label)
 
-        acc_meter.add(prediction, y)
-        loss_meter.add(loss.item())
+        if (i + 1) % config['display_step'] == 0:
+            print('Step [{}/{}], Loss: {:.4f}, IoU : {:.2f}'.format(i + 1, len(loader), loss.item(), iou))
 
-        y_p = prediction.argmax(dim=1).cpu().numpy()
-        y_pred.extend(list(y_p))
 
-    metrics = {'{}_accuracy'.format(mode): acc_meter.value()[0],
-               '{}_loss'.format(mode): loss_meter.value()[0],
-               '{}_IoU'.format(mode): mIou(y_true, y_pred, config['num_classes'])}
-
-    if mode == 'val':
-        return metrics
-    elif mode == 'test':
-        return metrics, confusion_matrix(y_true, y_pred, labels=list(range(config['num_classes'])))
+def intersection_union(pred, label):
+    intersection = (pred & label).float().sum((1, 2))
+    union = (pred | label).float().sum((1, 2))
+    iou = (intersection + 1e-6) / (union + 1e-6)
+    iou = iou.mean().item()
+    return iou
 
 
 def recursive_todevice(x, device):
@@ -128,7 +85,7 @@ def checkpoint(log, config):
         json.dump(log, outfile, indent=4)
 
 
-def save_results(fold, metrics, conf_mat, config):
+def save_results(metrics, conf_mat, config):
     with open(os.path.join(config['res_dir'], 'test_metrics.json'), 'w') as outfile:
         json.dump(metrics, outfile, indent=4)
     pkl.dump(conf_mat, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
@@ -178,25 +135,22 @@ def main(config):
         train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
         print('Validation . . . ')
         model.eval()
-        val_metrics = evaluation(model, criterion, val_loader, device=device, config=config, mode='val')
+        evaluation(model, criterion, val_loader, device=device, config=config, mode='val', plot=False)
 
         # trainlog[epoch] = {**train_metrics, **val_metrics}
         # checkpoint(trainlog, config)
 
-        # if val_metrics['val_IoU'] >= best_mIoU:
-        #     best_mIoU = val_metrics['val_IoU']
-        #     torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
-        #                 'optimizer': optimizer.state_dict()},
-        #                os.path.join(config['res_dir'], 'model.pth.tar'))
+    evaluation(model, criterion, val_loader, device=device, config=config, mode='val', plot=True)
+    torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict()},
+               os.path.join(config['res_dir'], 'model.pth.tar'))
 
     print('Testing best epoch . . .')
-    model.load_state_dict(
-        torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
+    model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
     model.eval()
 
-    test_metrics, conf_mat = evaluation(model, criterion, test_loader,
-                                        device=device, mode='test', config=config)
-    save_results(test_metrics, conf_mat, config)
+    # test_metrics, conf_mat = evaluation(model, criterion, test_loader, device=device, mode='test', config=config)
+    # save_results(test_metrics, conf_mat, config)
 
     overall_performance(config)
 
@@ -205,8 +159,8 @@ if __name__ == '__main__':
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
-              'epochs': 100,
-              'display_step': 50,
+              'epochs': 1,
+              'display_step': 10,
               'num_classes': 4,
               'nomenclature': 'label_4class',
               'kfold': 5,
