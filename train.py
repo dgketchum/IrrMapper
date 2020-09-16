@@ -4,13 +4,11 @@ import pickle as pkl
 from pathlib import Path
 
 import torch
-import torchnet as tnt
-from torch.nn import CrossEntropyLoss
 import numpy as np
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
-from learning.metrics import mIou, confusion_matrix_analysis
+from learning.metrics import confusion_matrix_analysis
 from utils import plot_prediction
 
 from models.model_init import get_loaders, get_model
@@ -21,47 +19,42 @@ path = Path(__file__).parents
 def train_epoch(model, optimizer, criterion, loader, device, config):
     for i, (x, y) in enumerate(loader):
 
-        if config['clstm']:
-            y_true = y
-            x = recursive_todevice(x, device)
-            y = y.to(device)
-            optimizer.zero_grad()
-            out, att = model(x)
-            loss = CrossEntropyLoss()(out[0][0], y.argmax(dim=1))
+        x = recursive_todevice(x, device)
+        mask = y.sum(1) > 0
+        y = y.argmax(dim=1).to(device)
+        optimizer.zero_grad()
+        out, att = model(x)
+        pred = out[0][0]
+        loss = criterion(pred, y)
 
-            loss.backward()
-            optimizer.step()
-
-            pred = torch.argmax(out[0][0], dim=1)
-            label = torch.argmax(y, dim=1)
-            iou = intersection_union(pred, label)
-            if (i + 1) % config['display_step'] == 0:
-                print('Step [{}/{}], Loss: {:.4f}, IoU : {:.2f}'.format(i + 1, len(loader), loss.item(), iou))
+        loss.backward()
+        optimizer.step()
+        if (i + 1) % config['display_step'] == 0:
+            print('Step [{}/{}], Loss: {:.4f}'.format(i + 1, len(loader), loss.item()))
 
 
 def evaluation(model, criterion, loader, device, config, mode='val', plot=False):
-
     for i, (x, y) in enumerate(loader):
         x = recursive_todevice(x, device)
-        y = y.to(device)
+        y = y.argmax(dim=1).to(device)
 
         with torch.no_grad():
             out, att = model(x)
-            loss = CrossEntropyLoss()(out[0][0], y.argmax(dim=1))
+            pred = out[0][0]
+            loss = criterion(pred, y)
             if mode == 'val':
-                pred = torch.argmax(out[0][0], dim=1)
-                label = torch.argmax(y, dim=1)
-                if plot:
-                    plot_prediction(pred.cpu().numpy(), label.cpu().numpy())
-                iou = intersection_union(pred, label)
+                pred = torch.argmax(pred, dim=1)
+                if plot and i < 5:
+                    plot_prediction(pred.cpu().numpy(), y.cpu().numpy())
+                iou = intersection_union(pred, y)
 
         if (i + 1) % config['display_step'] == 0:
             print('Step [{}/{}], Loss: {:.4f}, IoU : {:.2f}'.format(i + 1, len(loader), loss.item(), iou))
 
 
 def intersection_union(pred, label):
-    intersection = (pred & label).float().sum((1, 2))
-    union = (pred | label).float().sum((1, 2))
+    intersection = (pred & label).float()
+    union = (pred | label).float()
     iou = (intersection + 1e-6) / (union + 1e-6)
     iou = iou.mean().item()
     return iou
@@ -125,8 +118,7 @@ def main(config):
     model = model.to(device)
     model.apply(weight_init)
     optimizer = torch.optim.Adam(model.parameters())
-    criterion = FocalLoss(config['gamma'])
-    # criterion = CrossEntropyLoss()
+    criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
 
     for epoch in range(1, config['epochs'] + 1):
         print('EPOCH {}/{}'.format(epoch, config['epochs']))
@@ -171,6 +163,7 @@ if __name__ == '__main__':
               'pooling': 'mean_std',
               'dropout': 0.2,
               'gamma': 1,
+              'alpha': None,
               'validation_folder': os.path.join(path[0], 'data', 'npy', 'valid'),
               'ltae': False, 'dcm': False, 'tcnn': False, 'clstm': True}
 
