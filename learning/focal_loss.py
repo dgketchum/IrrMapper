@@ -1,12 +1,11 @@
 """
 Credits to  github.com/clcarwin/focal_loss_pytorch
 """
-
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.nn as nn
-
 
 
 class FocalLoss(nn.Module):
@@ -18,22 +17,23 @@ class FocalLoss(nn.Module):
         if isinstance(alpha, list): self.alpha = torch.Tensor(alpha)
         self.size_average = size_average
 
-    def forward(self, input, target):
-        if input.dim() > 2:
-            input = input.view(input.size(0), input.size(1), -1)  # N,C,H,W => N,C,H*W
-            input = input.transpose(1, 2)  # N,C,H*W => N,H*W,C
-            input = input.contiguous().view(-1, input.size(2))  # N,H*W,C => N*H*W,C
+    def forward(self, logit, target):
+        if logit.dim() > 2:
+            # N,C,d1,d2 -> N,C,m (m=d1*d2*...)
+            logit = logit.view(logit.size(0), logit.size(1), -1)
+            logit = logit.permute(0, 2, 1).contiguous()
+            logit = logit.view(-1, logit.size(-1))  # N,H*W,C => N*H*W,C
         target = target.view(-1, 1)
 
-        logpt = F.log_softmax(input, dim=1)
+        logpt = F.log_softmax(logit, dim=1)
         logpt = logpt.gather(1, target)
         logpt = logpt.view(-1)
 
         pt = Variable(logpt.data.exp())
 
         if self.alpha is not None:
-            if self.alpha.type() != input.data.type():
-                self.alpha = self.alpha.type_as(input.data)
+            if self.alpha.type() != logit.data.type():
+                self.alpha = self.alpha.type_as(logit.data)
             at = self.alpha.gather(0, target.data.view(-1))
             logpt = logpt * Variable(at)
 
