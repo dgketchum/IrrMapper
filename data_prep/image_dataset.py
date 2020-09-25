@@ -31,6 +31,8 @@ class ImageDataset(data.Dataset):
         x = a[:, :, :self.bands]
         x = x.reshape(x.shape[0], x.shape[1], self.sequence_len, self.channels)
         x = x.transpose((2, 3, 0, 1))
+        # if torch.any(x) == -1.:
+        #     raise TypeError('found missing value')
 
         y = a[:, :, -4:]
         y = torch.from_numpy(y).permute(2, 0, 1)

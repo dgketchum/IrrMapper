@@ -2,6 +2,7 @@
 Credits to  https://github.com/VSainteuf/pytorch-psetae
 """
 import numpy as np
+import torch
 import pandas as pd
 
 
@@ -56,9 +57,9 @@ def confusion_matrix_analysis(mat):
 
     for j in range(mat.shape[0]):
         d = {}
-        tp = np.sum(mat[j, j])
-        fp = np.sum(mat[:, j]) - tp
-        fn = np.sum(mat[j, :]) - tp
+        tp = torch.sum(mat[j, j])
+        fp = torch.sum(mat[:, j]) - tp
+        fn = torch.sum(mat[j, :]) - tp
 
         d['IoU'] = tp / (tp + fp + fn)
         d['Precision'] = tp / (tp + fp)
@@ -77,12 +78,12 @@ def confusion_matrix_analysis(mat):
     overall['micro_Recall'] = TP / (TP + FN)
     overall['micro_F1-score'] = 2 * TP / (2 * TP + FP + FN)
 
-    macro = pd.DataFrame(per_class).transpose().mean()
-    overall['MACRO_IoU'] = macro.loc['IoU']
-    overall['MACRO_Precision'] = macro.loc['Precision']
-    overall['MACRO_Recall'] = macro.loc['Recall']
-    overall['MACRO_F1-score'] = macro.loc['F1-score']
+    # macro = pd.DataFrame(per_class).transpose().mean()
+    # overall['MACRO_IoU'] = macro.loc['IoU']
+    # overall['MACRO_Precision'] = macro.loc['Precision']
+    # overall['MACRO_Recall'] = macro.loc['Recall']
+    # overall['MACRO_F1-score'] = macro.loc['F1-score']
 
-    overall['Accuracy'] = np.sum(np.diag(mat)) / np.sum(mat)
+    overall['Accuracy'] = torch.sum(torch.diag(mat)) / torch.sum(mat)
 
     return per_class, overall

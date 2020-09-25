@@ -20,7 +20,6 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
     for i, (x, y) in enumerate(loader):
 
         x = recursive_todevice(x, device)
-        mask = y.sum(1) > 0
         y = y.argmax(dim=1).to(device)
         optimizer.zero_grad()
         out, att = model(x)
@@ -33,31 +32,56 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
             print('Step [{}/{}], Loss: {:.4f}'.format(i + 1, len(loader), loss.item()))
 
 
-def evaluation(model, criterion, loader, device, config, mode='val', plot=False):
+def evaluate_epoch(model, criterion, loader, device, config):
+    confusion = torch.ones_like(config['confusion'])
     for i, (x, y) in enumerate(loader):
         x = recursive_todevice(x, device)
+        mask = y.sum(1) > 0
         y = y.argmax(dim=1).to(device)
 
         with torch.no_grad():
             out, att = model(x)
             pred = out[0][0]
             loss = criterion(pred, y)
-            if mode == 'val':
-                pred = torch.argmax(pred, dim=1)
-                if plot and i < 5:
-                    plot_prediction(pred.cpu().numpy(), y.cpu().numpy())
-                iou = intersection_union(pred, y)
+            pred = torch.argmax(pred, dim=1)
+            confusion += conf_matrix(pred, y, mask, config)
 
         if (i + 1) % config['display_step'] == 0:
-            print('Step [{}/{}], Loss: {:.4f}, IoU : {:.2f}'.format(i + 1, len(loader), loss.item(), iou))
+            per_class, overall = confusion_matrix_analysis(confusion)
+            prec, rec, f1 = overall['micro_Precision'], overall['micro_Recall'], overall['micro_F1-score']
+            print('Step [{}/{}], Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
+                  'F1 Score {:.2f},'.format(i + 1, len(loader), loss.item(), prec, rec, f1))
 
 
-def intersection_union(pred, label):
-    intersection = (pred & label).float()
-    union = (pred | label).float()
-    iou = (intersection + 1e-6) / (union + 1e-6)
-    iou = iou.mean().item()
-    return iou
+def prediction(model, loader, device, config):
+    print('writing predictions to {}'.format(config['res_dir']))
+    for i, (x, y) in enumerate(loader):
+        x = recursive_todevice(x, device)
+        y = y.argmax(dim=1).to(device)
+        with torch.no_grad():
+            out, att = model(x)
+            pred = out[0][0]
+            pred = torch.argmax(pred, dim=1)
+            plot_prediction(pred.cpu().numpy(), y.cpu().numpy(),
+                            os.path.join(config['res_dir'], 'figures', '{}.png'.format(i)))
+
+
+def conf_matrix(y_pred, y_true, mask, config):
+    confusion = torch.ones_like(config['confusion'])
+    n_classes = config['num_classes']
+    classes = torch.tensor([x for x in range(n_classes)]).to(torch.device(config['device']))
+    t, p = y_true[mask], y_pred[mask]
+    for i in range(n_classes):
+        c = classes[i]
+        pred, target = p == c, t == c
+        confusion[i, i] = (pred & target).bool().sum()
+        for nc in range(n_classes):
+            if nc == c:
+                continue
+            else:
+                confusion[c, nc] = (p == nc).bool().sum()
+    config['confusion'] += confusion
+    return confusion
 
 
 def recursive_todevice(x, device):
@@ -69,8 +93,7 @@ def recursive_todevice(x, device):
 
 def prepare_output(config):
     os.makedirs(config['res_dir'], exist_ok=True)
-    for fold in range(1, config['kfold'] + 1):
-        os.makedirs(os.path.join(config['res_dir'], 'Fold_{}'.format(fold)), exist_ok=True)
+    os.makedirs(os.path.join(config['res_dir'], 'figures'), exist_ok=True)
 
 
 def checkpoint(log, config):
@@ -87,22 +110,35 @@ def save_results(metrics, conf_mat, config):
 def overall_performance(config):
     cm = np.zeros((config['num_classes'], config['num_classes']))
     for fold in range(1, config['kfold'] + 1):
-        cm += pkl.load(open(os.path.join(config['res_dir'], 'Fold_{}'.format(fold), 'conf_mat.pkl'), 'rb'))
+        cm += pkl.load(open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'rb'))
 
     _, perf = confusion_matrix_analysis(cm)
 
     print('Overall performance:')
-    print('Acc: {},  IoU: {}'.format(perf['Accuracy'], perf['MACRO_IoU']))
+    print('Acc: {},  F1: {}'.format(perf['Accuracy'], perf['MACRO_IoU']))
 
     with open(os.path.join(config['res_dir'], 'overall.json'), 'w') as file:
         file.write(json.dumps(perf, indent=4))
 
 
-def main(config):
+def predict(config):
+    device = torch.device(config['device'])
+    _, _, val_loader = get_loaders(config)
+    print('Val {}'.format(len(val_loader)))
+    model = get_model(config)
+    check_pt = torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))
+    optimizer = torch.optim.Adam(model.parameters())
+    model.load_state_dict(check_pt['state_dict'])
+    model.to(device)
+    optimizer.load_state_dict(check_pt['optimizer'])
+    model.eval()
+    prediction(model, val_loader, device, config)
+
+
+def train(config):
     np.random.seed(config['rdm_seed'])
     torch.manual_seed(config['rdm_seed'])
     prepare_output(config)
-
     device = torch.device(config['device'])
 
     train_loader, test_loader, val_loader = get_loaders(config)
@@ -119,20 +155,21 @@ def main(config):
     model.apply(weight_init)
     optimizer = torch.optim.Adam(model.parameters())
     criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
+    config['confusion'] = torch.tensor(np.zeros((config['num_classes'], config['num_classes']))).to(device)
 
     for epoch in range(1, config['epochs'] + 1):
         print('EPOCH {}/{}'.format(epoch, config['epochs']))
 
-        model.train()
-        train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
+        # model.train()
+        # train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
         print('Validation . . . ')
         model.eval()
-        evaluation(model, criterion, val_loader, device=device, config=config, mode='val', plot=False)
+        evaluate_epoch(model, criterion, val_loader, device=device, config=config)
 
         # trainlog[epoch] = {**train_metrics, **val_metrics}
         # checkpoint(trainlog, config)
 
-    evaluation(model, criterion, val_loader, device=device, config=config, mode='val', plot=True)
+    evaluate_epoch(model, criterion, val_loader, device=device, config=config)
     torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict()},
                os.path.join(config['res_dir'], 'model.pth.tar'))
@@ -151,7 +188,7 @@ if __name__ == '__main__':
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
-              'epochs': 1,
+              'epochs': 100,
               'display_step': 10,
               'num_classes': 4,
               'nomenclature': 'label_4class',
@@ -231,4 +268,5 @@ if __name__ == '__main__':
             config[k] = list(map(int, v.split(',')))
 
     # pprint.pprint(config)
-    main(config)
+    # train(config)
+    predict(config)

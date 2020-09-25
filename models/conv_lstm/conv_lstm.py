@@ -135,6 +135,7 @@ class ConvLSTM(nn.Module):
         -------
         last_state_list, layer_output
         """
+        device = input_tensor.device
         if not self.batch_first:
             # (t, b, c, h, w) -> (b, t, c, h, w)
             input_tensor = input_tensor.permute(1, 0, 2, 3, 4)

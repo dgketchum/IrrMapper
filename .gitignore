@@ -106,3 +106,4 @@ ENV/
 data/*
 /home/dgketchum/PycharmProjects/IrrMapper/models/ltae_pse/*.json
 
+/utils.py
