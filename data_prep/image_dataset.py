@@ -1,11 +1,27 @@
 import os
-
+from itertools import islice
 import numpy as np
-
+from subprocess import Popen
 import torch
 from torch.utils import data
+from webdataset import dataset as wds
+from webdataset import MultiDataset as wmds
 
 from data_prep.pixel_preparation import BANDS, CHANNELS, DATES
+from data_prep.bucket import get_bucket_contents
+
+def image_dataset(mode):
+    bucket = get_bucket_contents('ts_data')
+    gs_dir = 'cmask/tar/{}/{}_patches'.format(mode, mode)
+    tar_data = bucket[gs_dir]
+    url = 'http://storage.googleapis.com/ts_data/cmask/tar/train/train_patches/train_000001.tar'
+    url = f"pipe: curl -s -L {url} || true"
+    bs = 20
+    dataset = wds.Dataset(url).decode('torchl').shuffle(100)
+    for sample in islice(dataset, 0, 3):
+        for key, value in sample.items():
+            print(key, repr(value)[:50])
+    return dataset
 
 
 class ImageDataset(data.Dataset):
@@ -48,5 +64,5 @@ class ImageDataset(data.Dataset):
 
 
 if __name__ == '__main__':
-    pass
+    image_dataset('train')
 # ========================= EOF ====================================================================
