@@ -5,7 +5,7 @@ import torch.utils.data as data
 
 from data_prep.pse_dataset import PixelSetData
 from data_prep.pixel_dataset import pixel_data
-from data_prep.image_dataset import ImageDataset
+from data_prep.image_dataset import ImageDataset, image_dataset
 
 from models.ltae_pse.stclassifier import PseLTae
 from models.dcm.dcm import DCM
@@ -15,7 +15,8 @@ from models.conv_lstm.conv_lstm import ConvLSTM
 
 def get_loaders(config):
     train, test, valid = None, None, None
-    train_loc, test_loc = '{}/train'.format(config['dataset_folder']), '{}/test'.format(config['dataset_folder'])
+    train_loc, test_loc = '{}/train'.format(config['dataset_folder']), \
+                          '{}/test'.format(config['dataset_folder'])
     valid_loc = config['validation_folder']
     data_locations = [train_loc, test_loc, valid_loc]
 
@@ -39,7 +40,7 @@ def get_loaders(config):
         train, test = get_dataloader(dt, config)
 
     if config['clstm']:
-        dt = (ImageDataset(loc, norm=mean_std) for loc in data_locations)
+        dt = (image_dataset(loc) for loc in ['train', 'test', 'valid'])
         train, test, valid = (get_dataloader(d, config) for d in dt)
 
     return train, test, valid
@@ -79,12 +80,8 @@ def get_model(config):
 
 
 def get_dataloader(dt, config):
-    indices = list(range(len(dt)))
-    np.random.shuffle(indices)
-    sampler = data.sampler.SubsetRandomSampler(indices)
     loader = data.DataLoader(dt, batch_size=config['batch_size'],
-                             sampler=sampler,
-                             num_workers=config['num_workers'])
+                             num_workers=config['num_workers'], pin_memory=True)
     return loader
 
 

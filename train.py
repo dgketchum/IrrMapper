@@ -29,7 +29,7 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
         loss.backward()
         optimizer.step()
         if (i + 1) % config['display_step'] == 0:
-            print('Step [{}/{}], Loss: {:.4f}'.format(i + 1, len(loader), loss.item()))
+            print('Step {}, Loss: {:.4f}'.format(i + 1, loss.item()))
 
 
 def evaluate_epoch(model, criterion, loader, device, config):
@@ -49,8 +49,8 @@ def evaluate_epoch(model, criterion, loader, device, config):
         if (i + 1) % config['display_step'] == 0:
             per_class, overall = confusion_matrix_analysis(confusion)
             prec, rec, f1 = overall['micro_Precision'], overall['micro_Recall'], overall['micro_F1-score']
-            print('Step [{}/{}], Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
-                  'F1 Score {:.2f},'.format(i + 1, len(loader), loss.item(), prec, rec, f1))
+            print('Step {}, Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
+                  'F1 Score {:.2f},'.format(i + 1, loss.item(), prec, rec, f1))
 
 
 def prediction(model, loader, device, config):
@@ -142,7 +142,7 @@ def train(config):
     device = torch.device(config['device'])
 
     train_loader, test_loader, val_loader = get_loaders(config)
-    print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
+    # print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
 
     model = get_model(config)
 
@@ -160,8 +160,8 @@ def train(config):
     for epoch in range(1, config['epochs'] + 1):
         print('EPOCH {}/{}'.format(epoch, config['epochs']))
 
-        # model.train()
-        # train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
+        model.train()
+        train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
         print('Validation . . . ')
         model.eval()
         evaluate_epoch(model, criterion, val_loader, device=device, config=config)
@@ -186,6 +186,8 @@ def train(config):
 
 if __name__ == '__main__':
 
+    data = os.path.join('/home/dgketchum/IrrigationGIS/tfrecords')
+
     config = {'mode': 'irr',
               'rdm_seed': 1,
               'epochs': 100,
@@ -201,7 +203,7 @@ if __name__ == '__main__':
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'validation_folder': os.path.join(path[0], 'data', 'npy', 'valid'),
+              'validation_folder': data,
               'ltae': False, 'dcm': False, 'tcnn': False, 'clstm': True}
 
     if config['ltae']:
@@ -254,7 +256,7 @@ if __name__ == '__main__':
         config['batch_size'] = 8
         config['input_dim'] = 7
         config['num_layers'] = 1
-        config['dataset_folder'] = os.path.join(path[0], 'data', 'npy')
+        config['dataset_folder'] = data
         config['kernel_size'] = (3, 3)
         config['hidden_dim'] = 4
         config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')
@@ -268,5 +270,5 @@ if __name__ == '__main__':
             config[k] = list(map(int, v.split(',')))
 
     # pprint.pprint(config)
-    # train(config)
-    predict(config)
+    train(config)
+    # predict(config)
