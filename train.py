@@ -186,7 +186,9 @@ def train(config):
 
 if __name__ == '__main__':
 
-    data = os.path.join('/home/dgketchum/IrrigationGIS/tfrecords')
+    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
+    if not os.path.isdir(data):
+        data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
@@ -203,7 +205,6 @@ if __name__ == '__main__':
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'validation_folder': data,
               'ltae': False, 'dcm': False, 'tcnn': False, 'clstm': True}
 
     if config['ltae']:

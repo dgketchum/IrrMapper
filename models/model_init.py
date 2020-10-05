@@ -15,10 +15,6 @@ from models.conv_lstm.conv_lstm import ConvLSTM
 
 def get_loaders(config):
     train, test, valid = None, None, None
-    train_loc, test_loc = '{}/train'.format(config['dataset_folder']), \
-                          '{}/test'.format(config['dataset_folder'])
-    valid_loc = config['validation_folder']
-    data_locations = [train_loc, test_loc, valid_loc]
 
     mean_std = pkl.load(open(config['dataset_folder'] + '/meanstd.pkl', 'rb'))
     extra = 'geomfeat' if config['geomfeat'] else None
@@ -40,7 +36,7 @@ def get_loaders(config):
         train, test = get_dataloader(dt, config)
 
     if config['clstm']:
-        dt = (image_dataset(loc) for loc in ['train', 'test', 'valid'])
+        dt = (image_dataset(loc, config) for loc in ['train', 'test', 'valid'])
         train, test, valid = (get_dataloader(d, config) for d in dt)
 
     return train, test, valid

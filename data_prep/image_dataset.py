@@ -10,8 +10,6 @@ from data_prep.pixel_preparation import BANDS, CHANNELS, DATES
 
 sequence_len = len(DATES.keys())
 
-from data_prep.bucket import get_bucket_contents
-
 
 def transform_(x):
     mean_std = pkl.load(open('/home/dgketchum/IrrigationGIS/tfrecords/meanstd.pkl', 'rb'))
@@ -23,14 +21,12 @@ def transform_(x):
     return x
 
 
-def image_dataset(mode):
-    # url = 'http://storage.googleapis.com/ts_data/cmask/tar/train/train_patches/train_000000.tar'
-    if mode == 'train':
-        url = '/home/dgketchum/Downloads/tarchive/train_{000000..000004}.tar'
-    elif mode == 'test':
-        url = '/home/dgketchum/Downloads/tarchive/test_{000000..000004}.tar'
-    else:
-        url = '/home/dgketchum/Downloads/tarchive/valid_{000000..000004}.tar'
+def image_dataset(mode, config):
+    root = config['dataset_folder']
+    loc = os.path.join(root, mode, '{}_patches'.format(mode))
+    end_idx = len(os.listdir(loc)) - 1
+    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
+    url = os.path.join(loc, brace_str)
     dataset = wds.Dataset(url).decode('torchl').map(map_fn)
     return dataset
 
@@ -86,5 +82,5 @@ class ImageDataset(data.Dataset):
 
 
 if __name__ == '__main__':
-    image_dataset('train')
+    pass
 # ========================= EOF ====================================================================
