@@ -1,27 +1,66 @@
-import torch
-from torch.utils import data
-
-import pandas as pd
-import numpy as np
-
 import os
 import json
 from pathlib import Path
+import pandas as pd
+import numpy as np
+
+import torch
+from torch.utils import data
+from torchvision import transforms
+from webdataset import dataset as wds
+
+from data_prep.pixel_preparation import BANDS, CHANNELS, DATES
+
+SEQUENCE_LENGTH = len(DATES.keys())
+
+structure = np.array([
+    [1, 1, 1],
+    [1, 1, 1],
+    [1, 1, 1]
+])
 
 
-def pixel_data(folder, labels, norm, extra_feature):
-    folder = os.path.join(folder, 'DATA')
-    l = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith('labels.npy')]
-    dl = [os.path.join(folder, f) for f in os.listdir(folder) if
-          os.path.join(folder, f) not in l and f.endswith('.npy')]
-    datasets = []
-    for f in dl:
-        pds = PixelDataChunk(f, labels=labels,
-                             norm=norm,
-                             extra_feature=extra_feature)
-        datasets.append(pds)
-    dt = data.ConcatDataset(datasets)
-    return dt
+def transform_(x, mean_std):
+    normalize = transforms.Normalize(
+        mean=mean_std[0],
+        std=mean_std[1])
+    transform = transforms.Compose([normalize])
+    x = transform(x)
+    return x
+
+
+def pixel_dataset(mode, config, norm):
+    def map_fn(item):
+        item = item['pth']
+        x = item[:, :, :BANDS]
+        x = x.reshape((x.shape[0] * x.shape[1], SEQUENCE_LENGTH, CHANNELS))
+        y = item[:, :, 98:]
+        y = y.reshape(y.shape[0] * y.shape[1], y.shape[2])
+        mask = y.sum(1) > 0
+        print(y.sum())
+        y = y[mask]
+        print(y.shape)
+        if y.shape[0] > 0:
+            y = y.argmax(1)
+            x = x[mask]
+            x = transform_(x, norm)
+            return x, y
+        else:
+            return None
+
+    root = config['dataset_folder']
+    loc = os.path.join(root, mode, '{}_patches'.format(mode))
+    end_idx = len(os.listdir(loc)) - 1
+    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
+    url = os.path.join(loc, brace_str)
+    dataset = wds.Dataset(url).decode('torchl')  # .map(map_fn)
+    for i, s in enumerate(dataset):
+        lab = s['pth'][:, :, 101].numpy()
+        samples = lab.sum().item()
+        if samples == 0:
+            label = s['pth'][:, :, 98:].numpy()
+            print(i, label)
+    return dataset
 
 
 class PixelDataChunk(data.Dataset):
@@ -78,4 +117,3 @@ class PixelDataChunk(data.Dataset):
             data = (data, ef)
 
         return data, torch.from_numpy(np.array(y, dtype=int))
-
