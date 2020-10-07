@@ -29,7 +29,24 @@ def transform_(x, mean_std):
     return x
 
 
-def pixel_dataset(mode, config, norm):
+def pixel_data(mode, config, norm, extra_feature=False):
+    root = config['dataset_folder']
+    labels = config['nomenclature']
+    loc = os.path.join(root, mode, '{}_patches'.format(mode))
+    l = [os.path.join(loc, f) for f in os.listdir(loc) if f.endswith('labels.npy')]
+    dl = [os.path.join(loc, f) for f in os.listdir(loc) if
+          os.path.join(loc, f) not in l and f.endswith('.npy')]
+    datasets = []
+    for f in dl:
+        pds = PixelDataChunk(f, labels=labels,
+                             norm=norm,
+                             extra_feature=extra_feature)
+        datasets.append(pds)
+    dt = data.ConcatDataset(datasets)
+    return dt
+
+
+def pixel_dataset(mode, config, norm, extra_feature=False):
     def map_fn(item):
         item = item['pth']
         x = item[:, :, :BANDS]
@@ -37,34 +54,28 @@ def pixel_dataset(mode, config, norm):
         y = item[:, :, 98:]
         y = y.reshape(y.shape[0] * y.shape[1], y.shape[2])
         mask = y.sum(1) > 0
-        print(y.sum())
         y = y[mask]
-        print(y.shape)
         if y.shape[0] > 0:
             y = y.argmax(1)
             x = x[mask]
             x = transform_(x, norm)
             return x, y
         else:
-            return None
+            x = torch.tensor(norm[0])
+            y = torch.tensor([3])
+            return x, y
 
     root = config['dataset_folder']
     loc = os.path.join(root, mode, '{}_patches'.format(mode))
     end_idx = len(os.listdir(loc)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(loc, brace_str)
-    dataset = wds.Dataset(url).decode('torchl')  # .map(map_fn)
-    for i, s in enumerate(dataset):
-        lab = s['pth'][:, :, 101].numpy()
-        samples = lab.sum().item()
-        if samples == 0:
-            label = s['pth'][:, :, 98:].numpy()
-            print(i, label)
+    dataset = wds.Dataset(url).decode('torchl').map(map_fn)
     return dataset
 
 
 class PixelDataChunk(data.Dataset):
-    def __init__(self, _file, labels, norm=None, extra_feature=None):
+    def __init__(self, _file, labels, norm=None, extra_feature=False):
 
         super(PixelDataChunk, self).__init__()
 
@@ -82,7 +93,7 @@ class PixelDataChunk(data.Dataset):
         self.target = list(np.load(self.label_src))
         self.len = len(self.target)
 
-        if self.extra_feature is not None:
+        if self.extra_feature:
             with open(os.path.join(self.meta_folder, '{}.json'.format(extra_feature)), 'r') as file:
                 self.extra = json.loads(file.read())
 
@@ -100,16 +111,15 @@ class PixelDataChunk(data.Dataset):
         x = self.data[:, :, item]
         y = self.target[item]
 
-        if self.norm is not None:
-            m, s = self.norm
-            m = np.array(m)
-            s = np.array(s)
-            x = (x - m) / s
+        m, s = self.norm
+        m = np.array(m)
+        s = np.array(s)
+        x = (x - m) / s
 
         x = x.astype('float')
         data = torch.from_numpy(x).float()
 
-        if self.extra_feature is not None:
+        if self.extra_feature:
             ef = (self.extra[str(item)] - self.extra_m) / self.extra_s
             ef = torch.from_numpy(ef).float()
 

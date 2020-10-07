@@ -3,6 +3,8 @@ import os
 import scipy.ndimage.measurements as mnts
 import numpy as np
 import pickle as pkl
+import webdataset as wds
+import torch
 
 # dates are generic, dates of each year as below, but data is from many years
 # the year of the data is not used in training, just date position
@@ -31,10 +33,15 @@ structure = np.array([
 ])
 
 
-def write_pixel_sets(out, recs):
-    """Iterate through each image of fenp.ature bands and labels, find contiguous objects, extract
+def write_pixel_sets(out, recs, mode):
+    """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
+    if not os.path.isdir(os.path.join(out, 'DATA')):
+        os.mkdir(os.path.join(out, 'DATA'))
+    if not os.path.isdir(os.path.join(out, 'META')):
+        os.mkdir(os.path.join(out, 'META'))
+
     l = [os.path.join(recs, x) for x in os.listdir(recs)]
     count = 0
     nan_pix = 0
@@ -45,8 +52,14 @@ def write_pixel_sets(out, recs):
     # [757 128 329 986]
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     label_dict, cdl_label_dict, size_dict, geom = {}, {}, {}, {}
-    for j, f in enumerate(l):
-        a = np.load(f)
+
+    end_idx = len(os.listdir(recs)) - 1
+    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
+    url = os.path.join(recs, brace_str)
+    dataset = wds.Dataset(url).decode('torchl')
+
+    for j, f in enumerate(dataset):
+        a = f['pth'].numpy()
         labels = a[:, :, 98:]
         features = a[:, :, :96]
         cdl_label = a[:, :, 96:98]
@@ -79,17 +92,19 @@ def write_pixel_sets(out, recs):
                     feat = np.swapaxes(feat, 0, 2)
                     feat = np.swapaxes(feat, 0, 1)
 
+                    # ignore cdl labels for now
+                    # TODO: handle data so Irr and CDL are masked according to irrigation and CDL labels
                     # cdl label
-                    lab_mask = np.repeat(lab[b][:, :, np.newaxis], cdl_label.shape[-1], axis=2)
-                    nan_label = lab_mask.copy()
-                    nan_label[:, :, :] = np.iinfo(np.uint32).min
-                    cdl = np.where(lab_mask, cdl_label[b], nan_label)
-                    cdl[cdl == np.iinfo(np.uint32).min] = np.nan
-
-                    cdl = cdl.reshape(cdl.shape[0] * cdl.shape[1], 2)
-                    nan_mask = np.all(np.isnan(cdl), axis=1)
-                    cdl = cdl[~nan_mask]
-                    cdl = np.swapaxes(cdl, 0, 1)
+                    # lab_mask = np.repeat(lab[b][:, :, np.newaxis], cdl_label.shape[-1], axis=2)
+                    # nan_label = lab_mask.copy()
+                    # nan_label[:, :, :] = np.iinfo(np.uint32).min
+                    # cdl = np.where(lab_mask, cdl_label[b], nan_label)
+                    # cdl[cdl == np.iinfo(np.uint32).min] = np.nan
+                    #
+                    # cdl = cdl.reshape(cdl.shape[0] * cdl.shape[1], 2)
+                    # nan_mask = np.all(np.isnan(cdl), axis=1)
+                    # cdl = cdl[~nan_mask]
+                    # cdl = np.swapaxes(cdl, 0, 1)
 
                     if np.count_nonzero(np.isnan(geo)):
                         nan_geom += 1
@@ -121,7 +136,7 @@ def write_pixel_sets(out, recs):
                         print('count: {}'.format(count))
 
                     np.save(os.path.join(out, 'DATA', '{}'.format(count)), feat)
-                    np.save(os.path.join(out, 'DATA', '{}_cdl'.format(count)), cdl)
+                    # np.save(os.path.join(out, 'DATA', '{}_cdl'.format(count)), cdl)
 
     print('objects count: {}'.format(obj_ct))
     print('final pse shape: {}'.format(feat.shape))
@@ -160,10 +175,13 @@ def write_pixel_blocks(data_dir, out, n_subset=100000):
     count = 0
     start_ind, end_ind = 0, 0
     features, labels = None, []
-    for j, (f, l) in enumerate(zip(_files, label), start=1):
+    for j, (f, l) in enumerate(zip(_files, label)):
         a = np.load(f)
-        c = np.load(f.replace('.npy', '_cdl.npy'))
-        labels.extend([(label[str(j)], c[1, i], c[0, i]) for i in range(a.shape[-1])])
+        # ignore cdl labels for now
+        # TODO: handle data so Irr and CDL are masked according to irrigation and CDL labels
+        # c = np.load(f.replace('.npy', '_cdl.npy'))
+        # labels.extend([(label[str(j + 1)], c[1, i], c[0, i]) for i in range(a.shape[-1])])
+        labels.extend([label[str(j + 1)] for i in range(a.shape[-1])])
         if first:
             features = a
             start_ind = count
@@ -183,20 +201,22 @@ def write_pixel_blocks(data_dir, out, n_subset=100000):
 
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
-    parent = os.path.join(home, 'PycharmProjects', 'IrrMapper')
+    data = '/home/dgketchum/IrrigationGIS/tfrecords'
+    tar = os.path.join(data, 'tarchives')
 
-    npy = os.path.join(parent, 'data', 'npy')
-    pixels = os.path.join(parent, 'data', 'pixels')
-    pixel_sets = os.path.join(parent, 'data', 'pixel_sets')
+    if not os.path.isdir(data):
+        data = '/mnt/beegfs/dk128872/ts_data/cmask'
+        tar = os.path.join(data, 'tar')
+
+    pixels = os.path.join(data, 'pixels')
+    pixel_sets = os.path.join(data, 'pixel_sets')
 
     for split in ['train', 'test', 'valid']:
+        np_images = os.path.join(tar, split, '{}_patches'.format(split))
+        pixel_dst = os.path.join(pixels, split, '{}_patches'.format(split))
+        pixel_set_dst = os.path.join(pixel_sets, split, '{}_patches'.format(split))
 
-        np_images = os.path.join(npy, split)
-        pixel_dst = os.path.join(pixels, split)
-        pixel_set_dst = os.path.join(pixel_sets, split)
-
-        write_pixel_sets(pixel_set_dst, np_images)
+        write_pixel_sets(pixel_set_dst, np_images, split)
         write_pixel_blocks(pixel_set_dst, pixel_dst)
 
 # ========================= EOF ================================================================

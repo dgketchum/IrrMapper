@@ -20,11 +20,17 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
     for i, (x, y) in enumerate(loader):
 
         x = recursive_todevice(x, device)
-        y = y.argmax(dim=1).to(device)
-        optimizer.zero_grad()
-        out, att = model(x)
-        pred = out[0][0]
-        loss = criterion(pred, y)
+        if config['model'] == 'clstm':
+            y = y.argmax(dim=1).to(device)
+            optimizer.zero_grad()
+            out, att = model(x)
+            pred = out[0][0]
+            loss = criterion(pred, y)
+        else:
+            y = y.to(device)
+            optimizer.zero_grad()
+            out, att = model(x)
+            loss = criterion(out, y.long())
 
         loss.backward()
         optimizer.step()
@@ -36,15 +42,23 @@ def evaluate_epoch(model, criterion, loader, device, config):
     confusion = torch.ones_like(config['confusion'])
     for i, (x, y) in enumerate(loader):
         x = recursive_todevice(x, device)
-        mask = y.sum(1) > 0
-        y = y.argmax(dim=1).to(device)
 
-        with torch.no_grad():
-            out, att = model(x)
-            pred = out[0][0]
-            loss = criterion(pred, y)
-            pred = torch.argmax(pred, dim=1)
-            confusion += conf_matrix(pred, y, mask, config)
+        if config['model'] == 'clstm':
+            mask = y.sum(1) > 0
+            y = y.argmax(dim=1).to(device)
+            with torch.no_grad():
+                out, att = model(x)
+                pred = out[0][0]
+                loss = criterion(pred, y)
+                pred = torch.argmax(pred, dim=1)
+                confusion += conf_matrix(y, pred, config, mask)
+        else:
+            y = y.to(device)
+            with torch.no_grad():
+                pred, att = model(x)
+                loss = criterion(pred, y)
+                pred = torch.argmax(pred, dim=1)
+                confusion += conf_matrix(y, pred, config)
 
         if (i + 1) % config['display_step'] == 0:
             per_class, overall = confusion_matrix_analysis(confusion)
@@ -66,20 +80,21 @@ def prediction(model, loader, device, config):
                             os.path.join(config['res_dir'], 'figures', '{}.png'.format(i)))
 
 
-def conf_matrix(y_pred, y_true, mask, config):
+def conf_matrix(y, pred, config, mask=None):
     confusion = torch.ones_like(config['confusion'])
     n_classes = config['num_classes']
     classes = torch.tensor([x for x in range(n_classes)]).to(torch.device(config['device']))
-    t, p = y_true[mask], y_pred[mask]
+    if mask:
+        y, pred = y[mask], pred[mask]
     for i in range(n_classes):
         c = classes[i]
-        pred, target = p == c, t == c
+        pred, target = pred == c, y == c
         confusion[i, i] = (pred & target).bool().sum()
         for nc in range(n_classes):
             if nc == c:
                 continue
             else:
-                confusion[c, nc] = (p == nc).bool().sum()
+                confusion[c, nc] = (pred == nc).bool().sum()
     config['confusion'] += confusion
     return confusion
 
@@ -186,9 +201,12 @@ def train(config):
 
 if __name__ == '__main__':
 
-    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
+    data = '/home/dgketchum/IrrigationGIS/tfrecords'
+    tar = os.path.join(data, 'tarchives')
+
     if not os.path.isdir(data):
-        data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
+        data = '/mnt/beegfs/dk128872/ts_data/cmask'
+        tar = os.path.join(data, 'tar')
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
@@ -205,9 +223,9 @@ if __name__ == '__main__':
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'ltae': False, 'dcm': False, 'tcnn': False, 'clstm': True}
+              'model': 'clstm'}
 
-    if config['ltae']:
+    if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(path[0], 'data', 'pixel_sets')
         config['batch_size'] = 128
         config['mlp1'] = '[7, 32, 64]'
@@ -231,9 +249,9 @@ if __name__ == '__main__':
             file.write(json.dumps(config, indent=4))
             # exit()
 
-    if config['dcm']:
+    if config['model'] == 'dcm':
         config['batch_size'] = 7168
-        config['dataset_folder'] = os.path.join(path[0], 'data', 'pixels')
+        config['dataset_folder'] = os.path.join(data, 'pixels')
         config['hidden_size'] = 256
         config['num_layers'] = 2
         config['bidirectional'] = True
@@ -243,9 +261,9 @@ if __name__ == '__main__':
         with open(os.path.join(path[0], 'models', 'dcm', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
 
-    if config['tcnn']:
+    if config['model'] == 'tcnn':
         config['batch_size'] = 7168
-        config['dataset_folder'] = os.path.join(path[0], 'data', 'pixels')
+        config['dataset_folder'] = os.path.join(data, 'pixels')
         config['sequence_len'] = 13
         config['nker'] = '[16, 16, 16]'
         config['mlp3'] = '[16, 16]'
@@ -253,11 +271,11 @@ if __name__ == '__main__':
         with open(os.path.join(path[0], 'models', 'temp_cnn', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
 
-    if config['clstm']:
+    if config['model'] == 'clstm':
         config['batch_size'] = 8
         config['input_dim'] = 7
         config['num_layers'] = 1
-        config['dataset_folder'] = data
+        config['dataset_folder'] = tar
         config['kernel_size'] = (3, 3)
         config['hidden_dim'] = 4
         config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')

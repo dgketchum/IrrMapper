@@ -11,8 +11,7 @@ from data_prep.pixel_preparation import BANDS, CHANNELS, DATES
 sequence_len = len(DATES.keys())
 
 
-def transform_(x):
-    mean_std = pkl.load(open('/home/dgketchum/IrrigationGIS/tfrecords/meanstd.pkl', 'rb'))
+def transform_(x, mean_std):
     normalize = transforms.Normalize(
         mean=mean_std[0].reshape(mean_std[0].shape[0] * mean_std[0].shape[1]),
         std=mean_std[1].reshape(mean_std[0].shape[0] * mean_std[0].shape[1]))
@@ -21,7 +20,18 @@ def transform_(x):
     return x
 
 
-def image_dataset(mode, config):
+def image_dataset(mode, config, norm):
+
+    def map_fn(item):
+        item = item['pth']
+        x = item[:, :, :BANDS]
+        x = x.permute(2, 0, 1)
+        x = transform_(x, norm)
+        x = x.reshape(x.shape[1], x.shape[2], len(DATES.keys()), CHANNELS)
+        x = x.permute((2, 3, 0, 1)).float()
+        y = item[:, :, -4:].permute(2, 0, 1).int()
+        return x, y
+
     root = config['dataset_folder']
     loc = os.path.join(root, mode, '{}_patches'.format(mode))
     end_idx = len(os.listdir(loc)) - 1
@@ -29,17 +39,6 @@ def image_dataset(mode, config):
     url = os.path.join(loc, brace_str)
     dataset = wds.Dataset(url).decode('torchl').map(map_fn)
     return dataset
-
-
-def map_fn(item):
-    item = item['pth']
-    x = item[:, :, :BANDS]
-    x = x.permute(2, 0, 1)
-    x = transform_(x)
-    x = x.reshape(x.shape[1], x.shape[2], len(DATES.keys()), CHANNELS)
-    x = x.permute((2, 3, 0, 1)).float()
-    y = item[:, :, -4:].permute(2, 0, 1).int()
-    return x, y
 
 
 class ImageDataset(data.Dataset):
