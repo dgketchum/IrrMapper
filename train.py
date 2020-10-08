@@ -18,7 +18,6 @@ path = Path(__file__).parents
 
 def train_epoch(model, optimizer, criterion, loader, device, config):
     for i, (x, y) in enumerate(loader):
-
         x = recursive_todevice(x, device)
         if config['model'] == 'clstm':
             y = y.argmax(dim=1).to(device)
@@ -29,6 +28,7 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
         else:
             y = y.to(device)
             optimizer.zero_grad()
+            x = torch.squeeze(x)
             out, att = model(x)
             loss = criterion(out, y.long())
 
@@ -54,6 +54,7 @@ def evaluate_epoch(model, criterion, loader, device, config):
                 confusion += conf_matrix(y, pred, config, mask)
         else:
             y = y.to(device)
+            x = x.squeeze()
             with torch.no_grad():
                 pred, att = model(x)
                 loss = criterion(pred, y)
@@ -201,12 +202,10 @@ def train(config):
 
 if __name__ == '__main__':
 
-    data = '/home/dgketchum/IrrigationGIS/tfrecords'
-    tar = os.path.join(data, 'tarchives')
+    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
 
     if not os.path.isdir(data):
-        data = '/mnt/beegfs/dk128872/ts_data/cmask'
-        tar = os.path.join(data, 'tar')
+        data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
@@ -223,10 +222,10 @@ if __name__ == '__main__':
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'model': 'clstm'}
+              'model': 'dcm'}
 
     if config['model'] == 'ltae':
-        config['dataset_folder'] = os.path.join(path[0], 'data', 'pixel_sets')
+        config['dataset_folder'] = os.path.join(data, 'pixel_sets')
         config['batch_size'] = 128
         config['mlp1'] = '[7, 32, 64]'
         config['mlp2'] = '[131, 128]'
@@ -250,7 +249,7 @@ if __name__ == '__main__':
             # exit()
 
     if config['model'] == 'dcm':
-        config['batch_size'] = 7168
+        config['batch_size'] = 1
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['hidden_size'] = 256
         config['num_layers'] = 2
@@ -262,7 +261,7 @@ if __name__ == '__main__':
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'tcnn':
-        config['batch_size'] = 7168
+        config['batch_size'] = 1
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['sequence_len'] = 13
         config['nker'] = '[16, 16, 16]'
@@ -275,7 +274,7 @@ if __name__ == '__main__':
         config['batch_size'] = 8
         config['input_dim'] = 7
         config['num_layers'] = 1
-        config['dataset_folder'] = tar
+        config['dataset_folder'] = os.path.join(data, 'images')
         config['kernel_size'] = (3, 3)
         config['hidden_dim'] = 4
         config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')

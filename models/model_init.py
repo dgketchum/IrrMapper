@@ -5,7 +5,7 @@ import pickle as pkl
 import torch.utils.data as data
 
 from data_prep.pse_dataset import PixelSetData
-from data_prep.pixel_dataset import pixel_dataset, pixel_data
+from data_prep.pixel_dataset import pixel_dataset
 from data_prep.image_dataset import ImageDataset, image_dataset
 
 from models.ltae_pse.stclassifier import PseLTae
@@ -21,7 +21,7 @@ def get_loaders(config):
     extra = 'geomfeat' if config['geomfeat'] else None
 
     if config['model'] in ['tcnn', 'dcm']:
-        dt = (pixel_data(split, config, mean_std) for split in splits)
+        dt = (pixel_dataset(split, config, mean_std) for split in splits)
 
     if config['model'] == 'ltae':
         dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],

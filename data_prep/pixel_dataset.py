@@ -1,15 +1,12 @@
 import os
-import json
-from pathlib import Path
-import pandas as pd
 import numpy as np
-
+import json
 import torch
 from torch.utils import data
 from torchvision import transforms
 from webdataset import dataset as wds
 
-from data_prep.pixel_preparation import BANDS, CHANNELS, DATES
+from data_prep.pixel_preparation import CHANNELS, DATES
 
 SEQUENCE_LENGTH = len(DATES.keys())
 
@@ -20,13 +17,30 @@ structure = np.array([
 ])
 
 
+def identity(y):
+    y = y['labels']
+    y = torch.tensor(y)
+    return y
+
+
 def transform_(x, mean_std):
-    normalize = transforms.Normalize(
-        mean=mean_std[0],
-        std=mean_std[1])
-    transform = transforms.Compose([normalize])
-    x = transform(x)
+    x = (x - mean_std[0]) / mean_std[1]
     return x
+
+
+def pixel_dataset(mode, config, norm, extra_feature=False):
+    def map_input(x):
+        x = x.permute(2, 0, 1)
+        x = transform_(x, norm)
+        return x.float()
+
+    root = config['dataset_folder']
+    loc = os.path.join(root, mode, '{}_patches'.format(mode))
+    end_idx = len(os.listdir(loc)) - 1
+    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
+    url = os.path.join(loc, brace_str)
+    dataset = wds.Dataset(url).decode('torchl').to_tuple('pth', 'json').map_tuple(map_input, identity).batched(1)
+    return dataset
 
 
 def pixel_data(mode, config, norm, extra_feature=False):
@@ -44,34 +58,6 @@ def pixel_data(mode, config, norm, extra_feature=False):
         datasets.append(pds)
     dt = data.ConcatDataset(datasets)
     return dt
-
-
-def pixel_dataset(mode, config, norm, extra_feature=False):
-    def map_fn(item):
-        item = item['pth']
-        x = item[:, :, :BANDS]
-        x = x.reshape((x.shape[0] * x.shape[1], SEQUENCE_LENGTH, CHANNELS))
-        y = item[:, :, 98:]
-        y = y.reshape(y.shape[0] * y.shape[1], y.shape[2])
-        mask = y.sum(1) > 0
-        y = y[mask]
-        if y.shape[0] > 0:
-            y = y.argmax(1)
-            x = x[mask]
-            x = transform_(x, norm)
-            return x, y
-        else:
-            x = torch.tensor(norm[0])
-            y = torch.tensor([3])
-            return x, y
-
-    root = config['dataset_folder']
-    loc = os.path.join(root, mode, '{}_patches'.format(mode))
-    end_idx = len(os.listdir(loc)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(loc, brace_str)
-    dataset = wds.Dataset(url).decode('torchl').map(map_fn)
-    return dataset
 
 
 class PixelDataChunk(data.Dataset):

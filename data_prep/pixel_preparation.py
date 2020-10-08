@@ -4,7 +4,10 @@ import scipy.ndimage.measurements as mnts
 import numpy as np
 import pickle as pkl
 import webdataset as wds
+import tarfile
+import tempfile
 import torch
+import shutil
 
 # dates are generic, dates of each year as below, but data is from many years
 # the year of the data is not used in training, just date position
@@ -33,36 +36,37 @@ structure = np.array([
 ])
 
 
+def push_tar(t_dir, out_dir, mode, items, ind):
+    tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
+    tar_archive = os.path.join(out_dir, tar_filename)
+    with tarfile.open(tar_archive, 'w') as tar:
+        for i in items:
+            tar.add(i, arcname=os.path.basename(i))
+    shutil.rmtree(t_dir)
+
+
 def write_pixel_sets(out, recs, mode):
     """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
-    if not os.path.isdir(os.path.join(out, 'DATA')):
-        os.mkdir(os.path.join(out, 'DATA'))
-    if not os.path.isdir(os.path.join(out, 'META')):
-        os.mkdir(os.path.join(out, 'META'))
 
-    l = [os.path.join(recs, x) for x in os.listdir(recs)]
     count = 0
     nan_pix = 0
     nan_geom = 0
     invalid_pix = 0
     mean_, std_ = 0, 0
     M2 = 0
-    # [757 128 329 986]
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-    label_dict, cdl_label_dict, size_dict, geom = {}, {}, {}, {}
-
     end_idx = len(os.listdir(recs)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(recs, brace_str)
     dataset = wds.Dataset(url).decode('torchl')
-
+    tar_count, items = 0, []
+    tmpdirname = tempfile.mkdtemp()
     for j, f in enumerate(dataset):
         a = f['pth'].numpy()
         labels = a[:, :, 98:]
         features = a[:, :, :96]
-        cdl_label = a[:, :, 96:98]
 
         bbox_slices = {}
         for i in range(labels.shape[2]):
@@ -92,20 +96,6 @@ def write_pixel_sets(out, recs, mode):
                     feat = np.swapaxes(feat, 0, 2)
                     feat = np.swapaxes(feat, 0, 1)
 
-                    # ignore cdl labels for now
-                    # TODO: handle data so Irr and CDL are masked according to irrigation and CDL labels
-                    # cdl label
-                    # lab_mask = np.repeat(lab[b][:, :, np.newaxis], cdl_label.shape[-1], axis=2)
-                    # nan_label = lab_mask.copy()
-                    # nan_label[:, :, :] = np.iinfo(np.uint32).min
-                    # cdl = np.where(lab_mask, cdl_label[b], nan_label)
-                    # cdl[cdl == np.iinfo(np.uint32).min] = np.nan
-                    #
-                    # cdl = cdl.reshape(cdl.shape[0] * cdl.shape[1], 2)
-                    # nan_mask = np.all(np.isnan(cdl), axis=1)
-                    # cdl = cdl[~nan_mask]
-                    # cdl = np.swapaxes(cdl, 0, 1)
-
                     if np.count_nonzero(np.isnan(geo)):
                         nan_geom += 1
                         continue
@@ -128,15 +118,28 @@ def write_pixel_sets(out, recs, mode):
                     M2 = M2 + delta * delta2
                     std_ = np.sqrt(M2 / (count - 1))
 
-                    geom[count] = geo
-                    label_dict[count] = _class
-                    cdl_label_dict[count] = _class
-                    size_dict[count] = feat.shape[2]
+                    ancillary = {'label': _class,
+                                 'size': feat.shape[2],
+                                 'terrain': geo}
+
                     if count % 100 == 0:
                         print('count: {}'.format(count))
 
-                    np.save(os.path.join(out, 'DATA', '{}'.format(count)), feat)
-                    # np.save(os.path.join(out, 'DATA', '{}_cdl'.format(count)), cdl)
+                    tmp_tensor = os.path.join(tmpdirname, '{}.pth'.format(str(count).rjust(7, '0')))
+                    tmp_json = os.path.join(tmpdirname, '{}.json'.format(str(count).rjust(7, '0')))
+
+                    feat = torch.from_numpy(feat)
+                    torch.save(feat, tmp_tensor)
+                    with open(tmp_json, 'w') as file:
+                        file.write(json.dumps(ancillary, indent=4))
+
+                    items.extend([tmp_tensor, tmp_json])
+
+                    if len(items) == 200:
+                        push_tar(tmpdirname, out, mode, items, tar_count)
+                        tmpdirname = tempfile.mkdtemp()
+                        items = []
+                        tar_count += 1
 
     print('objects count: {}'.format(obj_ct))
     print('final pse shape: {}'.format(feat.shape))
@@ -145,78 +148,95 @@ def write_pixel_sets(out, recs, mode):
     print('nan geom: {}'.format(nan_geom))
     print('invalid (2.0) pixel values: {}'.format(invalid_pix))
 
-    with open(os.path.join(out, 'meanstd.pkl'), 'wb') as handle:
+    pkl_name = os.path.join(os.path.dirname(out), '{}_meanstd.pkl'.format(mode))
+    with open(pkl_name, 'wb') as handle:
         pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
-
-    label_dict = {'label_4class': label_dict}
-    with open(os.path.join(out, 'META', 'labels.json'), 'w') as file:
-        file.write(json.dumps(label_dict, indent=4))
-
-    with open(os.path.join(out, 'META', 'dates.json'), 'w') as file:
-        file.write(json.dumps(DATES, indent=4))
-
-    with open(os.path.join(out, 'META', 'sizes.json'), 'w') as file:
-        file.write(json.dumps(size_dict, indent=4))
-
-    with open(os.path.join(out, 'META', 'geomfeat.json'), 'w') as file:
-        file.write(json.dumps(geom, indent=4))
+    push_tar(tmpdirname, out, mode, items, tar_count)
 
 
-def write_pixel_blocks(data_dir, out, n_subset=100000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=1000):
     """ write numpy arrays every n samples from pixel sets"""
 
-    np_data = os.path.join(data_dir, 'DATA')
-    meta_data = os.path.join(data_dir, 'META')
-    _files = sorted([os.path.join(np_data, x) for x in os.listdir(np_data) if not x.endswith('_cdl.npy')])
-    with open(os.path.join(meta_data, 'labels.json'), 'r') as file:
-        label = json.loads(file.read())['label_4class']
-
+    end_idx = len(os.listdir(data_dir)) - 1
+    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
+    url = os.path.join(data_dir, brace_str)
+    dataset = wds.Dataset(url).decode('torchl').to_tuple('pth', 'json')
     first = True
-    count = 0
-    start_ind, end_ind = 0, 0
+    count, file_count = 0, 0
     features, labels = None, []
-    for j, (f, l) in enumerate(zip(_files, label)):
-        a = np.load(f)
-        # ignore cdl labels for now
-        # TODO: handle data so Irr and CDL are masked according to irrigation and CDL labels
-        # c = np.load(f.replace('.npy', '_cdl.npy'))
-        # labels.extend([(label[str(j + 1)], c[1, i], c[0, i]) for i in range(a.shape[-1])])
-        labels.extend([label[str(j + 1)] for i in range(a.shape[-1])])
+    remainder, remainder_lab = np.array(False), []
+    tmpdirname = tempfile.mkdtemp()
+    items, tar_count = [], 0
+
+    for sample in dataset:
+        a = sample[0].numpy()
+        labels.extend([sample[1]['label'] for _ in range(a.shape[-1])])
         if first:
             features = a
-            start_ind = count
             first = False
+            if remainder.any():
+                features = np.append(features, remainder, axis=-1)
+                labels.extend(remainder_lab)
         else:
             features = np.append(features, a, axis=-1)
-        count += a.shape[-1]
         if features.shape[-1] > n_subset:
-            end_ind = count
-            np.save(os.path.join(out, '{}-{}'.format(start_ind, end_ind)), features)
-            np.save(os.path.join(out, '{}-{}_labels'.format(start_ind, end_ind)), np.array(labels))
-            print('{}-{}'.format(start_ind, end_ind))
+            remainder, remainder_lab = features[:, :, n_subset:], labels[n_subset:]
+            out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
+            tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
+            tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
+
+            torch.save(out_features, tmp_feat)
+            with open(tmp_lab, 'w') as file:
+                file.write(json.dumps(out_labels, indent=4))
+
+            file_count += 1
+            print('file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
+            print('remainder', remainder.shape, len(remainder_lab))
+            print('')
             features, labels = None, []
             count += 1
             first = True
-    print(count)
+            items.extend([tmp_feat, tmp_lab])
+
+            if len(items) == 4:
+                push_tar(tmpdirname, out, mode, items, tar_count)
+                tmpdirname = tempfile.mkdtemp()
+                items = []
+                tar_count += 1
+
+    while features.shape[-1] < n_subset:
+        features = np.append(features, features, axis=-1)
+        labels.extend(labels)
+    file_count += 1
+    out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
+    tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
+    tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
+
+    torch.save(out_features, tmp_feat)
+    with open(tmp_lab, 'w') as file:
+        file.write(json.dumps(out_labels, indent=4))
+
+    print('final file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
+    items.extend([tmp_feat, tmp_lab])
+    push_tar(tmpdirname, out, mode, items, tar_count)
 
 
 if __name__ == '__main__':
-    data = '/home/dgketchum/IrrigationGIS/tfrecords'
-    tar = os.path.join(data, 'tarchives')
+    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
 
     if not os.path.isdir(data):
-        data = '/mnt/beegfs/dk128872/ts_data/cmask'
-        tar = os.path.join(data, 'tar')
+        data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
 
+    images = os.path.join(data, 'images')
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
     for split in ['train', 'test', 'valid']:
-        np_images = os.path.join(tar, split, '{}_patches'.format(split))
+        np_images = os.path.join(images, split, '{}_patches'.format(split))
         pixel_dst = os.path.join(pixels, split, '{}_patches'.format(split))
         pixel_set_dst = os.path.join(pixel_sets, split, '{}_patches'.format(split))
 
-        write_pixel_sets(pixel_set_dst, np_images, split)
-        write_pixel_blocks(pixel_set_dst, pixel_dst)
+        # write_pixel_sets(pixel_set_dst, np_images, split)
+        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================

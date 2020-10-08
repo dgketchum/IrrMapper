@@ -1,8 +1,12 @@
 """
 Credits to:
-code author: MILESI ALEXANDRE
+code author: Milese Alexandre
 code: https://github.com/milesial/Pytorch-UNet
-
+paper: Ronneberger, O., Fischer, P. and Brox, T., 2015, October.
+U-net: Convolutional networks for biomedical image segmentation.
+In International Conference on Medical image computing
+and computer-assisted intervention (pp. 234-241).
+Springer, Cham.
 """
 
 
