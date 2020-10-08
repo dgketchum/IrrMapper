@@ -154,7 +154,7 @@ def write_pixel_sets(out, recs, mode):
     push_tar(tmpdirname, out, mode, items, tar_count)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=1000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=200000):
     """ write numpy arrays every n samples from pixel sets"""
 
     end_idx = len(os.listdir(data_dir)) - 1

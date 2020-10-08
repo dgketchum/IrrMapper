@@ -5,6 +5,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+from torch.nn.modules.loss import CrossEntropyLoss
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
@@ -34,8 +35,7 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
 
         loss.backward()
         optimizer.step()
-        if (i + 1) % config['display_step'] == 0:
-            print('Step {}, Loss: {:.4f}'.format(i + 1, loss.item()))
+    print('Step {}, Loss: {:.4f}'.format(i + 1, loss.item()))
 
 
 def evaluate_epoch(model, criterion, loader, device, config):
@@ -61,11 +61,10 @@ def evaluate_epoch(model, criterion, loader, device, config):
                 pred = torch.argmax(pred, dim=1)
                 confusion += conf_matrix(y, pred, config)
 
-        if (i + 1) % config['display_step'] == 0:
-            per_class, overall = confusion_matrix_analysis(confusion)
-            prec, rec, f1 = overall['micro_Precision'], overall['micro_Recall'], overall['micro_F1-score']
-            print('Step {}, Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
-                  'F1 Score {:.2f},'.format(i + 1, loss.item(), prec, rec, f1))
+    per_class, overall = confusion_matrix_analysis(confusion)
+    prec, rec, f1 = overall['micro_Precision'], overall['micro_Recall'], overall['micro_F1-score']
+    print('Step {}, Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
+          'F1 Score {:.2f},'.format(i + 1, loss.item(), prec, rec, f1))
 
 
 def prediction(model, loader, device, config):
@@ -171,6 +170,7 @@ def train(config):
     model.apply(weight_init)
     optimizer = torch.optim.Adam(model.parameters())
     criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
+    # criterion = CrossEntropyLoss()
     config['confusion'] = torch.tensor(np.zeros((config['num_classes'], config['num_classes']))).to(device)
 
     for epoch in range(1, config['epochs'] + 1):
@@ -217,12 +217,12 @@ if __name__ == '__main__':
               'input_dim': 7,
               'geomfeat': None,
               'device': 'cuda:0',
-              'num_workers': 4,
+              'num_workers': 1,
               'pooling': 'mean_std',
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'model': 'dcm'}
+              'model': 'tcnn'}
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(data, 'pixel_sets')
