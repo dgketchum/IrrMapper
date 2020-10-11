@@ -18,6 +18,9 @@ DATES = {0: '19860101',
 CHANNELS = 7
 BANDS = 91
 
+SEQUENCE_LEN = len(DATES.keys())
+
+
 FEATURES = ['blue_0', 'green_0', 'red_0', 'nir_0', 'swir1_0', 'swir2_0', 'tir_0', 'blue_1', 'green_1', 'red_1', 'nir_1',
             'swir1_1', 'swir2_1', 'tir_1', 'blue_2', 'green_2', 'red_2', 'nir_2', 'swir1_2', 'swir2_2', 'tir_2',
             'blue_3', 'green_3', 'red_3', 'nir_3', 'swir1_3', 'swir2_3', 'tir_3', 'blue_4', 'green_4', 'red_4', 'nir_4',
@@ -28,6 +31,7 @@ FEATURES = ['blue_0', 'green_0', 'red_0', 'nir_0', 'swir1_0', 'swir2_0', 'tir_0'
             'nir_10', 'swir1_10', 'swir2_10', 'tir_10', 'blue_11', 'green_11', 'red_11', 'nir_11', 'swir1_11',
             'swir2_11', 'tir_11', 'blue_12', 'green_12', 'red_12', 'nir_12', 'swir1_12', 'swir2_12', 'tir_12', 'lat',
             'lon', 'elev']
+
 
 if __name__ == '__main__':
     pass

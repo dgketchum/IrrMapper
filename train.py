@@ -4,11 +4,10 @@ import pickle as pkl
 
 import torch
 import numpy as np
-from torch.nn.modules.loss import CrossEntropyLoss
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
-from learning.metrics import confusion_matrix_analysis
+from learning.metrics import confusion_matrix_analysis, get_conf_matrix
 from models.model_init import get_loaders, get_model
 from configure import get_config
 from utils import recursive_todevice
@@ -32,11 +31,15 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
 
         loss.backward()
         optimizer.step()
-    print('Step {}, Loss: {:.4f}'.format(i + 1, loss.item()))
+    print('Train Loss: {:.4f}'.format(loss.item()))
 
 
-def evaluate_epoch(model, criterion, loader, device, config):
-    confusion = torch.ones_like(config['confusion'])
+def evaluate_epoch(model, criterion, loader, config):
+
+    device = torch.device(config['device'])
+    n_class = config['num_classes']
+    confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
+
     for i, (x, y) in enumerate(loader):
         x = recursive_todevice(x, device)
 
@@ -48,39 +51,22 @@ def evaluate_epoch(model, criterion, loader, device, config):
                 pred = out[0][0]
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                confusion += conf_matrix(y, pred, config, mask)
+                confusion += get_conf_matrix(y, pred, n_class, device)
         else:
-            y = y.to(device)
+            y = y.to(device).squeeze()
+            mask = y.sum(0) > 0
             x = x.squeeze()
             with torch.no_grad():
                 pred, att = model(x)
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                confusion += conf_matrix(y, pred, config)
+                confusion += get_conf_matrix(y[mask], pred[mask], n_class, device)
 
     per_class, overall = confusion_matrix_analysis(confusion)
-    prec, rec, f1 = overall['micro_Precision'], overall['micro_Recall'], overall['micro_F1-score']
-    print('Step {}, Loss: {:.4f}, Precision {:.2f}, Recall {:.2f}, '
-          'F1 Score {:.2f},'.format(i + 1, loss.item(), prec, rec, f1))
-
-
-def conf_matrix(y, pred, config, mask=None):
-    confusion = torch.ones_like(config['confusion'])
-    n_classes = config['num_classes']
-    classes = torch.tensor([x for x in range(n_classes)]).to(torch.device(config['device']))
-    if mask:
-        y, pred = y[mask], pred[mask]
-    for i in range(n_classes):
-        c = classes[i]
-        pred, target = pred == c, y == c
-        confusion[i, i] = (pred & target).bool().sum()
-        for nc in range(n_classes):
-            if nc == c:
-                continue
-            else:
-                confusion[c, nc] = (pred == nc).bool().sum()
-    config['confusion'] += confusion
-    return confusion
+    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
+    print('Evaluation Loss: {:.4f}, Precision {:.4f}, Recall {:.4f}, '
+          'F1 Score {:.2f},'.format(loss.item(), prec, rec, f1))
+    pkl.dump(confusion, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
 
 
 def prepare_output(config):
@@ -134,21 +120,20 @@ def train(config):
     optimizer = torch.optim.Adam(model.parameters())
     criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
     # criterion = CrossEntropyLoss()
-    config['confusion'] = torch.tensor(np.zeros((config['num_classes'], config['num_classes']))).to(device)
 
     for epoch in range(1, config['epochs'] + 1):
+        print('')
         print('EPOCH {}/{}'.format(epoch, config['epochs']))
 
         model.train()
         train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
-        print('Validation . . . ')
         model.eval()
-        evaluate_epoch(model, criterion, val_loader, device=device, config=config)
+        evaluate_epoch(model, criterion, val_loader, config=config)
 
         # trainlog[epoch] = {**train_metrics, **val_metrics}
         # checkpoint(trainlog, config)
 
-    evaluate_epoch(model, criterion, val_loader, device=device, config=config)
+    evaluate_epoch(model, criterion, val_loader, config=config)
     torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict()},
                os.path.join(config['res_dir'], 'model.pth.tar'))
@@ -164,7 +149,7 @@ def train(config):
 
 
 if __name__ == '__main__':
-    config = get_config()
+    config = get_config('tcnn')
     train(config)
 
 # ========================================================================================

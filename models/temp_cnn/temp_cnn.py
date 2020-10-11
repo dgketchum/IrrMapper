@@ -13,6 +13,7 @@ import numpy as np
 class TempConv(nn.Module):
     """
     Temporal CNN
+
     """
 
     def __init__(self, input_dim, nker, seq_len, nfc, positions=None):

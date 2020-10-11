@@ -4,18 +4,13 @@ import torch
 
 def get_conf_matrix(y, pred, n_class, device):
     batch_conf = torch.tensor(np.zeros((n_class, n_class))).to(device)
-    classes = torch.tensor([x for x in range(n_class)]).to(device)
-    for i in range(n_class):
-        c = classes[i]
-        pred, target = pred == c, y == c
-        batch_conf[i, i] = (pred & target).bool().sum()
-        for nc in range(n_class):
-            if nc != c:
-                batch_conf[c, nc] = (pred == nc).bool().sum()
-        return batch_conf
+    for i in range(len(y)):
+        batch_conf[y[i]][pred[i]] += 1
+    return batch_conf
 
 
 def confusion_matrix_analysis(mat):
+    epsilon = 1.0e-6
     TP = 0
     FP = 0
     FN = 0
@@ -28,20 +23,28 @@ def confusion_matrix_analysis(mat):
         fp = torch.sum(mat[:, j]) - tp
         fn = torch.sum(mat[j, :]) - tp
 
-        d['IoU'] = tp / (tp + fp + fn)
-        d['Precision'] = tp / (tp + fp)
-        d['Recall'] = tp / (tp + fn)
-        d['F1-score'] = 2 * tp / (2 * tp + fp + fn)
+        d['IoU'] = tp / (tp + fp + fn + epsilon)
+        d['Precision'] = tp / (tp + fp + epsilon)
+        d['Recall'] = tp / (tp + fn + epsilon)
+        d['F1-score'] = 2 * tp / (2 * tp + fp + fn + epsilon)
 
         per_class[str(j)] = d
 
         TP += tp
         FP += fp
         FN += fn
-    overall = {'IoU': TP / (TP + FP + FN),
-               'precision': TP / (TP + FP),
-               'recall': TP / (TP + FN),
-               'f1-score': 2 * TP / (2 * TP + FP + FN),
+
+    overall = {'IoU': TP / (TP + FP + FN + epsilon),
+               'precision': TP / (TP + FP + epsilon),
+               'recall': TP / (TP + FN + epsilon),
+               'f1-score': 2 * TP / (2 * TP + FP + FN + epsilon),
                'accuracy': torch.sum(torch.diag(mat)) / torch.sum(mat)}
 
     return per_class, overall
+
+
+# tensor([[4802., 86., 0., 144.],
+#         [0., 0., 0., 0.],
+#         [0., 0., 0., 0.],
+#         [10., 37., 0., 654.]], device='cuda:0', dtype=torch.float64)
+

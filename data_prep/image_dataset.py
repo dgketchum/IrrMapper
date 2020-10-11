@@ -1,8 +1,5 @@
 import os
-import pickle as pkl
-import numpy as np
 import torch
-from torch.utils import data
 from torchvision import transforms
 from webdataset import dataset as wds
 
@@ -10,9 +7,10 @@ from data_prep import BANDS, CHANNELS, SEQUENCE_LEN
 
 
 def transform_(x, mean_std):
+    mean, std = torch.tensor(mean_std[0]), torch.tensor(mean_std[1])
     normalize = transforms.Normalize(
-        mean=mean_std[0].reshape(mean_std[0].shape[0] * mean_std[0].shape[1]),
-        std=mean_std[1].reshape(mean_std[0].shape[0] * mean_std[0].shape[1]))
+        mean=mean,
+        std=std)
     t = transforms.Compose([normalize])
     x = t(x)
     return x
@@ -24,10 +22,11 @@ def image_dataset(mode, data_dir, norm):
         x = item[:, :, :BANDS]
         x = x.permute(2, 0, 1)
         x = transform_(x, norm)
-        x = x.reshape(x.shape[1], x.shape[2], SEQUENCE_LEN, CHANNELS)
-        x = x.permute((2, 3, 0, 1)).float()
-        y = item[:, :, -4:].permute(2, 0, 1).int()
-        return x, y
+        x = x.permute(1, 2, 0)
+        x = x.reshape(x.shape[0], x.shape[1], SEQUENCE_LEN, CHANNELS).float()
+        y = item[:, :, -4:].permute(2, 0, 1)
+        g = item[:, :, BANDS:BANDS + 3].permute(2, 0, 1)
+        return x, y, g
 
     loc = os.path.join(data_dir, '{}_patches'.format(mode))
     end_idx = len(os.listdir(loc)) - 1

@@ -1,12 +1,10 @@
-import os
-import numpy as np
 import pickle as pkl
 
 import torch.utils.data as data
 
 from data_prep.pse_dataset import PixelSetData
 from data_prep.pixel_dataset import pixel_dataset
-from data_prep.image_dataset import ImageDataset, image_dataset
+from data_prep.image_dataset import image_dataset
 
 from models.ltae_pse.stclassifier import PseLTae
 from models.dcm.dcm import DCM
@@ -14,22 +12,36 @@ from models.temp_cnn.temp_cnn import TempConv
 from models.conv_lstm.conv_lstm import ConvLSTM
 
 
+
+
+
+
+def get_predict_loader(config):
+    mean_std = pkl.load(open(config['image_norm'], 'rb'))
+    dt = image_dataset('test', config['prediction_dir'], mean_std)
+    test = get_dataloader(dt, config)
+    return test
+
+
 def get_loaders(config):
     dt = None
     splits = ['train', 'test', 'valid']
-    mean_std = pkl.load(open(config['dataset_folder'] + '/meanstd.pkl', 'rb'))
     extra = 'geomfeat' if config['geomfeat'] else None
 
     if config['model'] in ['tcnn', 'dcm']:
+        mean_std = pkl.load(open(config['pixel_norm'], 'rb'))
         dt = (pixel_dataset(split, config, mean_std) for split in splits)
 
     if config['model'] == 'ltae':
-        dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'], npixel=config['npixel'],
+        mean_std = pkl.load(open(config['pixel_norm'], 'rb'))
+        dt = PixelSetData(config['dataset_folder'], labels=config['nomenclature'],
+                          npixel=config['npixel'],
                           sub_classes=config['subset'],
                           norm=mean_std,
                           extra_feature=extra)
 
     if config['model'] == 'clstm':
+        mean_std = pkl.load(open(config['image_norm'], 'rb'))
         dt = (image_dataset(split, config, mean_std) for split in splits)
 
     train, test, valid = (get_dataloader(d, config) for d in dt)

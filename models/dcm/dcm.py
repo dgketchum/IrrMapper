@@ -58,7 +58,9 @@ class DCM(nn.Module):
         # attn (after permutation): (batch, 1, seq_len)
         fc_in = attn_weights.permute(0, 2, 1).bmm(lstm_out)
         fc_out = self.fc(fc_in)
-        return fc_out.squeeze(), attn_weights.squeeze()
+        fc_out = fc_out.squeeze()
+        fc_out = F.softmax(fc_out, dim=1)
+        return fc_out, attn_weights.squeeze()
 
 
 if __name__ == '__main__':

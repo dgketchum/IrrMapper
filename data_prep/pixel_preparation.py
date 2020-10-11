@@ -8,26 +8,8 @@ import tarfile
 import tempfile
 import torch
 import shutil
+from data_prep import BANDS, CHANNELS, SEQUENCE_LEN
 
-# dates are generic, dates of each year as below, but data is from many years
-# the year of the data is not used in training, just date position
-DATES = {0: '19860101',
-         1: '19860131',
-         2: '19860302',
-         3: '19860401',
-         4: '19860501',
-         5: '19860531',
-         6: '19860630',
-         7: '19860730',
-         8: '19860829',
-         9: '19860928',
-         10: '19861028',
-         11: '19861127',
-         12: '19861227'}
-
-# see feature_spec.py for dict of bands, lat , lon, elev, label
-CHANNELS = 7
-BANDS = 91
 
 structure = np.array([
     [1, 1, 1],
@@ -92,7 +74,7 @@ def write_pixel_sets(out, recs, mode):
                     feat = feat.reshape(feat.shape[0] * feat.shape[1], BANDS)
                     nan_mask = np.all(np.isnan(feat), axis=1)
                     feat = feat[~nan_mask]
-                    feat = feat.reshape(feat.shape[0], len(DATES.keys()), CHANNELS)
+                    feat = feat.reshape(feat.shape[0], SEQUENCE_LEN, CHANNELS)
                     feat = np.swapaxes(feat, 0, 2)
                     feat = np.swapaxes(feat, 0, 1)
 
@@ -148,13 +130,14 @@ def write_pixel_sets(out, recs, mode):
     print('nan geom: {}'.format(nan_geom))
     print('invalid (2.0) pixel values: {}'.format(invalid_pix))
 
-    pkl_name = os.path.join(os.path.dirname(out), '{}_meanstd.pkl'.format(mode))
+    mean_, std_ = mean_.reshape(SEQUENCE_LEN * CHANNELS), std_.reshape(SEQUENCE_LEN * CHANNELS)
+    pkl_name = os.path.join(os.path.dirname(out), '{}_meanstd_91.pkl'.format(mode))
     with open(pkl_name, 'wb') as handle:
         pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
     push_tar(tmpdirname, out, mode, items, tar_count)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=200000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     """ write numpy arrays every n samples from pixel sets"""
 
     end_idx = len(os.listdir(data_dir)) - 1
@@ -204,21 +187,22 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=200000):
                 items = []
                 tar_count += 1
 
-    while features.shape[-1] < n_subset:
-        features = np.append(features, features, axis=-1)
-        labels.extend(labels)
-    file_count += 1
-    out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
-    tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
-    tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
+    if features is not None:
+        while features.shape[-1] < n_subset:
+            features = np.append(features, features, axis=-1)
+            labels.extend(labels)
+        file_count += 1
+        out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
+        tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
+        tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
 
-    torch.save(out_features, tmp_feat)
-    with open(tmp_lab, 'w') as file:
-        file.write(json.dumps(out_labels, indent=4))
+        torch.save(out_features, tmp_feat)
+        with open(tmp_lab, 'w') as file:
+            file.write(json.dumps(out_labels, indent=4))
 
-    print('final file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
-    items.extend([tmp_feat, tmp_lab])
-    push_tar(tmpdirname, out, mode, items, tar_count)
+        print('final file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
+        items.extend([tmp_feat, tmp_lab])
+        push_tar(tmpdirname, out, mode, items, tar_count)
 
 
 if __name__ == '__main__':
@@ -231,12 +215,17 @@ if __name__ == '__main__':
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
-    for split in ['train', 'test', 'valid']:
+    for split in ['train']:
         np_images = os.path.join(images, split, '{}_patches'.format(split))
         pixel_dst = os.path.join(pixels, split, '{}_patches'.format(split))
         pixel_set_dst = os.path.join(pixel_sets, split, '{}_patches'.format(split))
 
-        # write_pixel_sets(pixel_set_dst, np_images, split)
+        # if split == 'train':
+        #     np_images = os.path.join(images, split, '{}_points'.format(split))
+        #     pixel_dst = os.path.join(pixels, split, '{}_points'.format(split))
+        #     pixel_set_dst = os.path.join(pixel_sets, split, '{}_points'.format(split))
+
+        write_pixel_sets(pixel_set_dst, np_images, split)
         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================

@@ -37,7 +37,7 @@ def predict(config):
     optimizer.load_state_dict(check_pt['optimizer'])
     model.eval()
     for i, (x, y, g) in enumerate(val_loader):
-        if i in [25, 33, 41, 53, 88]:
+        if i in 88:
             image = unnormalize(deepcopy(x), norm)
             x = recursive_todevice(x, device)
             if config['model'] == 'clstm':
@@ -59,13 +59,9 @@ def predict(config):
                     pred = torch.argmax(pred, dim=1)
 
                     y_flat = y.argmax(0).flatten()
-                    print(y.device, y_flat.device, pred.device, mask.device)
-                    print('irr', np.count_nonzero(y_flat[mask].cpu() == 0),
-                          np.count_nonzero(pred[mask].cpu() == 0))
-                    print('ucult', np.count_nonzero(y_flat[mask].cpu() == 3),
-                          np.count_nonzero(pred[mask].cpu() == 3))
                     conf = get_conf_matrix(y_flat[mask], pred[mask], config['num_classes'], device)
                     print(conf)
+                    exit()
                     # _, overall = confusion_matrix_analysis(conf)
                     # prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
                     # print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))

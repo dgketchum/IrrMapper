@@ -1,18 +1,3 @@
-# ===============================================================================
-# Copyright 2018 dgketchum
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ===============================================================================
 import os
 import json
 from pathlib import Path
@@ -20,7 +5,7 @@ from pathlib import Path
 path = Path(__file__).parents
 
 
-def get_config():
+def get_config(model='clstm'):
     data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
 
     if not os.path.isdir(data):
@@ -42,7 +27,9 @@ def get_config():
               'gamma': 1,
               'alpha': None,
               'prediction_dir': os.path.join(data, 'images', 'test'),
-              'model': 'tcnn'}
+              'image_norm': os.path.join(data, 'images', 'meanstd_91.pkl'),
+              'pixel_norm': os.path.join(data, 'pixels', 'meanstd.pkl'),
+              'model': model}
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(data, 'pixel_sets')
@@ -66,12 +53,11 @@ def get_config():
         config['res_dir'] = os.path.join(path[0], 'models', 'ltae_pse', 'results')
         with open(os.path.join(path[0], 'models', 'ltae_pse', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
-            # exit()
 
     if config['model'] == 'dcm':
         config['batch_size'] = 1
         config['dataset_folder'] = os.path.join(data, 'pixels')
-        config['hidden_size'] = 256
+        config['hidden_size'] = 36
         config['num_layers'] = 2
         config['bidirectional'] = True
         config['seed'] = 121
@@ -85,7 +71,8 @@ def get_config():
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['sequence_len'] = 13
         config['nker'] = '[16, 16, 16]'
-        config['mlp3'] = '[16, 16]'
+        config['mlp3'] = '[16, 4]'
+        config['norm'] = config['dataset_folder'] + '/meanstd.pkl'
         config['res_dir'] = os.path.join(path[0], 'models', 'temp_cnn', 'results')
         with open(os.path.join(path[0], 'models', 'temp_cnn', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
