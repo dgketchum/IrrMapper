@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from matplotlib import colors
 
 from utils import recursive_todevice
+from learning.metrics import get_conf_matrix, confusion_matrix_analysis
 from models.model_init import get_model, get_predict_loader
 from configure import get_config
 from data_prep import FEATURES
@@ -36,33 +37,50 @@ def predict(config):
     optimizer.load_state_dict(check_pt['optimizer'])
     model.eval()
     for i, (x, y, g) in enumerate(val_loader):
-        image = unnormalize(deepcopy(x), norm)
-        x = recursive_todevice(x, device)
-        if config['model'] == 'clstm':
-            y = y.argmax(dim=1).numpy()
-            with torch.no_grad():
-                out, att = model(x)
-                pred = out[0][0]
-                pred = torch.argmax(pred, dim=1)
-                pred = pred.cpu().numpy()
-                g = g.numpy()
-        else:
+        if i in [25, 33, 41, 53, 88]:
+            image = unnormalize(deepcopy(x), norm)
+            x = recursive_todevice(x, device)
+            if config['model'] == 'clstm':
+                y = y.argmax(dim=1)
+                with torch.no_grad():
+                    out, att = model(x)
+                    pred = out[0][0]
+                    pred = torch.argmax(pred, dim=1)
+                    pred = pred.cpu().numpy()
+                    g = g.numpy()
+            else:
+                y = y.squeeze().to(device)
+                x = x.squeeze()
+                mask = (y.sum(0) > 0).flatten()
 
-            y = y.squeeze().numpy()
-            x = x.squeeze()
-            x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
-            with torch.no_grad():
-                pred, att = model(x)
-                pred = torch.argmax(pred, dim=1)
-                pred = pred.reshape((image.shape[0], image.shape[1]))
-                pred = pred.cpu().numpy()
-                g = g.numpy()
-        plot_prediction(image, pred, y, geo=g, out_file=os.path.join(config['res_dir'],
-                                                                     'figures', '{}.png'.format(i)))
+                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
+                with torch.no_grad():
+                    pred, att = model(x)
+                    pred = torch.argmax(pred, dim=1)
+
+                    y_flat = y.argmax(0).flatten()
+                    print(y.device, y_flat.device, pred.device, mask.device)
+                    print('irr', np.count_nonzero(y_flat[mask].cpu() == 0),
+                          np.count_nonzero(pred[mask].cpu() == 0))
+                    print('ucult', np.count_nonzero(y_flat[mask].cpu() == 3),
+                          np.count_nonzero(pred[mask].cpu() == 3))
+                    conf = get_conf_matrix(y_flat[mask], pred[mask], config['num_classes'], device)
+                    print(conf)
+                    # _, overall = confusion_matrix_analysis(conf)
+                    # prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
+                    # print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
+
+                    pred = pred.reshape((image.shape[0], image.shape[1]))
+                    pred = pred.cpu().numpy()
+                    y = y.cpu().numpy()
+                    g = g.numpy()
+                    out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
+                    plot_prediction(image, pred, y, geo=g, out_file=out_fig)
 
 
 def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
-    cmap = colors.ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
+    cmap_label = colors.ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
+    cmap_pred = colors.ListedColormap(['blue', 'purple', 'pink', 'green'])
 
     r_idx, g_idx, b_idx = [FEATURES.index(x) for x in FEATURES if 'red' in x], \
                           [FEATURES.index(x) for x in FEATURES if 'green' in x], \
@@ -84,17 +102,16 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
     mask = label.sum(0) == 0
     label = label.argmax(0) + 1
     label[mask] = 0
+    pred += 1
     pred, label = pred.squeeze(), label.squeeze()
-    print('pred', pred.min(), pred.max())
-    print('label', label.min(), label.max(), label.mean())
 
     ax[0].imshow(rgb)
     ax[0].set(xlabel='image')
 
-    ax[1].imshow(label, cmap=cmap)
+    ax[1].imshow(label, cmap=cmap_label)
     ax[1].set(xlabel='label')
 
-    ax[2].imshow(pred, cmap=cmap)
+    ax[2].imshow(pred, cmap=cmap_pred)
     ax[2].set(xlabel='pred')
 
     plt.suptitle('{:.3f}, {:.3f}'.format(lat, lon))
@@ -107,6 +124,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn')
+    config = get_config('dcm')
     predict(config)
 # ========================= EOF ====================================================================
