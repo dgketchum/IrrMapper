@@ -60,11 +60,9 @@ def predict(config):
 
                     y_flat = y.argmax(0).flatten()
                     conf = get_conf_matrix(y_flat[mask], pred[mask], config['num_classes'], device)
-                    print(conf)
-                    exit()
-                    # _, overall = confusion_matrix_analysis(conf)
-                    # prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
-                    # print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
+                    _, overall = confusion_matrix_analysis(conf)
+                    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
+                    print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
 
                     pred = pred.reshape((image.shape[0], image.shape[1]))
                     pred = pred.cpu().numpy()
