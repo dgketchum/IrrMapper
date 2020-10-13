@@ -43,8 +43,11 @@ def confusion_matrix_analysis(mat):
     return per_class, overall
 
 
-# tensor([[4802., 86., 0., 144.],
-#         [0., 0., 0., 0.],
-#         [0., 0., 0., 0.],
-#         [10., 37., 0., 654.]], device='cuda:0', dtype=torch.float64)
-
+if __name__ == '__main__':
+    t = torch.tensor([[4802., 86., 0., 144.],
+                      [0., 0., 0., 0.],
+                      [0., 0., 0., 0.],
+                      [10., 37., 0., 654.]], device='cuda:0', dtype=torch.float64)
+    p_c, overall = confusion_matrix_analysis(t)
+    print(overall)
+# =======================================================================================
