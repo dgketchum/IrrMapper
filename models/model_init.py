@@ -12,13 +12,9 @@ from models.temp_cnn.temp_cnn import TempConv
 from models.conv_lstm.conv_lstm import ConvLSTM
 
 
-
-
-
-
 def get_predict_loader(config):
     mean_std = pkl.load(open(config['image_norm'], 'rb'))
-    dt = image_dataset('test', config['prediction_dir'], mean_std)
+    dt = image_dataset('test', config['prediction_dir'], mean_std, pixel_predict=True)
     test = get_dataloader(dt, config)
     return test
 
@@ -42,7 +38,7 @@ def get_loaders(config):
 
     if config['model'] == 'clstm':
         mean_std = pkl.load(open(config['image_norm'], 'rb'))
-        dt = (image_dataset(split, config, mean_std) for split in splits)
+        dt = (image_dataset(split, config, mean_std, False) for split in splits)
 
     train, test, valid = (get_dataloader(d, config) for d in dt)
     return train, test, valid

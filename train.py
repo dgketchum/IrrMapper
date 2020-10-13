@@ -14,7 +14,8 @@ from utils import recursive_todevice
 
 
 def train_epoch(model, optimizer, criterion, loader, device, config):
-    for i, (x, y) in enumerate(loader):
+    loss = None
+    for i, (x, y, g) in enumerate(loader):
         x = recursive_todevice(x, device)
         if config['model'] == 'clstm':
             y = y.argmax(dim=1).to(device)
@@ -40,9 +41,8 @@ def evaluate_epoch(model, criterion, loader, config):
     n_class = config['num_classes']
     confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
 
-    for i, (x, y) in enumerate(loader):
+    for i, (x, y, g) in enumerate(loader):
         x = recursive_todevice(x, device)
-
         if config['model'] == 'clstm':
             mask = y.sum(1) > 0
             y = y.argmax(dim=1).to(device)
@@ -51,16 +51,17 @@ def evaluate_epoch(model, criterion, loader, config):
                 pred = out[0][0]
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                confusion += get_conf_matrix(y, pred, n_class, device)
+                confusion += get_conf_matrix(y[mask], pred[mask], n_class, device)
         else:
-            y = y.to(device).squeeze()
-            mask = y.sum(0) > 0
+            y = y.squeeze().to(device)
+            mask = (y > 0).flatten()
             x = x.squeeze()
             with torch.no_grad():
                 pred, att = model(x)
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                confusion += get_conf_matrix(y[mask], pred[mask], n_class, device)
+                conf = get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
+                confusion += conf
 
     per_class, overall = confusion_matrix_analysis(confusion)
     prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
@@ -106,8 +107,6 @@ def train(config):
     device = torch.device(config['device'])
 
     train_loader, test_loader, val_loader = get_loaders(config)
-    # print('Train {}, Val {}, Test {}'.format(len(train_loader), len(val_loader), len(test_loader)))
-
     model = get_model(config)
 
     # config['N_params'] = model.param_ratio()
@@ -119,11 +118,10 @@ def train(config):
     model.apply(weight_init)
     optimizer = torch.optim.Adam(model.parameters())
     criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
-    # criterion = CrossEntropyLoss()
 
+    print('Train {}'.format(config['model'].upper()))
     for epoch in range(1, config['epochs'] + 1):
-        print('')
-        print('EPOCH {}/{}'.format(epoch, config['epochs']))
+        print('\nEPOCH {}/{}'.format(epoch, config['epochs']))
 
         model.train()
         train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
@@ -149,7 +147,7 @@ def train(config):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn')
+    config = get_config('dcm')
     train(config)
 
 # ========================================================================================

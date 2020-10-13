@@ -16,19 +16,28 @@ def transform_(x, mean_std):
     return x
 
 
-def image_dataset(mode, data_dir, norm):
+def image_dataset(mode, config, norm, pixel_predict=False):
+
     def map_fn(item):
         item = item['pth']
         x = item[:, :, :BANDS]
         x = x.permute(2, 0, 1)
         x = transform_(x, norm)
-        x = x.permute(1, 2, 0)
-        x = x.reshape(x.shape[0], x.shape[1], SEQUENCE_LEN, CHANNELS).float()
-        y = item[:, :, -4:].permute(2, 0, 1)
+
+        if pixel_predict:
+            x = x.permute(1, 2, 0)
+            x = x.reshape(x.shape[0], x.shape[1], SEQUENCE_LEN, CHANNELS).float()
+            y = item[:, :, -4:].permute(2, 0, 1)
+        else:
+            x = x.reshape(x.shape[1], x.shape[2], SEQUENCE_LEN, CHANNELS)
+            x = x.permute((2, 3, 0, 1)).float()
+            y = item[:, :, -4:].permute(2, 0, 1).int()
+
         g = item[:, :, BANDS:BANDS + 3].permute(2, 0, 1)
         return x, y, g
 
-    loc = os.path.join(data_dir, '{}_patches'.format(mode))
+    data_dir = config['dataset_folder']
+    loc = os.path.join(data_dir, mode, '{}_patches'.format(mode))
     end_idx = len(os.listdir(loc)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(loc, brace_str)

@@ -146,7 +146,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     dataset = wds.Dataset(url).decode('torchl').to_tuple('pth', 'json')
     first = True
     count, file_count = 0, 0
-    features, labels = None, []
+    features, labels, terrain = None, [], []
     remainder, remainder_lab = np.array(False), []
     tmpdirname = tempfile.mkdtemp()
     items, tar_count = [], 0
@@ -154,6 +154,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     for sample in dataset:
         a = sample[0].numpy()
         labels.extend([sample[1]['label'] for _ in range(a.shape[-1])])
+        terrain.extend([sample[1]['terrain'] for _ in range(a.shape[-1])])
         if first:
             features = a
             first = False
@@ -164,7 +165,8 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
             features = np.append(features, a, axis=-1)
         if features.shape[-1] > n_subset:
             remainder, remainder_lab = features[:, :, n_subset:], labels[n_subset:]
-            out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
+            out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset],
+                                                                                 'terrain': terrain[:n_subset]}
             tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
             tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
 
@@ -176,7 +178,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
             print('file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
             print('remainder', remainder.shape, len(remainder_lab))
             print('')
-            features, labels = None, []
+            features, labels, terrain = None, [], []
             count += 1
             first = True
             items.extend([tmp_feat, tmp_lab])
@@ -191,8 +193,10 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
         while features.shape[-1] < n_subset:
             features = np.append(features, features, axis=-1)
             labels.extend(labels)
+            terrain.extend(terrain)
         file_count += 1
-        out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset]}
+        out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset],
+                                                                             'terrain': terrain[:n_subset]}
         tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
         tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
 
@@ -215,7 +219,7 @@ if __name__ == '__main__':
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
-    for split in ['train']:
+    for split in ['train', 'test', 'valid']:
         np_images = os.path.join(images, split, '{}_patches'.format(split))
         pixel_dst = os.path.join(pixels, split, '{}_patches'.format(split))
         pixel_set_dst = os.path.join(pixel_sets, split, '{}_patches'.format(split))
@@ -225,7 +229,7 @@ if __name__ == '__main__':
         #     pixel_dst = os.path.join(pixels, split, '{}_points'.format(split))
         #     pixel_set_dst = os.path.join(pixel_sets, split, '{}_points'.format(split))
 
-        write_pixel_sets(pixel_set_dst, np_images, split)
+        # write_pixel_sets(pixel_set_dst, np_images, split)
         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================

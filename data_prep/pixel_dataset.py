@@ -14,22 +14,19 @@ structure = np.array([
 ])
 
 
-def identity(y):
-    y = y['labels']
-    y = torch.tensor(y)
-    return y
-
-
 def transform_(x, mean_std):
     x = (x - mean_std[0]) / mean_std[1]
     return x
 
 
-def pixel_dataset(mode, config, norm, extra_feature=False):
-    def map_input(x):
+def pixel_dataset(mode, config, norm):
+    def map_input(item):
+        x = item['pth']
         x = x.permute(2, 0, 1)
-        x = transform_(x, norm)
-        return x.float()
+        x = transform_(x, norm).float()
+        y = torch.tensor(item['json']['labels'])
+        g = torch.tensor(item['json']['terrain'])
+        return x, y, g
 
     root = config['dataset_folder']
     loc = os.path.join(root, mode, '{}_patches'.format(mode))
@@ -37,7 +34,5 @@ def pixel_dataset(mode, config, norm, extra_feature=False):
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(loc, brace_str)
     ds = wds.Dataset(url)
-    ds = ds.decode('torchl').to_tuple('pth', 'json')
-    ds = ds.map_tuple(map_input, identity).batched(1)
+    ds = ds.decode('torchl').map(map_input).batched(1)
     return ds
-
