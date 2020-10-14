@@ -8,8 +8,7 @@ import tarfile
 import tempfile
 import torch
 import shutil
-from data_prep import BANDS, CHANNELS, SEQUENCE_LEN
-
+from data_prep import BANDS, TERRAIN
 
 structure = np.array([
     [1, 1, 1],
@@ -27,18 +26,17 @@ def push_tar(t_dir, out_dir, mode, items, ind):
     shutil.rmtree(t_dir)
 
 
-def write_pixel_sets(out, recs, mode):
+def write_pixel_sets(out, recs, mode, out_norm):
     """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
 
     count = 0
-    nan_pix = 0
-    nan_geom = 0
     invalid_pix = 0
-    mean_, std_ = 0, 0
+    band_mean, band_std = 0, 0
     M2 = 0
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
+    pix_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     end_idx = len(os.listdir(recs)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(recs, brace_str)
@@ -59,63 +57,46 @@ def write_pixel_sets(out, recs, mode):
                 for b in bbox_slices[i]:
 
                     # features
-                    obj_ct[_class] += 1
                     lab_mask = np.repeat(lab[b][:, :, np.newaxis], features.shape[-1], axis=2)
                     nan_label = lab_mask.copy()
                     nan_label[:, :, :] = np.iinfo(np.uint32).min
                     feat = np.where(lab_mask, features[b], nan_label)
                     feat[feat == np.iinfo(np.uint32).min] = np.nan
 
-                    # geometric features (lat, lon, elev, slope, aspect)
-                    geo = list(np.nanmean(feat[:, :, 91:96], axis=(0, 1)))
-
                     # pse.shape = T x C x S
-                    feat = feat[:, :, :BANDS]
-                    feat = feat.reshape(feat.shape[0] * feat.shape[1], BANDS)
-                    nan_mask = np.all(np.isnan(feat), axis=1)
+                    feat = feat[:, :, :BANDS + TERRAIN]
+                    feat = feat.reshape(feat.shape[0] * feat.shape[1], BANDS + TERRAIN)
+                    nan_mask = np.any(np.isnan(feat), axis=1)
                     feat = feat[~nan_mask]
-                    feat = feat.reshape(feat.shape[0], SEQUENCE_LEN, CHANNELS)
-                    feat = np.swapaxes(feat, 0, 2)
-                    feat = np.swapaxes(feat, 0, 1)
 
-                    if np.count_nonzero(np.isnan(geo)):
-                        nan_geom += 1
-                        continue
-
-                    if np.count_nonzero(np.isnan(feat)):
-                        nan_pix += 1
-                        continue
-
-                    if np.any(feat[:, 0, :] == 2.0):
+                    if np.any(feat[:, 0] == 2.0):
                         invalid_pix += 1
                         continue
 
                     count += 1
 
+                    label = np.ones((feat.shape[0], 1)) * _class
+
                     # update mean and std
-                    # mean_std.shape =  C x T
-                    delta = np.nanmean(feat, axis=2) - mean_
-                    mean_ = mean_ + delta / count
-                    delta2 = np.nanmean(feat, axis=2) - mean_
+                    delta = np.nanmean(feat, axis=0) - band_mean
+                    band_mean = band_mean + delta / count
+                    delta2 = np.nanmean(feat, axis=0) - band_mean
                     M2 = M2 + delta * delta2
-                    std_ = np.sqrt(M2 / (count - 1))
+                    band_std = np.sqrt(M2 / (count - 1))
 
-                    ancillary = {'label': _class,
-                                 'size': feat.shape[2],
-                                 'terrain': geo}
+                    obj_ct[_class] += 1
+                    pix_ct[_class] += feat.shape[0]
 
-                    if count % 100 == 0:
+                    if count % 1000 == 0:
                         print('count: {}'.format(count))
 
                     tmp_tensor = os.path.join(tmpdirname, '{}.pth'.format(str(count).rjust(7, '0')))
-                    tmp_json = os.path.join(tmpdirname, '{}.json'.format(str(count).rjust(7, '0')))
 
-                    feat = torch.from_numpy(feat)
+                    out_array = np.append(feat, label, axis=1)
+                    feat = torch.from_numpy(out_array)
                     torch.save(feat, tmp_tensor)
-                    with open(tmp_json, 'w') as file:
-                        file.write(json.dumps(ancillary, indent=4))
 
-                    items.extend([tmp_tensor, tmp_json])
+                    items.append(tmp_tensor)
 
                     if len(items) == 200:
                         push_tar(tmpdirname, out, mode, items, tar_count)
@@ -123,18 +104,17 @@ def write_pixel_sets(out, recs, mode):
                         items = []
                         tar_count += 1
 
-    print('objects count: {}'.format(obj_ct))
-    print('final pse shape: {}'.format(feat.shape))
-    print('count of pixel sets: {}'.format(count))
-    print('nan arrays: {}'.format(nan_pix))
-    print('nan geom: {}'.format(nan_geom))
-    print('invalid (2.0) pixel values: {}'.format(invalid_pix))
+    if len(items) > 0:
+        push_tar(tmpdirname, out, mode, items, tar_count)
 
-    mean_, std_ = mean_.reshape(SEQUENCE_LEN * CHANNELS), std_.reshape(SEQUENCE_LEN * CHANNELS)
-    pkl_name = os.path.join(os.path.dirname(out), '{}_meanstd_91.pkl'.format(mode))
-    with open(pkl_name, 'wb') as handle:
-        pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
-    push_tar(tmpdirname, out, mode, items, tar_count)
+    print('objects count: {}'.format(obj_ct))
+    print('pixel count: {}'.format(pix_ct))
+    print('count of pixel sets: {}'.format(count))
+
+    if out_norm:
+        pkl_name = os.path.join(out_norm, 'meanstd.pkl')
+        with open(pkl_name, 'wb') as handle:
+            pkl.dump((band_mean, band_std), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
@@ -143,45 +123,37 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     end_idx = len(os.listdir(data_dir)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(data_dir, brace_str)
-    dataset = wds.Dataset(url).decode('torchl').to_tuple('pth', 'json')
+    dataset = wds.Dataset(url).decode('torchl').to_tuple('pth')
     first = True
     count, file_count = 0, 0
-    features, labels, terrain = None, [], []
-    remainder, remainder_lab = np.array(False), []
+    remainder = np.array(False)
     tmpdirname = tempfile.mkdtemp()
     items, tar_count = [], 0
 
     for sample in dataset:
         a = sample[0].numpy()
-        labels.extend([sample[1]['label'] for _ in range(a.shape[-1])])
-        terrain.extend([sample[1]['terrain'] for _ in range(a.shape[-1])])
         if first:
             features = a
             first = False
             if remainder.any():
-                features = np.append(features, remainder, axis=-1)
-                labels.extend(remainder_lab)
+                features = np.append(features, remainder, axis=0)
         else:
-            features = np.append(features, a, axis=-1)
-        if features.shape[-1] > n_subset:
-            remainder, remainder_lab = features[:, :, n_subset:], labels[n_subset:]
-            out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset],
-                                                                                 'terrain': terrain[:n_subset]}
+            features = np.append(features, a, axis=0)
+        if features.shape[0] > n_subset:
+            remainder = features[n_subset:, :]
+            out_features = torch.tensor(features[:n_subset, :])
             tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
-            tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
 
             torch.save(out_features, tmp_feat)
-            with open(tmp_lab, 'w') as file:
-                file.write(json.dumps(out_labels, indent=4))
 
             file_count += 1
-            print('file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
-            print('remainder', remainder.shape, len(remainder_lab))
+            print('file {}'.format(file_count))
+            print('remainder', remainder.shape)
             print('')
-            features, labels, terrain = None, [], []
+            features = None
             count += 1
             first = True
-            items.extend([tmp_feat, tmp_lab])
+            items.append(tmp_feat)
 
             if len(items) == 4:
                 push_tar(tmpdirname, out, mode, items, tar_count)
@@ -192,20 +164,14 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     if features is not None:
         while features.shape[-1] < n_subset:
             features = np.append(features, features, axis=-1)
-            labels.extend(labels)
-            terrain.extend(terrain)
         file_count += 1
-        out_features, out_labels = torch.tensor(features[:, :, :n_subset]), {'labels': labels[:n_subset],
-                                                                             'terrain': terrain[:n_subset]}
+        out_features = torch.tensor(features[:n_subset, :])
         tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
-        tmp_lab = os.path.join(tmpdirname, '{}.json'.format(str(file_count).rjust(7, '0')))
 
         torch.save(out_features, tmp_feat)
-        with open(tmp_lab, 'w') as file:
-            file.write(json.dumps(out_labels, indent=4))
 
-        print('final file {}, labels: {}, data {}'.format(file_count, out_features.shape[-1], len(out_labels)))
-        items.extend([tmp_feat, tmp_lab])
+        print('final file {}'.format(file_count))
+        items.append(tmp_feat)
         push_tar(tmpdirname, out, mode, items, tar_count)
 
 
@@ -229,7 +195,14 @@ if __name__ == '__main__':
         #     pixel_dst = os.path.join(pixels, split, '{}_points'.format(split))
         #     pixel_set_dst = os.path.join(pixel_sets, split, '{}_points'.format(split))
 
-        # write_pixel_sets(pixel_set_dst, np_images, split)
+        if split == 'train':
+            out_norm_pse = pixel_sets
+            out_norm_pixels = pixels
+        else:
+            out_norm_pixels = None
+            out_norm_pse = None
+
+        # write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================
