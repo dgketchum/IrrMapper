@@ -35,7 +35,7 @@ def get_loaders(config):
 
 
 def get_dataloader(dt, config):
-    loader = data.DataLoader(dt, batch_size=config['batch_size'],
+    loader = data.DataLoader(dt, batch_size=None,
                              num_workers=config['num_workers'], pin_memory=False)
     return loader
 
