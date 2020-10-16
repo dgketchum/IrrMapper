@@ -1,4 +1,3 @@
-import json
 import os
 import scipy.ndimage.measurements as mnts
 import numpy as np
@@ -46,7 +45,7 @@ def write_pixel_sets(out, recs, mode, out_norm):
     for j, f in enumerate(dataset):
         a = f['pth'].numpy()
         labels = a[:, :, 98:]
-        features = a[:, :, :96]
+        features = a[:, :, :98]
 
         bbox_slices = {}
         for i in range(labels.shape[2]):

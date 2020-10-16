@@ -77,7 +77,7 @@ def image_dataset(mode, config, norm):
     return dataset
 
 
-def predict_dataset(mode, config, norm):
+def predict_dataset(config, norm):
     """ Use for prediction of images using pixel-based models """
     def map_fn(item):
         features = item['pth'][:, :, :BANDS + TERRAIN]
@@ -89,9 +89,7 @@ def predict_dataset(mode, config, norm):
         return x, y, g
 
     data_dir = config['prediction_dir']
-    loc = os.path.join(data_dir, '{}_patches'.format(mode))
-    end_idx = len(os.listdir(loc)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(loc, brace_str)
-    dataset = wds.Dataset(url).decode('torchl').map(map_fn).batched(config['batch_size'])
+    loc = os.path.join(data_dir)
+    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset

@@ -5,13 +5,14 @@ from pathlib import Path
 path = Path(__file__).parents
 
 
-def get_config(model='clstm'):
+def get_config(model='clstm', mode='irr'):
     data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
 
-    config = {'mode': 'irr',
+    config = {'model': model,
+              'mode': mode,
               'rdm_seed': 1,
               'epochs': 20,
               'num_classes': 4,
@@ -24,8 +25,7 @@ def get_config(model='clstm'):
               'gamma': 1,
               'alpha': None,
               'prediction_dir': os.path.join(data, 'images', 'test'),
-              'norm': os.path.join(data, 'images', 'meanstd.pkl'),
-              'model': model}
+              'norm': os.path.join(data, 'images', 'meanstd.pkl'), }
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(data, 'pixel_sets')

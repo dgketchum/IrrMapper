@@ -72,11 +72,11 @@ def predict(config):
                 pred_img = pred_flat.reshape((image.shape[0], image.shape[1]))
                 y_flat = y.argmax(0).flatten()
 
-        # pred_img = pred_img.cpu().numpy()
-        # y = y.cpu().numpy()
-        # g = g.numpy()
-        # out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
-        # plot_prediction(image, pred_img, y, geo=g, out_file=None)
+        pred_img = pred_img.cpu().numpy()
+        y = y.cpu().numpy()
+        g = g.numpy()
+        out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
+        plot_prediction(image, pred_img, y, geo=g, out_file=None)
 
         confusion += get_conf_matrix(y_flat[mask], pred_flat[mask], config['num_classes'], device)
 
@@ -132,6 +132,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('clstm')
+    config = get_config('tcnn')
     predict(config)
 # ========================= EOF ====================================================================

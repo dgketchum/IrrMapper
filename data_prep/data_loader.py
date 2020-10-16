@@ -11,7 +11,7 @@ def get_predict_loader(config):
     config['batch_size'] = 1
 
     if config['predict_mode'] == 'pixel':
-        dt = predict_dataset('test', config, mean_std)
+        dt = predict_dataset(config, mean_std)
     elif config['predict_mode'] == 'image':
         dt = image_dataset('test', config, mean_std)
     else:
