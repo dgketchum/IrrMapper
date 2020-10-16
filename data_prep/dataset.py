@@ -21,11 +21,9 @@ def pixel_dataset(mode, config, norm):
         return x, y, g
 
     root = config['dataset_folder']
-    loc = os.path.join(root, mode, '{}_patches'.format(mode))
-    end_idx = len(os.listdir(loc)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(loc, brace_str)
-    ds = wds.Dataset(url)
+    loc = os.path.join(root, mode)
+    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    ds = wds.Dataset(urls)
     ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])
     return ds
 
@@ -54,10 +52,8 @@ def pixelset_dataset(mode, config, norm):
 
     root = config['dataset_folder']
     loc = os.path.join(root, mode, '{}_patches'.format(mode))
-    end_idx = len(os.listdir(loc)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(loc, brace_str)
-    ds = wds.Dataset(url)
+    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    ds = wds.Dataset(urls)
     ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])
     return ds
 
@@ -75,11 +71,9 @@ def image_dataset(mode, config, norm):
         return x, y, g
 
     data_dir = config['dataset_folder']
-    loc = os.path.join(data_dir, mode, '{}_patches'.format(mode))
-    end_idx = len(os.listdir(loc)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(loc, brace_str)
-    dataset = wds.Dataset(url).decode('torchl').map(map_fn).batched(config['batch_size'])
+    loc = os.path.join(data_dir, mode)
+    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset
 
 
