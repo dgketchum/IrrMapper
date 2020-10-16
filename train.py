@@ -8,7 +8,8 @@ import numpy as np
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
 from learning.metrics import confusion_matrix_analysis, get_conf_matrix
-from models.model_init import get_loaders, get_model
+from models.model_init import get_model
+from data_prep.data_loader import get_loaders
 from configure import get_config
 from utils import recursive_todevice
 
@@ -28,7 +29,7 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
             optimizer.zero_grad()
             x = torch.squeeze(x)
             out, att = model(x)
-            loss = criterion(out, y.long())
+            loss = criterion(out, y)
 
         loss.backward()
         optimizer.step()
@@ -101,8 +102,10 @@ def overall_performance(config):
 
 
 def train(config):
+
     np.random.seed(config['rdm_seed'])
     torch.manual_seed(config['rdm_seed'])
+
     prepare_output(config)
     device = torch.device(config['device'])
 
@@ -119,7 +122,7 @@ def train(config):
     optimizer = torch.optim.Adam(model.parameters())
     criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
 
-    print('Train {}'.format(config['model'].upper()))
+    print('\nTrain {}'.format(config['model'].upper()))
     for epoch in range(1, config['epochs'] + 1):
         print('\nEPOCH {}/{}'.format(epoch, config['epochs']))
 
@@ -127,7 +130,7 @@ def train(config):
         train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
         model.eval()
         evaluate_epoch(model, criterion, val_loader, config=config)
-
+        exit()
         # trainlog[epoch] = {**train_metrics, **val_metrics}
         # checkpoint(trainlog, config)
 
@@ -136,18 +139,18 @@ def train(config):
                 'optimizer': optimizer.state_dict()},
                os.path.join(config['res_dir'], 'model.pth.tar'))
 
-    print('Testing best epoch . . .')
-    model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
-    model.eval()
+    # print('Testing best epoch . . .')
+    # model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
+    # model.eval()
 
     # test_metrics, conf_mat = evaluation(model, criterion, test_loader, device=device, mode='test', config=config)
     # save_results(test_metrics, conf_mat, config)
 
-    overall_performance(config)
+    # overall_performance(config)
 
 
 if __name__ == '__main__':
-    config = get_config('dcm')
+    config = get_config('clstm')
     train(config)
 
 # ========================================================================================

@@ -5,7 +5,7 @@ Credits to  https://github.com/Lab-IDEAS/DeepCropMapping
 Deep Crop Mapper module
 
 Credits:
-The module from the works of Jinfan Xu et al. on pixel-based crop type mapping.
+The module is from the works of Jinfan Xu et al. on pixel-based crop type mapping.
 
 paper: https://www.sciencedirect.com/science/article/pii/S0034425720303163
 code: https://github.com/Lab-IDEAS/DeepCropMapping

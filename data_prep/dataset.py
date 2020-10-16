@@ -68,12 +68,9 @@ def image_dataset(mode, config, norm):
         features = item['pth'][:, :, :BANDS + TERRAIN]
         features = transform_(features, norm).float()
         x = features[:, :, :BANDS]
-        x = x.permute(2, 0, 1)
-        x = x.reshape(x.shape[1], x.shape[2], SEQUENCE_LEN, CHANNELS)
+        x = x.reshape(x.shape[0], x.shape[1], SEQUENCE_LEN, CHANNELS)
         x = x.permute((2, 3, 0, 1)).float()
         y = item['pth'][:, :, -4:].permute(2, 0, 1).int()
-        print('image', x.shape)
-
         g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
         return x, y, g
 

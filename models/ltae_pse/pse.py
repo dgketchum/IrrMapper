@@ -77,7 +77,7 @@ class PixelSetEncoder(nn.Module):
         complete sequences are processed at once. Then the temporal dimension is separated back to produce a tensor of
         shape Batch_size x Sequence length x Embedding dimension
         """
-        a, b = input
+        a, b = input, input[:, :, 0, :].squeeze() * torch.tensor(0.) + torch.tensor(1.)
         if len(a) == 2:
             out, mask = a
             extra = b

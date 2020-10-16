@@ -13,11 +13,8 @@ def get_config(model='clstm'):
 
     config = {'mode': 'irr',
               'rdm_seed': 1,
-              'epochs': 100,
-              'display_step': 10,
+              'epochs': 20,
               'num_classes': 4,
-              'nomenclature': 'label_4class',
-              'kfold': 5,
               'input_dim': 7,
               'geomfeat': None,
               'device': 'cuda:0',
@@ -27,26 +24,25 @@ def get_config(model='clstm'):
               'gamma': 1,
               'alpha': None,
               'prediction_dir': os.path.join(data, 'images', 'test'),
-              'image_norm': os.path.join(data, 'images', 'meanstd_91.pkl'),
-              'pixel_norm': os.path.join(data, 'pixels', 'meanstd.pkl'),
+              'norm': os.path.join(data, 'images', 'meanstd.pkl'),
               'model': model}
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(data, 'pixel_sets')
         config['batch_size'] = 128
         config['mlp1'] = '[7, 32, 64]'
-        config['mlp2'] = '[131, 128]'
+        config['mlp2'] = '[128, 128]'
         config['mlp3'] = '[256,128]'
-        config['mlp4'] = '[128, 64, 32, 20]'
+        config['mlp4'] = '[128, 64, 32, 4]'
         config['n_head'] = 16
         config['d_k'] = 8
         config['d_model'] = 256
         config['T'] = 1000
         config['positions'] = None
-        config['geom_dim'] = 3
-        config['geomfeat'] = True
+        config['geom_dim'] = 5
+        config['geomfeat'] = False
         config['lms'] = 13
-        config['npixel'] = 64
+        config['n_pixel'] = 64
         config['subset'] = None
         config['lr'] = 0.00025
         config['num_classes'] = 4
@@ -56,6 +52,7 @@ def get_config(model='clstm'):
 
     if config['model'] == 'dcm':
         config['batch_size'] = 1
+        config['predict_mode'] = 'pixel'
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['hidden_size'] = 36
         config['num_layers'] = 2
@@ -68,17 +65,18 @@ def get_config(model='clstm'):
 
     if config['model'] == 'tcnn':
         config['batch_size'] = 1
+        config['predict_mode'] = 'pixel'
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['sequence_len'] = 13
         config['nker'] = '[16, 16, 16]'
         config['mlp3'] = '[16, 4]'
-        config['norm'] = config['dataset_folder'] + '/meanstd.pkl'
         config['res_dir'] = os.path.join(path[0], 'models', 'temp_cnn', 'results')
         with open(os.path.join(path[0], 'models', 'temp_cnn', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'clstm':
-        config['batch_size'] = 8
+        config['batch_size'] = 6
+        config['predict_mode'] = 'image'
         config['input_dim'] = 7
         config['num_layers'] = 1
         config['dataset_folder'] = os.path.join(data, 'images')

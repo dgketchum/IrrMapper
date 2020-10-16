@@ -9,26 +9,33 @@ from matplotlib import colors
 
 from utils import recursive_todevice
 from learning.metrics import get_conf_matrix, confusion_matrix_analysis
-from models.model_init import get_model, get_predict_loader
+from models.model_init import get_model
+from data_prep.data_loader import get_predict_loader
 from configure import get_config
 from data_prep import FEATURES
 
 
-def unnormalize(x, mean_std):
-    """ get original image data"""
+def unnormalize(x, config):
+    """ get original image data (1 X H x W x T x C ) ==> ( H x W x C )"""
+    mean_std = pkl.load(open(config['norm'], 'rb'))
     x = x.squeeze()
+    if config['predict_mode'] == 'image':
+        x = x.permute(2, 3, 0, 1)
     x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
-    mean, std = torch.tensor(mean_std[0]), torch.tensor(mean_std[1])
+    mean, std = torch.tensor(mean_std[0][:x.shape[-1]]), torch.tensor(mean_std[1][:x.shape[-1]])
     x = x.mul_(std).add_(mean)
     x = x.detach().numpy()
     return x
 
 
 def predict(config):
-    print('Predict')
+    print('\nPredict w/ {}\n'.format(config['model'].upper()))
     device = torch.device(config['device'])
+
+    n_class = config['num_classes']
+    confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
+
     val_loader = get_predict_loader(config)
-    norm = pkl.load(open(config['image_norm'], 'rb'))
     model = get_model(config)
     check_pt = torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))
     optimizer = torch.optim.Adam(model.parameters())
@@ -36,41 +43,47 @@ def predict(config):
     model.to(device)
     optimizer.load_state_dict(check_pt['optimizer'])
     model.eval()
+
     for i, (x, y, g) in enumerate(val_loader):
-        if i in 88:
-            image = unnormalize(deepcopy(x), norm)
-            x = recursive_todevice(x, device)
-            if config['model'] == 'clstm':
-                y = y.argmax(dim=1)
-                with torch.no_grad():
-                    out, att = model(x)
-                    pred = out[0][0]
-                    pred = torch.argmax(pred, dim=1)
-                    pred = pred.cpu().numpy()
-                    g = g.numpy()
-            else:
-                y = y.squeeze().to(device)
-                x = x.squeeze()
-                mask = (y.sum(0) > 0).flatten()
+        image = unnormalize(deepcopy(x), config)
+        x = recursive_todevice(x, device)
 
-                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
-                with torch.no_grad():
-                    pred, att = model(x)
-                    pred = torch.argmax(pred, dim=1)
+        if config['model'] == 'clstm':
+            y = y.squeeze().to(device)
+            mask = (y.sum(0) > 0).flatten()
+            y = y.argmax(0)
+            y = y.reshape(1, y.shape[0], y.shape[1])
+            y_flat = y.flatten()
+            with torch.no_grad():
+                out, att = model(x)
+                pred = out[0][0]
+                pred_img = torch.argmax(pred, dim=1)
+                pred_flat = pred_img.flatten()
 
-                    y_flat = y.argmax(0).flatten()
-                    conf = get_conf_matrix(y_flat[mask], pred[mask], config['num_classes'], device)
-                    _, overall = confusion_matrix_analysis(conf)
-                    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
-                    print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
+        else:
+            y = y.squeeze().to(device)
+            x = x.squeeze()
+            mask = (y.sum(0) > 0).flatten()
 
-                    # prepare image for plotting, georeferencing
-                    pred = pred.reshape((image.shape[0], image.shape[1]))
-                    pred = pred.cpu().numpy()
-                    y = y.cpu().numpy()
-                    g = g.numpy()
-                    out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
-                    plot_prediction(image, pred, y, geo=g, out_file=out_fig)
+            x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
+            with torch.no_grad():
+                pred, att = model(x)
+                pred_flat = torch.argmax(pred, dim=1)
+                pred_img = pred_flat.reshape((image.shape[0], image.shape[1]))
+                y_flat = y.argmax(0).flatten()
+
+        # pred_img = pred_img.cpu().numpy()
+        # y = y.cpu().numpy()
+        # g = g.numpy()
+        # out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
+        # plot_prediction(image, pred_img, y, geo=g, out_file=None)
+
+        confusion += get_conf_matrix(y_flat[mask], pred_flat[mask], config['num_classes'], device)
+
+    _, overall = confusion_matrix_analysis(confusion)
+    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
+    print(confusion)
+    print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
 
 
 def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
@@ -119,6 +132,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('dcm')
+    config = get_config('clstm')
     predict(config)
 # ========================= EOF ====================================================================

@@ -17,6 +17,7 @@ DATES = {0: '19860101',
 # see feature_spec.py for dict of bands, lat , lon, elev, label
 CHANNELS = 7
 BANDS = 91
+TERRAIN = 5
 
 SEQUENCE_LEN = len(DATES.keys())
 

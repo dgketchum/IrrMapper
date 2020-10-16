@@ -32,8 +32,8 @@ def write_pixel_sets(out, recs, mode, out_norm):
     """
 
     count = 0
-    invalid_pix = 0
-    band_mean, band_std = 0, 0
+    invalid_pix, nan_pix = 0, 0
+    mean_, std_ = 0, 0
     M2 = 0
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     pix_ct = {0: 0, 1: 0, 2: 0, 3: 0}
@@ -63,11 +63,14 @@ def write_pixel_sets(out, recs, mode, out_norm):
                     feat = np.where(lab_mask, features[b], nan_label)
                     feat[feat == np.iinfo(np.uint32).min] = np.nan
 
-                    # pse.shape = T x C x S
                     feat = feat[:, :, :BANDS + TERRAIN]
                     feat = feat.reshape(feat.shape[0] * feat.shape[1], BANDS + TERRAIN)
                     nan_mask = np.any(np.isnan(feat), axis=1)
                     feat = feat[~nan_mask]
+
+                    if feat.shape[0] < 1:
+                        nan_pix += 1
+                        continue
 
                     if np.any(feat[:, 0] == 2.0):
                         invalid_pix += 1
@@ -78,11 +81,12 @@ def write_pixel_sets(out, recs, mode, out_norm):
                     label = np.ones((feat.shape[0], 1)) * _class
 
                     # update mean and std
-                    delta = np.nanmean(feat, axis=0) - band_mean
-                    band_mean = band_mean + delta / count
-                    delta2 = np.nanmean(feat, axis=0) - band_mean
+                    # mean_std.shape =  C x T
+                    delta = np.nanmean(feat, axis=0) - mean_
+                    mean_ = mean_ + delta / count
+                    delta2 = np.nanmean(feat, axis=0) - mean_
                     M2 = M2 + delta * delta2
-                    band_std = np.sqrt(M2 / (count - 1))
+                    std_ = np.sqrt(M2 / count)
 
                     obj_ct[_class] += 1
                     pix_ct[_class] += feat.shape[0]
@@ -109,12 +113,13 @@ def write_pixel_sets(out, recs, mode, out_norm):
 
     print('objects count: {}'.format(obj_ct))
     print('pixel count: {}'.format(pix_ct))
+    print('nan pixels: {}, 2.0 pixels: {}'.format(nan_pix, invalid_pix))
     print('count of pixel sets: {}'.format(count))
 
     if out_norm:
         pkl_name = os.path.join(out_norm, 'meanstd.pkl')
         with open(pkl_name, 'wb') as handle:
-            pkl.dump((band_mean, band_std), handle, protocol=pkl.HIGHEST_PROTOCOL)
+            pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
 def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
@@ -147,9 +152,6 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
             torch.save(out_features, tmp_feat)
 
             file_count += 1
-            print('file {}'.format(file_count))
-            print('remainder', remainder.shape)
-            print('')
             features = None
             count += 1
             first = True
