@@ -2,6 +2,8 @@ import os
 import json
 from pathlib import Path
 
+import torch
+
 path = Path(__file__).parents
 
 
@@ -11,10 +13,13 @@ def get_config(model='clstm', mode='irr'):
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
 
+    device_ct = torch.cuda.device_count()
+
     config = {'model': model,
               'mode': mode,
               'rdm_seed': 1,
-              'epochs': 20,
+              'display_step': 50,
+              'epochs': 100,
               'num_classes': 4,
               'input_dim': 7,
               'geomfeat': None,
@@ -29,7 +34,7 @@ def get_config(model='clstm', mode='irr'):
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = os.path.join(data, 'pixel_sets')
-        config['batch_size'] = 128
+        config['batch_size'] = 128 * device_ct
         config['mlp1'] = '[7, 32, 64]'
         config['mlp2'] = '[128, 128]'
         config['mlp3'] = '[256,128]'
@@ -51,7 +56,7 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'dcm':
-        config['batch_size'] = 1
+        config['batch_size'] = 1 * device_ct
         config['predict_mode'] = 'pixel'
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['hidden_size'] = 36
@@ -64,7 +69,7 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'tcnn':
-        config['batch_size'] = 1
+        config['batch_size'] = 1 * device_ct
         config['predict_mode'] = 'pixel'
         config['dataset_folder'] = os.path.join(data, 'pixels')
         config['sequence_len'] = 13
@@ -75,7 +80,7 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'clstm':
-        config['batch_size'] = 6
+        config['batch_size'] = 6 * device_ct
         config['predict_mode'] = 'image'
         config['input_dim'] = 7
         config['num_layers'] = 1

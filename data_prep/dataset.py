@@ -51,7 +51,7 @@ def pixelset_dataset(mode, config, norm):
         return x, y, g
 
     root = config['dataset_folder']
-    loc = os.path.join(root, mode, '{}_patches'.format(mode))
+    loc = os.path.join(root, mode)
     urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
     ds = wds.Dataset(urls)
     ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])

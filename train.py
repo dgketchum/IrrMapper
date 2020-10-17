@@ -1,9 +1,11 @@
 import os
 import json
 import pickle as pkl
+import numpy as np
 
 import torch
-import numpy as np
+import torch.nn as nn
+import torchnet as tnt
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
@@ -33,11 +35,13 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
 
         loss.backward()
         optimizer.step()
+        if (i + 1) % config['display_step'] == 0:
+            print('Step {}, Loss: {:.4f}'.format(i, loss.item()))
+
     print('Train Loss: {:.4f}'.format(loss.item()))
 
 
 def evaluate_epoch(model, criterion, loader, config):
-
     device = torch.device(config['device'])
     n_class = config['num_classes']
     confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
@@ -67,7 +71,7 @@ def evaluate_epoch(model, criterion, loader, config):
     per_class, overall = confusion_matrix_analysis(confusion)
     prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
     print('Evaluation Loss: {:.4f}, Precision {:.4f}, Recall {:.4f}, '
-          'F1 Score {:.2f},'.format(loss.item(), prec, rec, f1))
+          'F1 Score {:.2f}, \n {}'.format(loss.item(), prec, rec, f1, conf))
     pkl.dump(confusion, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
 
 
@@ -102,7 +106,6 @@ def overall_performance(config):
 
 
 def train(config):
-
     np.random.seed(config['rdm_seed'])
     torch.manual_seed(config['rdm_seed'])
 
@@ -111,16 +114,21 @@ def train(config):
 
     train_loader, test_loader, val_loader = get_loaders(config)
     model = get_model(config)
+    if torch.cuda.device_count() > 1:
+        print(torch.cuda.device_count(), "GPUs")
+        model = nn.DataParallel(model)
+    model = model.to(device)
+    model.apply(weight_init)
+
+    optimizer = torch.optim.Adam(model.parameters())
+    criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
 
     # config['N_params'] = model.param_ratio()
 
     with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
         _file.write(json.dumps(config, indent=4))
 
-    model = model.to(device)
-    model.apply(weight_init)
-    optimizer = torch.optim.Adam(model.parameters())
-    criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
+    trainlog = {}
 
     print('\nTrain {}'.format(config['model'].upper()))
     for epoch in range(1, config['epochs'] + 1):
@@ -130,27 +138,21 @@ def train(config):
         train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
         model.eval()
         evaluate_epoch(model, criterion, val_loader, config=config)
-        exit()
-        # trainlog[epoch] = {**train_metrics, **val_metrics}
-        # checkpoint(trainlog, config)
 
-    evaluate_epoch(model, criterion, val_loader, config=config)
     torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict()},
                os.path.join(config['res_dir'], 'model.pth.tar'))
 
-    # print('Testing best epoch . . .')
-    # model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
-    # model.eval()
-
-    # test_metrics, conf_mat = evaluation(model, criterion, test_loader, device=device, mode='test', config=config)
-    # save_results(test_metrics, conf_mat, config)
+    print('\nRun test set....')
+    model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
+    model.eval()
+    evaluate_epoch(model, criterion, test_loader, config=config)
 
     # overall_performance(config)
 
 
 if __name__ == '__main__':
-    config = get_config('clstm')
+    config = get_config('clstm', 'cdl')
     train(config)
 
 # ========================================================================================

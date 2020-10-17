@@ -1,4 +1,5 @@
 import os
+from pprint import pprint
 import numpy as np
 from webdataset import dataset as wds
 
@@ -385,22 +386,119 @@ def cdl_training_data():
     return _map
 
 
+def cdl_remap():
+    return None
+
+
+def cdl_training_data_strings():
+    _map = [('Pop or Orn Corn', 14),
+            ('Mint', 1),
+            ('', 2),
+            ('', 3),
+            ('', 4),
+            ('', 4),
+            ('', 3),
+            ('', 6),
+            ('Barley', 4),
+            ('Durum Wheat', 13),
+            ('Spring Wheat', 20),
+            ('Winter Wheat', 38),
+            ('Other Small Grains', 42),
+            ('Dbl Crop WinWht/Soybeans', 46),
+            ('Rye', 74),
+            ('Oats', 87),
+            ('Millet', 84),
+            ('Speltz', 96),
+            ('Canola', 115),
+            ('Flaxseed', 143),
+            ('Safflower', 184),
+            ('Rape Seed', 236),
+            ('Mustard', 217),
+            ('Alfalfa', 247),
+            ('Other Hay/Non Alfalfa', 296),
+            ('Camelina', 288),
+            ('Buckwheat', 298),
+            ('', 334),
+            ('Sugarbeets', 347),
+            ('Dry Beans', 370),
+            ('Potatoes', 388),
+            ('Other Crops', 402),
+            ('Sugarcane', 391),
+            ('Sweet Potatoes', 400),
+            ('Misc Vegs & Fruits', 398),
+            ('Watermelons', 444),
+            ('Onions', 417),
+            ('Cucumbers', 473),
+            ('Chick Peas', 505),
+            ('Lentils', 503),
+            ('Peas', 467),
+            ('Tomatoes', 488),
+            ('Caneberries', 527),
+            ('Hops', 455),
+            ('Herbs', 422),
+            ('Clover/Wildflowers', 401),
+            ('Sod/Grass Seed', 390),
+            ('Switchgrass', 376),
+            ('Fallow/Idle Cropland', 410),
+            ('Pasture/Grass', 386),
+            ('Forest', 354),
+            ('Shrubland', 387),
+            ('Barren', 348),
+            ('Cherries', 325),
+            ('Peaches', 310),
+            ('Apples', 289),
+            ('Grapes', 278),
+            ('Christmas Trees', 296),
+            ('Other Tree Crops', 313),
+            ('Citrus', 362),
+            ('', 310),
+            ('Pecans', 285),
+            ('Almonds', 263),
+            ('Walnuts', 246),
+            ('Pears', 231),
+            ('', 186),
+            ('', 197),
+            ('', 236),
+            ('Clouds/No Data', 353),
+            ('Developed', 355),
+            ('Water', 324),
+            ('', 369),
+            ('', 312),
+            ('', 217),
+            ('Wetlands', 144),
+            ('Nonag/Undefined', 168),
+            ('', 223),
+            ('', 608),
+            ('', 2173),
+            ('Aquaculture', 1131),
+            ('', 1909),
+            ('', 1348),
+            ('', 193),
+            ('', 207),
+            ('', 16),
+            ('', 38029),
+            ('', 3),
+            ('Sweet Corn', 6),
+            ('Tobacco', 1)]
+
+
 def map_cdl(root):
     counts = {}
     loc = os.path.join(root)
     urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
     dataset = wds.Dataset(urls).decode('torchl')
     for j, f in enumerate(dataset):
-        print(j)
         a = f['pth'].numpy()
         features = a[:, :, 97].astype(int)
+        print(np.count_nonzero(features == -1), features.size)
         ct = np.unique(features, return_counts=True)
         for (crop, num) in zip(list(ct[0]), list(ct[1])):
+            if crop == -1:
+                print(crop, num)
             if crop not in counts.keys():
                 counts[str(crop)] = num
             else:
                 counts[str(crop)] += num
-    print(counts)
 
 
 if __name__ == '__main__':

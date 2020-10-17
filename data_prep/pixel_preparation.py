@@ -121,7 +121,7 @@ def write_pixel_sets(out, recs, mode, out_norm):
             pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
     """ write numpy arrays every n samples from pixel sets"""
 
     end_idx = len(os.listdir(data_dir)) - 1
@@ -187,9 +187,9 @@ if __name__ == '__main__':
     pixel_sets = os.path.join(data, 'pixel_sets')
 
     for split in ['train', 'test', 'valid']:
-        np_images = os.path.join(images, split, '{}_patches'.format(split))
-        pixel_dst = os.path.join(pixels, split, '{}_patches'.format(split))
-        pixel_set_dst = os.path.join(pixel_sets, split, '{}_patches'.format(split))
+        np_images = os.path.join(images, split)
+        pixel_dst = os.path.join(pixels, split)
+        pixel_set_dst = os.path.join(pixel_sets, split)
 
         # if split == 'train':
         #     np_images = os.path.join(images, split, '{}_points'.format(split))
@@ -203,7 +203,7 @@ if __name__ == '__main__':
             out_norm_pixels = None
             out_norm_pse = None
 
-        # write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
+        write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================
