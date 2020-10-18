@@ -1,5 +1,4 @@
 import os
-from glob import glob, iglob
 import torch
 import webdataset as wds
 from webdataset import dataset as wds
@@ -8,10 +7,10 @@ from data_prep import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
 
 
 def find_archives(path):
-    for file in iglob(path, recursive=True):
-        [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
-        print(file)
-    return file
+    tar_list = []
+    for top_dir, dir_list, obj_list in os.walk(path):
+        tar_list.extend([os.path.join(top_dir, obj) for obj in obj_list if obj.endswith('.tar')])
+    return tar_list
 
 
 def transform_(x, mean_std):

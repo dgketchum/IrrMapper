@@ -25,7 +25,7 @@ def get_config(model='clstm', mode='irr'):
               'mode': mode,
               'rdm_seed': 1,
               'display_step': 50,
-              'epochs': 100,
+              'epochs': 1,
               'num_classes': 4,
               'input_dim': 7,
               'geomfeat': None,

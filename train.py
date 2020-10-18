@@ -39,7 +39,7 @@ def train_epoch(model, optimizer, criterion, loader, config):
             print('Step {}, Loss: {:.4f}'.format(i, loss.item()))
 
     print('Train Loss: {:.4f}'.format(loss.item()))
-    return {'loss', loss.item()}
+    return {'train_loss': loss.item()}
 
 
 def evaluate_epoch(model, criterion, loader, config, mode='valid'):
@@ -73,8 +73,10 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
           ''.format(loss.item(), overall['iou'], overall['precision'], overall['recall'], overall['f1-score']))
 
     if mode == 'valid':
+        overall['{}_loss'.format(mode)] = loss.item()
         return overall
     elif mode == 'test':
+        overall['{}_loss'.format(mode)] = loss.item()
         return overall, confusion
 
 
@@ -150,11 +152,6 @@ def train(config):
     model.eval()
     metrics, conf = evaluate_epoch(model, criterion, test_loader, config=config, mode='test')
     overall_performance(config, conf)
-    _, perf = confusion_matrix_analysis(conf)
-    print('Test Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
-          ''.format(perf['precision'], perf['recall'], perf['f1-score']))
-    with open(os.path.join(config['res_dir'], 'overall.json'), 'w') as file:
-        file.write(json.dumps(perf, indent=4))
 
 
 if __name__ == '__main__':
