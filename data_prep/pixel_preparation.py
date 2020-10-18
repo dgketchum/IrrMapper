@@ -18,7 +18,7 @@ structure = np.array([
 
 def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
     if prefix:
-        tar_filename = '{}_{}_{}.tar'.format(mode, prefix, str(ind).zfill(6))
+        tar_filename = '{}_{}_{}.tar'.format(prefix, mode, str(ind).zfill(6))
     else:
         tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
     tar_archive = os.path.join(out_dir, tar_filename)
@@ -39,18 +39,17 @@ def write_pixel_sets(out, recs, mode, out_norm):
     M2 = 0
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     pix_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-
     if mode == 'train' and 'points' in recs:
+        url_list = []
         for _type in ['dryland', 'irrigated', 'fallow']:
-            url_list = [os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar') and _type in x]
+            url_list.append([os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar') and _type in x])
             prefixes = ['d', 'i', 'f']
     else:
         url_list = [[os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar')]]
         prefixes = [None]
 
     for urls, pref in zip(url_list, prefixes):
-        print(urls[:1])
-        break
+        print(urls[0], pref)
         dataset = wds.Dataset(urls).decode('torchl')
         tar_count, items = 0, []
         tmpdirname = tempfile.mkdtemp()
@@ -136,14 +135,14 @@ def write_pixel_sets(out, recs, mode, out_norm):
                 pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
     """ write numpy arrays every n samples from pixel sets"""
 
-    url_list = None
-    if mode == 'train':
+    if mode == 'train' and 'points' in data_dir:
+        url_list = []
         prefixes = ['d', 'i', 'f']
         for _type in prefixes:
-            url_list = [os.path.join(data_dir, x) for x in os.listdir(data_dir) if x.endswith('.tar') and _type in x]
+            url_list.append([os.path.join(data_dir, x) for x in os.listdir(data_dir) if x.endswith('.tar') and _type in x])
     else:
         url_list = [[os.path.join(data_dir, x) for x in os.listdir(data_dir) if x.endswith('.tar')]]
         prefixes = [None]
@@ -180,7 +179,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
                 items.append(tmp_feat)
 
                 if len(items) == 4:
-                    push_tar(tmpdirname, out, mode, items, tar_count)
+                    push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
                     tmpdirname = tempfile.mkdtemp()
                     items = []
                     tar_count += 1
@@ -191,12 +190,10 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
             file_count += 1
             out_features = torch.tensor(features[:n_subset, :])
             tmp_feat = os.path.join(tmpdirname, '{}.pth'.format(str(file_count).rjust(7, '0')))
-
             torch.save(out_features, tmp_feat)
-
             print('final file {}'.format(file_count))
             items.append(tmp_feat)
-            push_tar(tmpdirname, out, mode, items, tar_count)
+            push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
 
 
 if __name__ == '__main__':
