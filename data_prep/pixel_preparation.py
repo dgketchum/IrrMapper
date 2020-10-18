@@ -16,8 +16,11 @@ structure = np.array([
 ])
 
 
-def push_tar(t_dir, out_dir, mode, items, ind):
-    tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
+def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
+    if prefix:
+        tar_filename = '{}_{}_{}.tar'.format(mode, prefix, str(ind).zfill(6))
+    else:
+        tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
     tar_archive = os.path.join(out_dir, tar_filename)
     with tarfile.open(tar_archive, 'w') as tar:
         for i in items:
@@ -36,10 +39,10 @@ def write_pixel_sets(out, recs, mode, out_norm):
     M2 = 0
     obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
     pix_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-    end_idx = len(os.listdir(recs)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(recs, brace_str)
-    dataset = wds.Dataset(url).decode('torchl')
+
+    urls = [os.path.join(recs, sd, x) for x in os.listdir(recs) if x.endswith('.tar')]
+
+    dataset = wds.Dataset(urls).decode('torchl')
     tar_count, items = 0, []
     tmpdirname = tempfile.mkdtemp()
     for j, f in enumerate(dataset):
@@ -102,14 +105,19 @@ def write_pixel_sets(out, recs, mode, out_norm):
                     items.append(tmp_tensor)
 
                     if len(items) == 200:
-                        push_tar(tmpdirname, out, mode, items, tar_count)
+                        if mode == 'train':
+                            push_tar(tmpdirname, out, mode, items, tar_count, prefix=None)
+                        else:
+                            push_tar(tmpdirname, out, mode, items, tar_count)
                         tmpdirname = tempfile.mkdtemp()
                         items = []
                         tar_count += 1
 
     if len(items) > 0:
-        push_tar(tmpdirname, out, mode, items, tar_count)
-
+        if mode == 'train':
+            push_tar(tmpdirname, out, mode, items, tar_count, prefix=None)
+        else:
+            push_tar(tmpdirname, out, mode, items, tar_count)
     print('objects count: {}'.format(obj_ct))
     print('pixel count: {}'.format(pix_ct))
     print('nan pixels: {}, 2.0 pixels: {}'.format(nan_pix, invalid_pix))
@@ -124,11 +132,8 @@ def write_pixel_sets(out, recs, mode, out_norm):
 def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
     """ write numpy arrays every n samples from pixel sets"""
 
-    global features
-    end_idx = len(os.listdir(data_dir)) - 1
-    brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
-    url = os.path.join(data_dir, brace_str)
-    dataset = wds.Dataset(url).decode('torchl').to_tuple('pth')
+    urls = [os.path.join(data_dir, x) for x in os.listdir(data_dir) if x.endswith('.tar')]
+    dataset = wds.Dataset(urls).decode('torchl').to_tuple('pth')
     first = True
     count, file_count = 0, 0
     remainder = np.array(False)
@@ -187,24 +192,23 @@ if __name__ == '__main__':
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
+
     for split in ['train', 'test', 'valid']:
         np_images = os.path.join(images, split)
         pixel_dst = os.path.join(pixels, split)
         pixel_set_dst = os.path.join(pixel_sets, split)
 
-        # if split == 'train':
-        #     np_images = os.path.join(images, split, '{}_points'.format(split))
-        #     pixel_dst = os.path.join(pixels, split, '{}_points'.format(split))
-        #     pixel_set_dst = os.path.join(pixel_sets, split, '{}_points'.format(split))
-
         if split == 'train':
-            out_norm_pse = pixel_sets
-            out_norm_pixels = pixels
+            for s in ['patches', 'points']:
+                out_norm_pse = pixel_sets
+                np_images = os.path.join(images, split, '{}_{}'.format(split, s))
+                pixel_dst = os.path.join(pixels, split, '{}_{}'.format(split, s))
+                pixel_set_dst = os.path.join(pixel_sets, split, '{}_{}'.format(split, s))
+                write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
+                write_pixel_blocks(pixel_set_dst, pixel_dst, split)
         else:
-            out_norm_pixels = None
             out_norm_pse = None
-
-        write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
-        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+            write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
+            write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================
