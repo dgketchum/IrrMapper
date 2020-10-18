@@ -124,6 +124,7 @@ def write_pixel_sets(out, recs, mode, out_norm):
 def write_pixel_blocks(data_dir, out, mode, n_subset=100000):
     """ write numpy arrays every n samples from pixel sets"""
 
+    global features
     end_idx = len(os.listdir(data_dir)) - 1
     brace_str = '{}_{{000000..{}}}.tar'.format(mode, str(end_idx).rjust(6, '0'))
     url = os.path.join(data_dir, brace_str)

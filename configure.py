@@ -9,9 +9,15 @@ path = Path(__file__).parents
 
 def get_config(model='clstm', mode='irr'):
     data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
+    pixels = os.path.join(data, 'pixels')
+    images = os.path.join(data, 'images')
+    pixel_sets = os.path.join(data, 'pixel_sets')
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
+        pixels = os.path.join(data, 'pixels')
+        images = os.path.join(data, 'images')
+        pixel_sets = os.path.join(data, 'pixel_sets')
 
     device_ct = torch.cuda.device_count()
 
@@ -29,11 +35,11 @@ def get_config(model='clstm', mode='irr'):
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
-              'prediction_dir': os.path.join(data, 'images', 'test'),
+              'prediction_dir': os.path.join(images, 'test'),
               'norm': os.path.join(data, 'images', 'meanstd.pkl'), }
 
     if config['model'] == 'ltae':
-        config['dataset_folder'] = os.path.join(data, 'pixel_sets')
+        config['dataset_folder'] = pixel_sets
         config['batch_size'] = 128 * device_ct
         config['mlp1'] = '[7, 32, 64]'
         config['mlp2'] = '[128, 128]'
@@ -56,9 +62,9 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'dcm':
-        config['batch_size'] = 1 * device_ct
+        config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
-        config['dataset_folder'] = os.path.join(data, 'pixels')
+        config['batch_size'] = 1 * device_ct
         config['hidden_size'] = 36
         config['num_layers'] = 2
         config['bidirectional'] = True
@@ -69,9 +75,9 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'tcnn':
-        config['batch_size'] = 1 * device_ct
+        config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
-        config['dataset_folder'] = os.path.join(data, 'pixels')
+        config['batch_size'] = 1 * device_ct
         config['sequence_len'] = 13
         config['nker'] = '[16, 16, 16]'
         config['mlp3'] = '[16, 4]'
@@ -80,11 +86,11 @@ def get_config(model='clstm', mode='irr'):
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'clstm':
-        config['batch_size'] = 6 * device_ct
+        config['dataset_folder'] = images
         config['predict_mode'] = 'image'
+        config['batch_size'] = 6 * device_ct
         config['input_dim'] = 7
         config['num_layers'] = 1
-        config['dataset_folder'] = os.path.join(data, 'images')
         config['kernel_size'] = (3, 3)
         config['hidden_dim'] = 4
         config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')

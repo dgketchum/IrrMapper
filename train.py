@@ -5,7 +5,6 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-import torchnet as tnt
 
 from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
@@ -16,7 +15,8 @@ from configure import get_config
 from utils import recursive_todevice
 
 
-def train_epoch(model, optimizer, criterion, loader, device, config):
+def train_epoch(model, optimizer, criterion, loader, config):
+    device = torch.device(config['device'])
     loss = None
     for i, (x, y, g) in enumerate(loader):
         x = recursive_todevice(x, device)
@@ -39,9 +39,10 @@ def train_epoch(model, optimizer, criterion, loader, device, config):
             print('Step {}, Loss: {:.4f}'.format(i, loss.item()))
 
     print('Train Loss: {:.4f}'.format(loss.item()))
+    return {'loss', loss.item()}
 
 
-def evaluate_epoch(model, criterion, loader, config):
+def evaluate_epoch(model, criterion, loader, config, mode='valid'):
     device = torch.device(config['device'])
     n_class = config['num_classes']
     confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
@@ -65,14 +66,16 @@ def evaluate_epoch(model, criterion, loader, config):
                 pred, att = model(x)
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                conf = get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
-                confusion += conf
+                confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
 
     per_class, overall = confusion_matrix_analysis(confusion)
-    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
-    print('Evaluation Loss: {:.4f}, Precision {:.4f}, Recall {:.4f}, '
-          'F1 Score {:.2f}, \n {}'.format(loss.item(), prec, rec, f1, conf))
-    pkl.dump(confusion, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
+    print('Evaluation Loss: {:.4f}, IOU: {:.4f}, Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
+          ''.format(loss.item(), overall['iou'], overall['precision'], overall['recall'], overall['f1-score']))
+
+    if mode == 'valid':
+        return overall
+    elif mode == 'test':
+        return overall, confusion
 
 
 def prepare_output(config):
@@ -91,15 +94,10 @@ def save_results(metrics, conf_mat, config):
     pkl.dump(conf_mat, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
 
 
-def overall_performance(config):
-    cm = np.zeros((config['num_classes'], config['num_classes']))
-    for fold in range(1, config['kfold'] + 1):
-        cm += pkl.load(open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'rb'))
-
-    _, perf = confusion_matrix_analysis(cm)
-
-    print('Overall performance:')
-    print('Acc: {},  F1: {}'.format(perf['Accuracy'], perf['MACRO_IoU']))
+def overall_performance(config, conf):
+    _, perf = confusion_matrix_analysis(conf)
+    print('Test Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
+          ''.format(perf['precision'], perf['recall'], perf['f1-score']))
 
     with open(os.path.join(config['res_dir'], 'overall.json'), 'w') as file:
         file.write(json.dumps(perf, indent=4))
@@ -128,31 +126,39 @@ def train(config):
     with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
         _file.write(json.dumps(config, indent=4))
 
-    trainlog = {}
+    train_log = {}
+    best_iou = 0.0
 
     print('\nTrain {}'.format(config['model'].upper()))
     for epoch in range(1, config['epochs'] + 1):
         print('\nEPOCH {}/{}'.format(epoch, config['epochs']))
 
         model.train()
-        train_epoch(model, optimizer, criterion, train_loader, device=device, config=config)
+        train_metrics = train_epoch(model, optimizer, criterion, train_loader, config=config)
         model.eval()
-        evaluate_epoch(model, criterion, val_loader, config=config)
+        val_metrics = evaluate_epoch(model, criterion, val_loader, config=config)
 
-    torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict()},
-               os.path.join(config['res_dir'], 'model.pth.tar'))
+        train_log[epoch] = {**train_metrics, **val_metrics}
+        if val_metrics['iou'] >= best_iou:
+            best_iou = val_metrics['iou']
+            torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
+                        'optimizer': optimizer.state_dict()},
+                       os.path.join(config['res_dir'], 'model.pth.tar'))
 
     print('\nRun test set....')
     model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
     model.eval()
-    evaluate_epoch(model, criterion, test_loader, config=config)
-
-    # overall_performance(config)
+    metrics, conf = evaluate_epoch(model, criterion, test_loader, config=config, mode='test')
+    overall_performance(config, conf)
+    _, perf = confusion_matrix_analysis(conf)
+    print('Test Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
+          ''.format(perf['precision'], perf['recall'], perf['f1-score']))
+    with open(os.path.join(config['res_dir'], 'overall.json'), 'w') as file:
+        file.write(json.dumps(perf, indent=4))
 
 
 if __name__ == '__main__':
-    config = get_config('clstm', 'cdl')
+    config = get_config('tcnn')
     train(config)
 
 # ========================================================================================

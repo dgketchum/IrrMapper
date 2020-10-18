@@ -1,9 +1,17 @@
 import os
+from glob import glob, iglob
 import torch
 import webdataset as wds
 from webdataset import dataset as wds
 
 from data_prep import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
+
+
+def find_archives(path):
+    for file in iglob(path, recursive=True):
+        [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+        print(file)
+    return file
 
 
 def transform_(x, mean_std):
@@ -22,7 +30,7 @@ def pixel_dataset(mode, config, norm):
 
     root = config['dataset_folder']
     loc = os.path.join(root, mode)
-    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    urls = find_archives(loc)
     ds = wds.Dataset(urls)
     ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])
     return ds

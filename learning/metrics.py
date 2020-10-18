@@ -23,31 +23,28 @@ def confusion_matrix_analysis(mat):
         fp = torch.sum(mat[:, j]) - tp
         fn = torch.sum(mat[j, :]) - tp
 
-        d['IoU'] = tp / (tp + fp + fn + epsilon)
-        d['Precision'] = tp / (tp + fp + epsilon)
-        d['Recall'] = tp / (tp + fn + epsilon)
-        d['F1-score'] = 2 * tp / (2 * tp + fp + fn + epsilon)
+        d['iou'] = tp / (tp + fp + fn + epsilon)
+        d['precision'] = tp / (tp + fp + epsilon)
+        d['recall'] = tp / (tp + fn + epsilon)
+        d['f1-score'] = 2 * tp / (2 * tp + fp + fn + epsilon)
 
-        per_class[str(j)] = d
+        per_class[str(j)] = {k: v.item() for k, v in d.items()}
 
         TP += tp
         FP += fp
         FN += fn
 
-    overall = {'IoU': TP / (TP + FP + FN + epsilon),
+    overall = {'iou': TP / (TP + FP + FN + epsilon),
                'precision': TP / (TP + FP + epsilon),
                'recall': TP / (TP + FN + epsilon),
                'f1-score': 2 * TP / (2 * TP + FP + FN + epsilon),
                'accuracy': torch.sum(torch.diag(mat)) / torch.sum(mat)}
 
+    overall = {k: v.item() for k, v in overall.items()}
+
     return per_class, overall
 
 
 if __name__ == '__main__':
-    t = torch.tensor([[4802., 86., 0., 144.],
-                      [0., 0., 0., 0.],
-                      [0., 0., 0., 0.],
-                      [10., 37., 0., 654.]], device='cuda:0', dtype=torch.float64)
-    p_c, overall = confusion_matrix_analysis(t)
-    print(overall)
+    pass
 # =======================================================================================
