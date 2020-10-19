@@ -2,6 +2,7 @@ import os
 import json
 import pickle as pkl
 import numpy as np
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -14,8 +15,11 @@ from data_prep.data_loader import get_loaders
 from configure import get_config
 from utils import recursive_todevice
 
+TIME_START = datetime.now()
+
 
 def train_epoch(model, optimizer, criterion, loader, config):
+    ts = datetime.now()
     device = torch.device(config['device'])
     loss = None
     for i, (x, y, g) in enumerate(loader):
@@ -38,11 +42,13 @@ def train_epoch(model, optimizer, criterion, loader, config):
         if (i + 1) % config['display_step'] == 0:
             print('Step {}, Loss: {:.4f}'.format(i, loss.item()))
 
-    print('Train Loss: {:.4f}'.format(loss.item()))
+    t_delta = datetime.now - ts
+    print('Train Loss: {:.4f} in {:.2f} minutes'.format(loss.item(), t_delta.seconds / 60.))
     return {'train_loss': loss.item()}
 
 
 def evaluate_epoch(model, criterion, loader, config, mode='valid'):
+    ts = datetime.now()
     device = torch.device(config['device'])
     n_class = config['num_classes']
     confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
@@ -69,8 +75,10 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
                 confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
 
     per_class, overall = confusion_matrix_analysis(confusion)
+    t_delta = datetime.now - ts
     print('Evaluation Loss: {:.4f}, IOU: {:.4f}, Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
-          ''.format(loss.item(), overall['iou'], overall['precision'], overall['recall'], overall['f1-score']))
+          'in {:.2f} minutes'.format(loss.item(), overall['iou'], overall['precision'],
+                                 overall['recall'], overall['f1-score'], t_delta.seconds / 60.))
 
     if mode == 'valid':
         overall['{}_loss'.format(mode)] = loss.item()
@@ -152,6 +160,8 @@ def train(config):
     model.eval()
     metrics, conf = evaluate_epoch(model, criterion, test_loader, config=config, mode='test')
     overall_performance(config, conf)
+    t_delta = datetime.now() - TIME
+    print('Total Time: {:.2f} minutes'.format(loss.item(), t_delta.seconds / 60.))
 
 
 if __name__ == '__main__':
