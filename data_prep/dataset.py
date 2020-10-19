@@ -59,7 +59,7 @@ def pixelset_dataset(mode, config, norm):
 
     root = config['dataset_folder']
     loc = os.path.join(root, mode)
-    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    urls = find_archives(loc)
     ds = wds.Dataset(urls)
     ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])
     return ds
@@ -79,7 +79,7 @@ def image_dataset(mode, config, norm):
 
     data_dir = config['dataset_folder']
     loc = os.path.join(data_dir, mode)
-    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    urls = find_archives(loc)
     dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset
 
@@ -97,6 +97,6 @@ def predict_dataset(config, norm):
 
     data_dir = config['prediction_dir']
     loc = os.path.join(data_dir)
-    urls = [os.path.join(loc, x) for x in os.listdir(loc) if x.endswith('.tar')]
+    urls = find_archives(loc)
     dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset

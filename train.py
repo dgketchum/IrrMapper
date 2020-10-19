@@ -155,7 +155,7 @@ def train(config):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn')
+    config = get_config('clstm')
     train(config)
 
 # ========================================================================================
