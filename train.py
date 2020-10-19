@@ -40,9 +40,9 @@ def train_epoch(model, optimizer, criterion, loader, config):
         loss.backward()
         optimizer.step()
         if (i + 1) % config['display_step'] == 0:
-            print('Step {}, Loss: {:.4f}'.format(i, loss.item()))
+            print('Train Step {}, Loss: {:.4f}'.format(i, loss.item()))
 
-    t_delta = datetime.now - ts
+    t_delta = datetime.now() - ts
     print('Train Loss: {:.4f} in {:.2f} minutes'.format(loss.item(), t_delta.seconds / 60.))
     return {'train_loss': loss.item()}
 
@@ -75,7 +75,7 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
                 confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
 
     per_class, overall = confusion_matrix_analysis(confusion)
-    t_delta = datetime.now - ts
+    t_delta = datetime.now() - ts
     print('Evaluation Loss: {:.4f}, IOU: {:.4f}, Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
           'in {:.2f} minutes'.format(loss.item(), overall['iou'], overall['precision'],
                                  overall['recall'], overall['f1-score'], t_delta.seconds / 60.))
@@ -160,12 +160,12 @@ def train(config):
     model.eval()
     metrics, conf = evaluate_epoch(model, criterion, test_loader, config=config, mode='test')
     overall_performance(config, conf)
-    t_delta = datetime.now() - TIME
-    print('Total Time: {:.2f} minutes'.format(loss.item(), t_delta.seconds / 60.))
+    t_delta = datetime.now() - TIME_START
+    print('Total Time: {:.2f} minutes'.format(t_delta.seconds / 60.))
 
 
 if __name__ == '__main__':
-    config = get_config('clstm')
+    config = get_config('tcnn')
     train(config)
 
 # ========================================================================================
