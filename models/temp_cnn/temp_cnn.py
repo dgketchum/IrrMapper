@@ -58,7 +58,8 @@ class TempConv(nn.Module):
             self.position_enc = None
 
     def forward(self, input):
-        sz_b, seq_len, _ = input.shape
+        sz_b, seq_len, channels = input.shape
+        # dataparallel requires tensor outputs, including channel dim
         if self.position_enc is not None:
             src_pos = torch.arange(1, seq_len + 1, dtype=torch.long).expand(sz_b, seq_len).to(input.device)
             enc_output = input + self.position_enc(src_pos)
@@ -68,7 +69,7 @@ class TempConv(nn.Module):
         out = self.conv1d(enc_output.permute(0, 2, 1))
         out = out.view(out.shape[0], -1)
         out = self.linear(out)
-        return out, _
+        return out, torch.tensor(channels)
 
 
 def get_sinusoid_encoding_table(positions, d_hid, T=1000):

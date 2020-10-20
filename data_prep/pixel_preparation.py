@@ -197,7 +197,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
 
 
 if __name__ == '__main__':
-    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
+    data = '/home/dgketchum/tfrecords/tarchives'
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'

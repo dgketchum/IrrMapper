@@ -8,7 +8,7 @@ path = Path(__file__).parents
 
 
 def get_config(model='clstm', mode='irr'):
-    data = '/home/dgketchum/IrrigationGIS/tfrecords/tarchives'
+    data = '/home/dgketchum/tfrecords/tarchives'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
     pixel_sets = os.path.join(data, 'pixel_sets')
