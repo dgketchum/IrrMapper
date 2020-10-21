@@ -58,6 +58,7 @@ class TempConv(nn.Module):
             self.position_enc = None
 
     def forward(self, input):
+        input = input.squeeze()
         sz_b, seq_len, channels = input.shape
         channels = torch.tensor(channels).cuda()
         # dataparallel requires tensor outputs, including channel dim
