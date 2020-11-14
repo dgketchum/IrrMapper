@@ -72,6 +72,8 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
                 pred, att = model(x)
                 loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
+                if config['batch_size'] > 1:
+                    y = y.flatten()
                 confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
 
     per_class, overall = confusion_matrix_analysis(confusion)
@@ -165,7 +167,7 @@ def train(config):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn')
+    config = get_config('tcnn', mode='irr')
     train(config)
 
 # ========================================================================================

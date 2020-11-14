@@ -4,6 +4,7 @@ import numpy as np
 from copy import deepcopy
 
 import torch
+from torchsummary import summary
 from matplotlib import pyplot as plt
 from matplotlib import colors
 
@@ -29,7 +30,6 @@ def unnormalize(x, config):
 
 
 def predict(config):
-    print('\nPredict w/ {}\n'.format(config['model'].upper()))
     device = torch.device(config['device'])
 
     n_class = config['num_classes']
@@ -37,9 +37,9 @@ def predict(config):
 
     val_loader = get_predict_loader(config)
     model = get_model(config)
-    check_pt = torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))
+    check_pt = torch.load(os.path.join(config['res_dir'], 'gcss_dcm_model.pth.tar'))
     optimizer = torch.optim.Adam(model.parameters())
-    model.load_state_dict(check_pt['state_dict'])
+    model.load_state_dict(check_pt['state_dict'], strict=False)
     model.to(device)
     optimizer.load_state_dict(check_pt['optimizer'])
     model.eval()
@@ -74,9 +74,10 @@ def predict(config):
 
         pred_img = pred_img.cpu().numpy()
         y = y.cpu().numpy()
+        print(np.unique(pred_img))
         g = g.numpy()
         out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
-        plot_prediction(image, pred_img, y, geo=g, out_file=None)
+        plot_prediction(image, pred_img, y, geo=g, out_file=out_fig)
 
         confusion += get_conf_matrix(y_flat[mask], pred_flat[mask], config['num_classes'], device)
 
@@ -132,6 +133,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn')
+    config = get_config('dcm')
     predict(config)
 # ========================= EOF ====================================================================

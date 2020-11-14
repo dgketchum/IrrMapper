@@ -49,7 +49,6 @@ def write_pixel_sets(out, recs, mode, out_norm):
         prefixes = [None]
 
     for urls, pref in zip(url_list, prefixes):
-        print(urls[0], pref)
         dataset = wds.Dataset(urls).decode('torchl')
         tar_count, items = 0, []
         tmpdirname = tempfile.mkdtemp()

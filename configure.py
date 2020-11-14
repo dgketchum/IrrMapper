@@ -8,7 +8,7 @@ path = Path(__file__).parents
 
 
 def get_config(model='clstm', mode='irr'):
-    data = '/home/dgketchum/tfrecords/tarchives'
+    data = '/media/hdisk/tfrecords/tarchives'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
     pixel_sets = os.path.join(data, 'pixel_sets')
@@ -24,8 +24,8 @@ def get_config(model='clstm', mode='irr'):
     config = {'model': model,
               'mode': mode,
               'rdm_seed': 1,
-              'display_step': 50,
-              'epochs': 1,
+              'display_step': 500,
+              'epochs': 100,
               'num_classes': 4,
               'input_dim': 7,
               'geomfeat': None,
