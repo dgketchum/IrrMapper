@@ -107,3 +107,7 @@ data/*
 /home/dgketchum/PycharmProjects/IrrMapper/models/ltae_pse/*.json
 
 /utils.py
+/models/nnet/results/figures/
+/models/dcm/results/figures/
+/models/temp_cnn/results/figures/
+/models/dcm/results/figures/
