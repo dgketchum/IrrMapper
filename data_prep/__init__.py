@@ -15,11 +15,6 @@ DATES = {0: '19860101',
          12: '19861227'}
 
 # see feature_spec.py for dict of bands, lat , lon, elev, label
-CHANNELS = 7
-BANDS = 91
-TERRAIN = 5
-
-SEQUENCE_LEN = len(DATES.keys())
 
 
 FEATURES = ['blue_0', 'green_0', 'red_0', 'nir_0', 'swir1_0', 'swir2_0', 'tir_0', 'blue_1', 'green_1', 'red_1', 'nir_1',

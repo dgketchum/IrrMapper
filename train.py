@@ -30,6 +30,7 @@ def train_epoch(model, optimizer, criterion, loader, config):
             out, att = model(x)
             pred = out[0][0]
             loss = criterion(pred, y)
+
         else:
             y = y.to(device)
             optimizer.zero_grad()
@@ -79,8 +80,9 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
     per_class, overall = confusion_matrix_analysis(confusion)
     t_delta = datetime.now() - ts
     print('Evaluation Loss: {:.4f}, IOU: {:.4f}, Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
-          'in {:.2f} minutes'.format(loss.item(), overall['iou'], overall['precision'],
-                                 overall['recall'], overall['f1-score'], t_delta.seconds / 60.))
+          'in {:.2f} minutes, {} steps'.format(loss.item(), overall['iou'], overall['precision'],
+                                               overall['recall'], overall['f1-score'],
+                                               t_delta.seconds / 60., i))
 
     if mode == 'valid':
         overall['{}_loss'.format(mode)] = loss.item()
@@ -135,7 +137,7 @@ def train(config):
 
     # config['N_params'] = model.param_ratio()
 
-    with open(os.path.join(config['res_dir'], 'conf.json'), 'w') as _file:
+    with open(os.path.join(config['res_dir'], 'config.json'), 'w') as _file:
         _file.write(json.dumps(config, indent=4))
 
     train_log = {}

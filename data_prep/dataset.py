@@ -3,7 +3,7 @@ import torch
 import webdataset as wds
 from webdataset import dataset as wds
 
-from data_prep import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
+from configure import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
 
 
 def find_archives(path):
@@ -25,6 +25,10 @@ def pixel_dataset(mode, config, norm):
         x, g = features[:, :BANDS], features[:, BANDS:BANDS + TERRAIN]
         x = x.reshape((x.shape[0], SEQUENCE_LEN, CHANNELS))
         y = item['pth'][:, -1].long()
+        if config['model'] == 'nnet':
+            x = x.reshape((x.shape[0], x.shape[1] * x.shape[2]))
+        if config['model'] == 'tcnn':
+            x = x.permute(0, 2, 1)
         return x, y, g
 
     root = config['dataset_folder']
@@ -67,6 +71,7 @@ def pixelset_dataset(mode, config, norm):
 
 def image_dataset(mode, config, norm):
     """ Use for training and prediction of image datasets"""
+
     def map_fn(item):
         features = item['pth'][:, :, :BANDS + TERRAIN]
         features = transform_(features, norm).float()
@@ -86,6 +91,7 @@ def image_dataset(mode, config, norm):
 
 def predict_dataset(config, norm):
     """ Use for prediction of images using pixel-based models """
+
     def map_fn(item):
         features = item['pth'][:, :, :BANDS + TERRAIN]
         features = transform_(features, norm).float()

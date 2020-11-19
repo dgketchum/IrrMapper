@@ -37,9 +37,14 @@ def predict(config):
 
     val_loader = get_predict_loader(config)
     model = get_model(config)
-    check_pt = torch.load(os.path.join(config['res_dir'], 'gcss_dcm_model.pth.tar'))
+    check_pt = torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))
     optimizer = torch.optim.Adam(model.parameters())
     model.load_state_dict(check_pt['state_dict'], strict=False)
+    chkpt = ['fc1.weight', 'fc1.bias', 'fc2.weight', 'fc2.bias']
+    # for x in chkpt:
+    #     l = check_pt['state_dict'][x].cpu().numpy().tolist()
+    #     with open('{}.txt'.format(x), 'w') as f:
+    #         f.write(str(l))
     model.to(device)
     optimizer.load_state_dict(check_pt['optimizer'])
     model.eval()
@@ -65,7 +70,13 @@ def predict(config):
             x = x.squeeze()
             mask = (y.sum(0) > 0).flatten()
 
-            x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
+            if config['model'] == 'nnet':
+                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2] * x.shape[3])
+            elif config['model'] == 'tcnn':
+                x = x.reshape(x.shape[0] * x.shape[1], x.shape[3],  x.shape[2])
+            else:
+                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
+
             with torch.no_grad():
                 pred, att = model(x)
                 pred_flat = torch.argmax(pred, dim=1)
@@ -95,6 +106,7 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
                           [FEATURES.index(x) for x in FEATURES if 'green' in x], \
                           [FEATURES.index(x) for x in FEATURES if 'blue' in x]
 
+    r_idx, g_idx, b_idx = r_idx[3:10], g_idx[3:10], b_idx[3:10]
     fig, ax = plt.subplots(ncols=3, nrows=1, figsize=(20, 10))
     r, g, b = x[:, :, r_idx], x[:, :, g_idx], x[:, :, b_idx]
 
@@ -133,6 +145,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('dcm')
+    config = get_config('nnet')
     predict(config)
 # ========================= EOF ====================================================================

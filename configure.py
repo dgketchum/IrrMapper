@@ -6,9 +6,20 @@ import torch
 
 path = Path(__file__).parents
 
+# CHANNELS = 7
+# BANDS = 91
+# TERRAIN = 5
+# SEQUENCE_LEN = 13
+
+
+CHANNELS = 7
+BANDS = 70
+TERRAIN = 5
+SEQUENCE_LEN = 10
+
 
 def get_config(model='clstm', mode='irr'):
-    data = '/media/hdisk/tfrecords/tarchives'
+    data = '/media/hdisk/ta_data/nmask/tarchives'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
     pixel_sets = os.path.join(data, 'pixel_sets')
@@ -24,10 +35,10 @@ def get_config(model='clstm', mode='irr'):
     config = {'model': model,
               'mode': mode,
               'rdm_seed': 1,
-              'display_step': 500,
-              'epochs': 100,
+              'display_step': 100,
+              'epochs': 2,
               'num_classes': 4,
-              'input_dim': 7,
+              'input_dim': CHANNELS,
               'geomfeat': None,
               'device': 'cuda:0',
               'num_workers': 1,
@@ -65,20 +76,33 @@ def get_config(model='clstm', mode='irr'):
         config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
         config['batch_size'] = 1 * device_ct
-        config['hidden_size'] = 36
+        config['hidden_size'] = 18
         config['num_layers'] = 2
         config['bidirectional'] = True
         config['seed'] = 121
-        config['lr'] = 0.00025
+        config['lr'] = 0.0025
         config['res_dir'] = os.path.join(path[0], 'models', 'dcm', 'results')
         with open(os.path.join(path[0], 'models', 'dcm', 'config.json'), 'w') as file:
+            file.write(json.dumps(config, indent=4))
+
+    if config['model'] == 'nnet':
+        config['dataset_folder'] = pixels
+        config['predict_mode'] = 'pixel'
+        config['batch_size'] = 1 * device_ct
+        config['hidden_size'] = 256
+        config['input_dim'] = BANDS
+        config['seed'] = 121
+        config['lr'] = 0.0025
+        config['res_dir'] = os.path.join(path[0], 'models', 'nnet', 'results')
+        with open(os.path.join(path[0], 'models', 'nnet', 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'tcnn':
         config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
         config['batch_size'] = 1 * device_ct
-        config['sequence_len'] = 13
+        config['sequence_len'] = SEQUENCE_LEN
+        config['hidden_dim'] = 4
         config['nker'] = '[16, 16, 16]'
         config['mlp3'] = '[16, 4]'
         config['res_dir'] = os.path.join(path[0], 'models', 'temp_cnn', 'results')

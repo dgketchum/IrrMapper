@@ -27,7 +27,7 @@ def get_loaders(config):
     splits = ['train', 'test', 'valid']
     mean_std = pkl.load(open(config['norm'], 'rb'))
 
-    if config['model'] in ['tcnn', 'dcm']:
+    if config['model'] in ['tcnn', 'dcm', 'nnet']:
         dt = (pixel_dataset(split, config, mean_std) for split in splits)
 
     if config['model'] == 'ltae':

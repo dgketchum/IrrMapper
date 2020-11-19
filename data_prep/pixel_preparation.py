@@ -54,8 +54,9 @@ def write_pixel_sets(out, recs, mode, out_norm):
         tmpdirname = tempfile.mkdtemp()
         for j, f in enumerate(dataset):
             a = f['pth'].numpy()
-            labels = a[:, :, 98:]
-            features = a[:, :, :98]
+            # treat cdl and cdl_confidence [97, 98] as features
+            labels = a[:, :, 77:]
+            features = a[:, :, :77]
 
             bbox_slices = {}
             for i in range(labels.shape[2]):
@@ -196,7 +197,8 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
 
 
 if __name__ == '__main__':
-    data = '/home/dgketchum/tfrecords/tarchives'
+    data = '/media/hdisk/ta_data/tarchives'
+    # data = '/home/dgketchum/tfrecords/tarchives'
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
@@ -210,17 +212,20 @@ if __name__ == '__main__':
         pixel_dst = os.path.join(pixels, split)
         pixel_set_dst = os.path.join(pixel_sets, split)
 
+        # if split == 'train':
+        #     for s in ['patches', 'points']:
+        #         out_norm_pse = pixel_sets
+        #         np_images = os.path.join(images, split, '{}_{}'.format(split, s))
+        #         pixel_dst = os.path.join(pixels, split, '{}_{}'.format(split, s))
+        #         pixel_set_dst = os.path.join(pixel_sets, split, '{}_{}'.format(split, s))
+        #         write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
+        #         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+        # else:
+        out_norm_pse = pixel_sets
         if split == 'train':
-            for s in ['patches', 'points']:
-                out_norm_pse = pixel_sets
-                np_images = os.path.join(images, split, '{}_{}'.format(split, s))
-                pixel_dst = os.path.join(pixels, split, '{}_{}'.format(split, s))
-                pixel_set_dst = os.path.join(pixel_sets, split, '{}_{}'.format(split, s))
-                write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
-                write_pixel_blocks(pixel_set_dst, pixel_dst, split)
-        else:
-            out_norm_pse = None
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
-            write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+        else:
+            write_pixel_sets(pixel_set_dst, np_images, split, out_norm=None)
+        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================
