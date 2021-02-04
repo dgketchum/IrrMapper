@@ -10,12 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-try:
-    from map.openet.collection import get_target_dates, Collection, get_target_bands
-    from map.data.bucket import get_bucket_contents
-except ModuleNotFoundError:
-    from openet.collection import get_target_dates, Collection, get_target_bands
-    from data.bucket import get_bucket_contents
+from ee_image.collection import get_target_dates, Collection, get_target_bands
 
 KERNEL_SIZE = 256
 KERNEL_SHAPE = [KERNEL_SIZE, KERNEL_SIZE]
@@ -216,8 +211,6 @@ def run_extract_irr_points(input_json):
 
     with open(input_json) as j:
         grids = json.loads(j.read())
-
-    grids = {'2106': grids['2106']}
 
     for pfid, dct in grids.items():
         pfid = int(pfid)

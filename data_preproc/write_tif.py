@@ -1,13 +1,13 @@
-
 import os
 
 import numpy as np
 
-from pyproj import Proj, transform
+from pyproj import Proj, Transformer
 import rasterio
 from rasterio.transform import from_origin
 
 from data_preproc import feature_spec
+from tf_dataset import make_test_dataset
 
 MODE = 'irr'
 FEATURES_DICT = feature_spec.features_dict()
@@ -27,26 +27,25 @@ from matplotlib.colors import ListedColormap
 cmap = ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
 
 
-def build_raster(npy_dir, out_tif_dir, plot=False):
-    """write geoTiff from TFRecord for simple sanity check"""
-    l = [os.path.join(npy_dir, x) for x in os.listdir(npy_dir) if x.endswith('.npy')]
-    for j, f in enumerate(l):
+def build_raster(recs, out_tif_dir, pattern='*gz', plot=False):
+    """write geoTiff from TFRecord"""
+    dataset = make_test_dataset(recs, pattern).batch(1)
+    for j, (features, labels) in enumerate(dataset):
 
-        a = np.load(f)
-        labels = a[:, :, -4:]
-        cdl = a[:, :, -6]
-        cconf = a[:, :, -5]
+        labels = labels.numpy().squeeze()
+        features = features.numpy().squeeze()
+        cdl = features[:, :, -6]
+        cconf = features[:, :, -5]
 
         for n in range(labels.shape[-1]):
             labels[:, :, n] *= n + 1
         labels = np.sum(labels, axis=-1)
 
-        features = a[:, :, :-4]
         r, g, b = features[:, :, r_idx], features[:, :, g_idx], features[:, :, b_idx]
 
         norm = lambda arr: ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255))
         rgb = map(norm, [np.median(r, axis=2), np.median(g, axis=2), np.median(b, axis=2)])
-        rgb = np.dstack(rgb).astype('uint8')
+        rgb = np.dstack(list(rgb)).astype('uint8')
 
         lat, lon = features[:, :, lat_idx].max(), features[:, :, lon_idx].min()
         if plot:
@@ -58,17 +57,16 @@ def build_raster(npy_dir, out_tif_dir, plot=False):
             plt.suptitle('{:.3f}, {:.3f}'.format(lat, lon))
             plt.show()
 
-        in_proj = Proj('epsg:4326')
-        out_proj = Proj('epsg:5070', preserve_units=True)
         x1, y1 = lon, lat
-        lon, lat = transform(in_proj, out_proj, y1, x1)
+        transformer = Transformer.from_crs('epsg:4326', 'epsg:5071')
+        lon, lat = transformer.transform(y1, x1)
         affine = from_origin(lon, lat, 30, 30)
         tif_name = os.path.join(out_tif_dir, '{}.tif'.format(j))
 
         meta = dict(driver='GTiff',
                     height=rgb.shape[0], width=rgb.shape[1],
                     count=3, dtype=str(rgb.dtype),
-                    crs='epsg:5070',
+                    crs='epsg:5071',
                     transform=affine)
 
         with rasterio.open(tif_name, 'w', **meta) as dst:
@@ -78,7 +76,7 @@ def build_raster(npy_dir, out_tif_dir, plot=False):
 
 
 if __name__ == '__main__':
-    npy = '/home/dgketchum/PycharmProjects/IrrMapper/data/npy'
-    tif = '/home/dgketchum/PycharmProjects/EEMapper/map/data/tif'
-    build_raster(npy, tif, plot=False)
+    records = '/media/hdisk/t_data/valid'
+    tif = '/home/dgketchum/Downloads/tif'
+    build_raster(records, tif, plot=False)
 # ========================= EOF ====================================================================

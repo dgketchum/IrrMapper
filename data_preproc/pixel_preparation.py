@@ -226,6 +226,6 @@ if __name__ == '__main__':
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
         else:
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=None)
-        # write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================

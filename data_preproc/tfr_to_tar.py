@@ -4,13 +4,13 @@ import tempfile
 import shutil
 import tarfile
 import torch
-# from google.cloud import storage
 
+from google.cloud import storage
 from tf_dataset import make_test_dataset
 
 
 def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category='irrigated', start_count=0):
-    """ Write tfrecord.gz to numpy, push .tar of torch tensor.pth to GCS bucket"""
+    """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to GCS bucket"""
     storage_client = storage.Client()
 
     def push_tar(t_dir, bckt, items, ind):
@@ -29,7 +29,6 @@ def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category
     count = start_count
 
     dataset = make_test_dataset(recs, pattern).batch(1)
-    exit()
     obj_ct = np.array([0, 0, 0, 0])
     tmpdirname = tempfile.mkdtemp()
     items = []
@@ -57,7 +56,7 @@ def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category
 
 
 def write_tfr_to_local(recs, out_dir, split, pattern='*gz', category='irrigated', start_count=0):
-    """ Write tfrecord.gz to numpy, push .tar of torch tensor.pth to GCS bucket"""
+    """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to local"""
 
     def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
         if prefix:
