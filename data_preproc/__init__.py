@@ -17,6 +17,11 @@ DATES = {0: '19860101',
 # see feature_spec.py for dict of bands, lat , lon, elev, label
 
 
+CHANNELS = 7
+BANDS = 91
+TERRAIN = 5
+
+
 FEATURES = ['blue_0', 'green_0', 'red_0', 'nir_0', 'swir1_0', 'swir2_0', 'tir_0', 'blue_1', 'green_1', 'red_1', 'nir_1',
             'swir1_1', 'swir2_1', 'tir_1', 'blue_2', 'green_2', 'red_2', 'nir_2', 'swir1_2', 'swir2_2', 'tir_2',
             'blue_3', 'green_3', 'red_3', 'nir_3', 'swir1_3', 'swir2_3', 'tir_3', 'blue_4', 'green_4', 'red_4', 'nir_4',

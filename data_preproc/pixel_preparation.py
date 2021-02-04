@@ -7,7 +7,7 @@ import tarfile
 import tempfile
 import torch
 import shutil
-from data_prep import BANDS, TERRAIN
+from data_preproc import BANDS, TERRAIN
 
 structure = np.array([
     [1, 1, 1],
@@ -55,8 +55,8 @@ def write_pixel_sets(out, recs, mode, out_norm):
         for j, f in enumerate(dataset):
             a = f['pth'].numpy()
             # treat cdl and cdl_confidence [97, 98] as features
-            labels = a[:, :, 77:]
-            features = a[:, :, :77]
+            labels = a[:, :, 98:]
+            features = a[:, :, :98]
 
             bbox_slices = {}
             for i in range(labels.shape[2]):
@@ -197,7 +197,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
 
 
 if __name__ == '__main__':
-    data = '/media/hdisk/ta_data/tarchives'
+    data = '/media/hdisk/t_data/tarchives'
     # data = '/home/dgketchum/tfrecords/tarchives'
 
     if not os.path.isdir(data):
@@ -207,7 +207,7 @@ if __name__ == '__main__':
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
-    for split in ['train', 'test', 'valid']:
+    for split in ['valid']:
         np_images = os.path.join(images, split)
         pixel_dst = os.path.join(pixels, split)
         pixel_set_dst = os.path.join(pixel_sets, split)
@@ -226,6 +226,6 @@ if __name__ == '__main__':
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
         else:
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=None)
-        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+        # write_pixel_blocks(pixel_set_dst, pixel_dst, split)
 
 # ========================= EOF ================================================================
