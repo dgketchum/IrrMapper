@@ -55,7 +55,7 @@ def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category
     print(obj_ct)
 
 
-def write_tfr_to_local(recs, out_dir, split, pattern='*gz', category='irrigated', start_count=0):
+def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0):
     """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to local"""
 
     def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
@@ -72,12 +72,12 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', category='irrigated'
     count = start_count
 
     dataset = make_test_dataset(recs, pattern).batch(1)
-    obj_ct = np.array([0, 0, 0, 0])
+    obj_ct = np.array([0, 0, 0])
     tmpdirname = tempfile.mkdtemp()
     items = []
     for j, (features, labels) in enumerate(dataset):
         labels = labels.numpy().squeeze()
-        classes = np.array([np.any(labels[:, :, i]) for i in range(4)])
+        classes = np.array([np.any(labels[:, :, i]) for i in range(3)])
         obj_ct += classes
         features = features.numpy().squeeze()
         a = np.append(features, labels, axis=2)
@@ -95,7 +95,7 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', category='irrigated'
     if len(items) > 0:
         push_tar(tmpdirname, out_dir, split, items, count)
 
-    print(obj_ct)
+    print(split, obj_ct)
 
 
 if __name__ == '__main__':
@@ -107,8 +107,8 @@ if __name__ == '__main__':
     # glob_pattern = '*{}*gz'.format(split)
     # write_tfr_to_gcs(tf_recs, bucket=bucket_root, bucket_dst=bucket_dir, category=_type, start_count=0)
 
-    for split in ['valid']:
-        dir_ = '/media/hdisk/t_data/{}'.format(split)
+    for split in ['valid', 'train', 'test']:
+        dir_ = '/media/hdisk/t_data/tfrecords/{}'.format(split)
         out_dir = '/media/hdisk/t_data/tarchives/images/{}'.format(split)
         write_tfr_to_local(dir_, out_dir, split=split, start_count=0)
 # ========================= EOF ====================================================================

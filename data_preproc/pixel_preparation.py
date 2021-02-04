@@ -16,11 +16,9 @@ structure = np.array([
 ])
 
 
-def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
-    if prefix:
-        tar_filename = '{}_{}_{}.tar'.format(prefix, mode, str(ind).zfill(6))
-    else:
-        tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
+def push_tar(t_dir, out_dir, mode, items, ind):
+
+    tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
     tar_archive = os.path.join(out_dir, tar_filename)
     with tarfile.open(tar_archive, 'w') as tar:
         for i in items:
@@ -32,23 +30,16 @@ def write_pixel_sets(out, recs, mode, out_norm):
     """Iterate through each image of feature bands and labels, find contiguous objects, extract
     pixel set from within the objects
     """
-
     count = 0
     invalid_pix, nan_pix = 0, 0
     mean_, std_ = 0, 0
     M2 = 0
-    obj_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-    pix_ct = {0: 0, 1: 0, 2: 0, 3: 0}
-    if mode == 'train' and 'points' in recs:
-        url_list = []
-        for _type in ['dryland', 'irrigated', 'fallow']:
-            url_list.append([os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar') and _type in x])
-            prefixes = ['d', 'i', 'f']
-    else:
-        url_list = [[os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar')]]
-        prefixes = [None]
+    obj_ct = {0: 0, 1: 0, 2: 0}
+    pix_ct = {0: 0, 1: 0, 2: 0}
 
-    for urls, pref in zip(url_list, prefixes):
+    url_list = [[os.path.join(recs, x) for x in os.listdir(recs) if x.endswith('.tar')]]
+
+    for urls in url_list:
         dataset = wds.Dataset(urls).decode('torchl')
         tar_count, items = 0, []
         tmpdirname = tempfile.mkdtemp()
@@ -65,7 +56,6 @@ def write_pixel_sets(out, recs, mode, out_norm):
                 if lab.max():
                     bbox_slices[i] = mnts.find_objects(mnts.label(lab, structure=structure)[0])
                     for b in bbox_slices[i]:
-
                         # features
                         lab_mask = np.repeat(lab[b][:, :, np.newaxis], features.shape[-1], axis=2)
                         nan_label = lab_mask.copy()
@@ -113,29 +103,26 @@ def write_pixel_sets(out, recs, mode, out_norm):
                         items.append(tmp_tensor)
 
                         if len(items) == 200:
-                            push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
+                            push_tar(tmpdirname, out, mode, items, tar_count)
                             tmpdirname = tempfile.mkdtemp()
                             items = []
                             tar_count += 1
 
         if len(items) > 0:
-            push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
+            push_tar(tmpdirname, out, mode, items, tar_count)
 
-        print('objects count: {}'.format(obj_ct))
+        print('{} objects count: {}'.format(split, obj_ct))
         print('pixel count: {}'.format(pix_ct))
         print('nan pixels: {}, 2.0 pixels: {}'.format(nan_pix, invalid_pix))
         print('count of pixel sets: {}'.format(count))
 
         if out_norm:
-            if pref:
-                pkl_name = os.path.join(out_norm, '{}_meanstd.pkl'.format(pref))
-            else:
-                pkl_name = os.path.join(out_norm, 'meanstd.pkl')
+            pkl_name = os.path.join(out_norm, 'meanstd.pkl')
             with open(pkl_name, 'wb') as handle:
                 pkl.dump((mean_, std_), handle, protocol=pkl.HIGHEST_PROTOCOL)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
+def write_pixel_blocks(data_dir, out, mode, n_subset=1000):
     """ write numpy arrays every n samples from pixel sets"""
 
     if mode == 'train' and 'points' in data_dir:
@@ -179,7 +166,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
                 items.append(tmp_feat)
 
                 if len(items) == 4:
-                    push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
+                    push_tar(tmpdirname, out, mode, items, tar_count)
                     tmpdirname = tempfile.mkdtemp()
                     items = []
                     tar_count += 1
@@ -193,12 +180,11 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000):
             torch.save(out_features, tmp_feat)
             print('final file {}'.format(file_count))
             items.append(tmp_feat)
-            push_tar(tmpdirname, out, mode, items, tar_count, prefix=pref)
+            push_tar(tmpdirname, out, mode, items, tar_count)
 
 
 if __name__ == '__main__':
     data = '/media/hdisk/t_data/tarchives'
-    # data = '/home/dgketchum/tfrecords/tarchives'
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
@@ -207,25 +193,17 @@ if __name__ == '__main__':
     pixels = os.path.join(data, 'pixels')
     pixel_sets = os.path.join(data, 'pixel_sets')
 
-    for split in ['valid']:
+    for split in ['valid', 'test', 'train']:
         np_images = os.path.join(images, split)
         pixel_dst = os.path.join(pixels, split)
         pixel_set_dst = os.path.join(pixel_sets, split)
 
-        # if split == 'train':
-        #     for s in ['patches', 'points']:
-        #         out_norm_pse = pixel_sets
-        #         np_images = os.path.join(images, split, '{}_{}'.format(split, s))
-        #         pixel_dst = os.path.join(pixels, split, '{}_{}'.format(split, s))
-        #         pixel_set_dst = os.path.join(pixel_sets, split, '{}_{}'.format(split, s))
-        #         write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
-        #         write_pixel_blocks(pixel_set_dst, pixel_dst, split)
-        # else:
         out_norm_pse = pixel_sets
         if split == 'train':
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=out_norm_pse)
         else:
             write_pixel_sets(pixel_set_dst, np_images, split, out_norm=None)
-        write_pixel_blocks(pixel_set_dst, pixel_dst, split)
+
+        write_pixel_blocks(data_dir=pixel_set_dst, out=pixel_dst, mode=split)
 
 # ========================= EOF ================================================================
