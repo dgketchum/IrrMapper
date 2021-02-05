@@ -6,20 +6,20 @@ import torch
 
 path = Path(__file__).parents
 
-# CHANNELS = 7
-# BANDS = 91
-# TERRAIN = 5
-# SEQUENCE_LEN = 13
-
-
 CHANNELS = 7
-BANDS = 70
+BANDS = 91
 TERRAIN = 5
-SEQUENCE_LEN = 10
+SEQUENCE_LEN = 13
+
+
+# CHANNELS = 7
+# BANDS = 70
+# TERRAIN = 5
+# SEQUENCE_LEN = 10
 
 
 def get_config(model='clstm', mode='irr'):
-    data = '/media/hdisk/ta_data/nmask/tarchives'
+    data = '/media/hdisk/t_data/tarchives'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
     pixel_sets = os.path.join(data, 'pixel_sets')
@@ -47,7 +47,7 @@ def get_config(model='clstm', mode='irr'):
               'gamma': 1,
               'alpha': None,
               'prediction_dir': os.path.join(images, 'test'),
-              'norm': os.path.join(data, 'images', 'meanstd.pkl'), }
+              'norm': os.path.join(data, 'pixels', 'meanstd.pkl'), }
 
     if config['model'] == 'ltae':
         config['dataset_folder'] = pixel_sets

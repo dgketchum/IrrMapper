@@ -2,7 +2,7 @@ import pickle as pkl
 
 from torch.utils import data as data
 
-from data_prep.dataset import image_dataset, pixel_dataset, pixelset_dataset, predict_dataset
+from data_load.dataset import image_dataset, pixel_dataset, pixelset_dataset, predict_dataset
 
 
 def get_predict_loader(config):

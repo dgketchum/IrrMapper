@@ -8,12 +8,6 @@ import torch
 import shutil
 from data_preproc import BANDS, TERRAIN
 
-structure = np.array([
-    [1, 1, 1],
-    [1, 1, 1],
-    [1, 1, 1]
-])
-
 
 def push_tar(t_dir, out_dir, mode, items, ind):
     tar_filename = '{}_{}.tar'.format(mode, str(ind).zfill(6))
@@ -24,10 +18,10 @@ def push_tar(t_dir, out_dir, mode, items, ind):
     shutil.rmtree(t_dir)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=1000, out_norm=None):
+def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
     """ write tensorflow records to class-balanced torch arrays every n samples"""
 
-    label_count, out_pixels = 0, 0
+    label_count, pth_count, out_pixels = 0, 0, 0
     invalid_pix, nan_pix = 0, 0
     mean_, std_ = 0, 0
     M2 = 0
@@ -107,7 +101,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=1000, out_norm=None):
                         out_pixels += array.shape[0]
                         array = torch.from_numpy(array)
                         tmp_tensor = os.path.join(tmpdirname, '{}.pth'.format(str(label_count).rjust(7, '0')))
-                        label_count += 1
+                        pth_count += 1
                         torch.save(array, tmp_tensor)
                         items.append(tmp_tensor)
 

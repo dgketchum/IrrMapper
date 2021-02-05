@@ -4,13 +4,14 @@ ee.Initialize()
 import time
 import os
 import json
-
+from collections import OrderedDict
 from datetime import datetime
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ee_image.collection import get_target_dates, Collection, get_target_bands
+from data_extract.bucket import get_bucket_contents
 
 KERNEL_SIZE = 256
 KERNEL_SHAPE = [KERNEL_SIZE, KERNEL_SIZE]
@@ -209,17 +210,22 @@ def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, spl
 
 def run_extract_irr_points(input_json):
 
+    contents = get_bucket_contents('ts_data')[0]['']
+    exported = [x[0].split('.')[0] for x in contents]
+
     with open(input_json) as j:
         grids = json.loads(j.read())
 
-    for pfid, dct in grids.items():
-        pfid = int(pfid)
+    for gfid, dct in grids.items():
+        gfid = int(gfid)
         years = [v[-1] for k, v in dct.items()]
         years = set([i for s in years for i in s])
         pfids = [(y, [k for k, v in dct.items() if y in v[-1]]) for y in years]
         for y, pf in pfids:
             split = dct[pf[0]][0]
-            extract_by_point(year=y, grid_fid=pfid, point_fids=pf, cloud_mask=True, split=split)
+            record = '{}_{}_cm_{}'.format(split, y, gfid)
+            if record not in exported:
+                extract_by_point(year=y, grid_fid=gfid, point_fids=pf, cloud_mask=True, split=split)
 
 
 if __name__ == '__main__':

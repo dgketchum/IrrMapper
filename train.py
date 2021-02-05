@@ -11,7 +11,7 @@ from learning.focal_loss import FocalLoss
 from learning.weight_init import weight_init
 from learning.metrics import confusion_matrix_analysis, get_conf_matrix
 from models.model_init import get_model
-from data_prep.data_loader import get_loaders
+from data_load.data_loader import get_loaders
 from configure import get_config
 from utils import recursive_todevice
 
