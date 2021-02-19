@@ -4,7 +4,6 @@ ee.Initialize()
 import time
 import os
 import json
-from collections import OrderedDict
 from datetime import datetime
 import sys
 
@@ -33,47 +32,6 @@ LC8_BANDS = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10']
 LC7_BANDS = ['B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'B6']
 LC5_BANDS = ['B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'B6']
 STD_NAMES = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'tir']
-
-
-def ls8mask(img):
-    sr_bands = img.select('B2', 'B3', 'B4', 'B5', 'B6', 'B7')
-    mask_sat = sr_bands.neq(20000)
-    img_nsat = sr_bands.updateMask(mask_sat)
-    mask1 = img.select('pixel_qa').bitwiseAnd(8).eq(0)
-    mask2 = img.select('pixel_qa').bitwiseAnd(32).eq(0)
-    mask_p = mask1.And(mask2)
-    img_masked = img_nsat.updateMask(mask_p)
-    mask_mult = img_masked.multiply(0.0001).copyProperties(img, ['system:time_start'])
-    return mask_mult
-
-
-def preprocess_data(year):
-    l8 = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR').select(LC8_BANDS, STD_NAMES)
-    l7 = ee.ImageCollection('LANDSAT/LE07/C01/T1_SR').select(LC7_BANDS, STD_NAMES)
-    l5 = ee.ImageCollection('LANDSAT/LT05/C01/T1_SR').select(LC5_BANDS, STD_NAMES)
-    l5l7l8 = ee.ImageCollection(l7.merge(l8).merge(l5))
-
-    return temporalCollection(l5l7l8, ee.Date('{}-01-01'.format(year)), 10, 36, 'days')
-
-
-def temporalCollection(collection, start, count, interval, units):
-    sequence = ee.List.sequence(0, ee.Number(count).subtract(1))
-    originalStartDate = ee.Date(start)
-
-    def filt(i):
-        startDate = originalStartDate.advance(ee.Number(interval).multiply(i), units)
-        endDate = originalStartDate.advance(
-            ee.Number(interval).multiply(ee.Number(i).add(1)), units)
-        return collection.filterDate(startDate, endDate).reduce(ee.Reducer.mean())
-
-    return ee.ImageCollection(sequence.map(filt))
-
-
-def class_codes():
-    return {'irrigated': 2,
-            'fallow': 3,
-            'dryland': 4,
-            'uncultivated': 5}
 
 
 def create_class_labels(year_, roi_):
@@ -149,7 +107,6 @@ def get_sr_stack(yr, s, e, interval, mask, geo_):
 
 
 def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, split='train'):
-
     if cloud_mask:
         cloud = 'cm'
     else:
@@ -209,23 +166,28 @@ def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, spl
 
 
 def run_extract_irr_points(input_json):
-
-    contents = get_bucket_contents('ts_data')[0]['']
-    exported = [x[0].split('.')[0] for x in contents]
+    # contents = get_bucket_contents('ts_data')[0]['cm_12']
+    # exported = [x[0].split('.')[0] for x in contents]
 
     with open(input_json) as j:
         grids = json.loads(j.read())
 
+    shard_ct = {'train': 0, 'test': 0, 'valid': 0}
     for gfid, dct in grids.items():
         gfid = int(gfid)
-        years = [v[-1] for k, v in dct.items()]
-        years = set([i for s in years for i in s])
-        pfids = [(y, [k for k, v in dct.items() if y in v[-1]]) for y in years]
-        for y, pf in pfids:
-            split = dct[pf[0]][0]
-            record = '{}_{}_cm_{}'.format(split, y, gfid)
-            if record not in exported:
-                extract_by_point(year=y, grid_fid=gfid, point_fids=pf, cloud_mask=True, split=split)
+        if gfid == 821:
+            years = [v[-1] for k, v in dct.items()]
+            years = set([i for s in years for i in s])
+            pfids = [(y, [k for k, v in dct.items() if y in v[-1]]) for y in years]
+            for y, pf in pfids:
+                if y == 2010:
+                    split = dct[pf[0]][0]
+                    shard_ct[split] += len(pf)
+                    record = '{}_{}_cm_{}'.format(split, y, gfid)
+                    # if record not in exported:
+                    #     print('{} not found'.format(record))
+                    extract_by_point(year=y, grid_fid=gfid, point_fids=pf, cloud_mask=True, split=split)
+    print(shard_ct)
 
 
 if __name__ == '__main__':
