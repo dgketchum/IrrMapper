@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+from matplotlib import colors
 
 from pyproj import Proj, Transformer
 import rasterio
@@ -13,10 +14,11 @@ MODE = 'irr'
 FEATURES_DICT = feature_spec.features_dict()
 FEATURES = feature_spec.features()
 step_, length_ = 7, len(FEATURES)
+NDVI_INDICES = [(x, y) for x, y in zip(range(2, length_, step_), range(3, length_, step_))]
 
-r_idx, g_idx, b_idx = [FEATURES.index(x) for x in FEATURES if 'red' in x], \
-                      [FEATURES.index(x) for x in FEATURES if 'green' in x], \
-                      [FEATURES.index(x) for x in FEATURES if 'blue' in x]
+R, G, B = [FEATURES.index(x) for x in FEATURES if 'red' in x], \
+          [FEATURES.index(x) for x in FEATURES if 'green' in x], \
+          [FEATURES.index(x) for x in FEATURES if 'blue' in x]
 
 lat_idx = [FEATURES.index(x) for x in FEATURES if 'lat' in x][0]
 lon_idx = [FEATURES.index(x) for x in FEATURES if 'lon' in x][0]
@@ -41,7 +43,7 @@ def build_raster(recs, out_tif_dir, pattern='*gz', plot=False):
             labels[:, :, n] *= n + 1
         labels = np.sum(labels, axis=-1)
 
-        r, g, b = features[:, :, r_idx], features[:, :, g_idx], features[:, :, b_idx]
+        r, g, b = features[:, :, R], features[:, :, G], features[:, :, B]
 
         norm = lambda arr: ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255))
         rgb = map(norm, [np.median(r, axis=2), np.median(g, axis=2), np.median(b, axis=2)])
@@ -73,6 +75,43 @@ def build_raster(recs, out_tif_dir, pattern='*gz', plot=False):
             for b in range(rgb.shape[-1]):
                 band = rgb[:, :, b].astype(rasterio.uint8)
                 dst.write_band(b + 1, band)
+
+
+def plot_image_data(x, label=None, out_file=None):
+    bounds = [0, 1, 2, 3, 4]
+    cmap_label = colors.ListedColormap(['grey', 'blue', 'pink', 'green'])
+    norm = colors.BoundaryNorm(bounds, len(bounds))
+
+    r_idx, g_idx, b_idx = R[3:10], G[3:10], B[3:10]
+    fig, ax = plt.subplots(ncols=2, nrows=1, figsize=(20, 10))
+    r, g, b = x[:, :, r_idx], x[:, :, g_idx], x[:, :, b_idx]
+
+    def norm_rgb(arr):
+        arr = ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255)).astype('uint8')
+        return arr
+
+    rgb = map(norm_rgb, [np.median(r, axis=2), np.median(g, axis=2), np.median(b, axis=2)])
+    rgb = np.dstack(list(rgb))
+
+    lat, lon = x[:, :, lat_idx].mean(), x[:, :, lon_idx].mean()
+
+    mask = label.sum(2) == 0
+    label = label.argmax(2) + 1
+    label[mask] = 0
+
+    ax[0].imshow(rgb)
+    ax[0].set(xlabel='image')
+
+    ax[1].imshow(label, cmap=cmap_label, norm=norm)
+    ax[1].set(xlabel='label')
+
+    plt.suptitle('{:.3f}, {:.3f}'.format(lat, lon))
+    plt.tight_layout()
+    if out_file:
+        plt.savefig(out_file)
+        plt.close()
+    else:
+        plt.show()
 
 
 if __name__ == '__main__':
