@@ -8,7 +8,7 @@ FEATURES_DICT = feature_spec.features_dict(kind='interp')
 FEATURES = feature_spec.features(kind='interp')
 step_, length_ = 7, len(FEATURES)
 NDVI_INDICES = [(x, y) for x, y in zip(range(2, length_, step_), range(3, length_, step_))]
-
+N_CLASSES = 3
 
 def make_test_dataset(root, pattern='*gz'):
     training_root = os.path.join(root, pattern)
@@ -67,7 +67,7 @@ def to_tuple(add_ndvi):
         else:
             image_stack = stacked
         # 'constant' is the label for label raster.
-        labels = one_hot(inputs.get(MODE), n_classes=4)
+        labels = one_hot(inputs.get(MODE), n_classes=N_CLASSES)
         labels = tf.cast(labels, tf.int32)
         return image_stack, labels
 
@@ -109,7 +109,7 @@ def add_ndvi_raster(image_stack):
 
 def one_hot(labels, n_classes):
     h, w = labels.shape
-    labels = tf.squeeze(labels) - 1
+    labels = tf.squeeze(labels)
     ls = []
     for i in range(n_classes):
         where = tf.where(labels != i + 1, tf.zeros((h, w)), 1 * tf.ones((h, w)))
