@@ -7,9 +7,14 @@ import torch
 
 from google.cloud import storage
 from tf_dataset import make_test_dataset
+from data_preproc.write_tif import plot_image_data
+
+N_CLASSES = 3
+PLOTS = '/media/hdisk/t_data/tfrecords/plots'
 
 
-def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category='irrigated', start_count=0):
+def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None,
+                     pattern='*gz', category='irrigated', start_count=0):
     """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to GCS bucket"""
     storage_client = storage.Client()
 
@@ -55,7 +60,7 @@ def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None, pattern='*gz', category
     print(obj_ct)
 
 
-def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0):
+def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=False):
     """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to local"""
 
     def push_tar(t_dir, out_dir, mode, items, ind, prefix=None):
@@ -71,15 +76,20 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0):
 
     count = start_count
 
-    dataset = make_test_dataset(recs, pattern).batch(1)
-    obj_ct = np.array([0, 0, 0])
+    dataset = make_test_dataset(recs, pattern)
+    obj_ct = np.zeros((1, N_CLASSES))
     tmpdirname = tempfile.mkdtemp()
     items = []
     for j, (features, labels) in enumerate(dataset):
         labels = labels.numpy().squeeze()
-        classes = np.array([np.any(labels[:, :, i]) for i in range(3)])
+        classes = np.array([np.any(labels[:, :, i]) for i in range(N_CLASSES)])
         obj_ct += classes
         features = features.numpy().squeeze()
+
+        if plot:
+            out_plot = os.path.join(PLOTS, '{}.png'.format(j))
+            plot_image_data(features, labels, out_file=out_plot)
+
         a = np.append(features, labels, axis=2)
         a = torch.from_numpy(a)
         tmp_name = os.path.join(tmpdirname, '{}.pth'.format(str(j).zfill(7)))
@@ -96,6 +106,7 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0):
         push_tar(tmpdirname, out_dir, split, items, count)
 
     print(split, obj_ct)
+    print('{} shards'.format(j + 1))
 
 
 if __name__ == '__main__':
@@ -107,7 +118,7 @@ if __name__ == '__main__':
     # glob_pattern = '*{}*gz'.format(split)
     # write_tfr_to_gcs(tf_recs, bucket=bucket_root, bucket_dst=bucket_dir, category=_type, start_count=0)
 
-    for split in ['valid', 'train', 'test']:
+    for split in ['test']:
         dir_ = '/media/hdisk/t_data/tfrecords/{}'.format(split)
         out_dir = '/media/hdisk/t_data/tarchives/images/{}'.format(split)
         write_tfr_to_local(dir_, out_dir, split=split, start_count=0)
