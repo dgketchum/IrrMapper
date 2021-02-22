@@ -7,7 +7,7 @@ import torch
 
 from google.cloud import storage
 from tf_dataset import make_test_dataset
-from data_preproc.write_tif import plot_image_data
+from data_preproc.plot_data import plot_image_data
 
 N_CLASSES = 3
 PLOTS = '/media/hdisk/t_data/tfrecords/plots'
@@ -121,5 +121,5 @@ if __name__ == '__main__':
     for split in ['test']:
         dir_ = '/media/hdisk/t_data/tfrecords/{}'.format(split)
         out_dir = '/media/hdisk/t_data/tarchives/images/{}'.format(split)
-        write_tfr_to_local(dir_, out_dir, split=split, start_count=0)
+        write_tfr_to_local(dir_, out_dir, split=split, start_count=0, plot=True)
 # ========================= EOF ====================================================================

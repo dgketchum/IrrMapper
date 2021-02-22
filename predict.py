@@ -4,16 +4,17 @@ import numpy as np
 from copy import deepcopy
 
 import torch
-from torchsummary import summary
 from matplotlib import pyplot as plt
 from matplotlib import colors
 
 from utils import recursive_todevice
 from learning.metrics import get_conf_matrix, confusion_matrix_analysis
 from models.model_init import get_model
-from data_prep.data_loader import get_predict_loader
+from data_load.data_loader import get_predict_loader
 from configure import get_config
-from data_prep import FEATURES
+from data_preproc import feature_spec
+
+FEATURES = feature_spec.features()
 
 
 def unnormalize(x, config):
@@ -73,7 +74,7 @@ def predict(config):
             if config['model'] == 'nnet':
                 x = x.reshape(x.shape[0] * x.shape[1], x.shape[2] * x.shape[3])
             elif config['model'] == 'tcnn':
-                x = x.reshape(x.shape[0] * x.shape[1], x.shape[3],  x.shape[2])
+                x = x.reshape(x.shape[0] * x.shape[1], x.shape[3], x.shape[2])
             else:
                 x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
 
@@ -88,7 +89,7 @@ def predict(config):
         print(np.unique(pred_img))
         g = g.numpy()
         out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
-        plot_prediction(image, pred_img, y, geo=g, out_file=out_fig)
+        plot_prediction(image, pred_img, y, geo=g, out_file=out_fig, config=config)
 
         confusion += get_conf_matrix(y_flat[mask], pred_flat[mask], config['num_classes'], device)
 
@@ -98,7 +99,7 @@ def predict(config):
     print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
 
 
-def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
+def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=None):
     cmap_label = colors.ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
     cmap_pred = colors.ListedColormap(['blue', 'purple', 'pink', 'green'])
 
@@ -118,7 +119,13 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
     rgb = np.dstack(list(rgb))
 
     geo = geo.squeeze()
-    lat, lon = geo[0, :, :].mean(), geo[1, :, :].mean()
+    mean_std = pkl.load(open(config['norm'], 'rb'))
+    lat_std, lat_mn = mean_std[1][91], mean_std[0][91]
+    lon_std, lon_mn = mean_std[1][92], mean_std[0][92]
+    lat = geo[0, :, :].mean() * lat_std + lat_mn
+    lon = geo[1, :, :].mean() * lon_std + lon_mn
+
+    print(lat, lon)
 
     mask = label.sum(0) == 0
     label = label.argmax(0) + 1
@@ -145,6 +152,6 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    config = get_config('nnet')
+    config = get_config('clstm')
     predict(config)
 # ========================= EOF ====================================================================

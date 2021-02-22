@@ -169,7 +169,7 @@ def train(config):
 
 
 if __name__ == '__main__':
-    config = get_config('tcnn', mode='irr')
+    config = get_config('clstm', mode='irr')
     train(config)
 
 # ========================================================================================
