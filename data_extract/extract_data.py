@@ -194,7 +194,7 @@ if __name__ == '__main__':
     alt_home = os.path.join(home, 'data')
     if os.path.isdir(alt_home):
         home = alt_home
-    _json = '/home/dgketchum/PycharmProjects/EEMapper/map/data/master_shards.json'
+    _json = os.path.join(os.path.dirname(__file__), 'master_shards.json')
     run_extract_irr_points(_json, overwrite=True)
 
 # =====================================================================================================================

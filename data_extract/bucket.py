@@ -3,10 +3,10 @@ import os
 from google.cloud import storage
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = '/home/dgketchum/ssebop-montana-57d2b4da4339.json'
-client = storage.Client()
 
 
 def get_bucket_contents(bucket_name, glob=None):
+    client = storage.Client()
     dct = {}
     empty = []
     for blob in client.list_blobs(bucket_name, prefix=glob):
@@ -20,13 +20,11 @@ def get_bucket_contents(bucket_name, glob=None):
             dct[dirname] = [(b_name, size)]
         else:
             dct[dirname].append((b_name, size))
-    for k, v in dct.items():
-        pass
-        # print(k, sum([x[1] for x in v]))
     return dct, empty
 
 
 def move_empty(bucket_name, glob=None, dst_folder=None):
+    client = storage.Client()
     bucket = client.get_bucket(bucket_name)
     for blob in bucket.list_blobs(prefix=glob):
         dirname = os.path.dirname(blob.name)
@@ -38,7 +36,5 @@ def move_empty(bucket_name, glob=None, dst_folder=None):
 
 
 if __name__ == '__main__':
-    bucket = 'ts_data'
-    dst_rt = 'cmask/points/empty'
-    move_empty(bucket, dst_folder=dst_rt)
+    pass
 # ========================= EOF ====================================================================
