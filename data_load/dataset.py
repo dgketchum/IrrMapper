@@ -84,7 +84,7 @@ def temporal_image_dataset(mode, config, norm):
 
     data_dir = config['dataset_folder']
     loc = os.path.join(data_dir, mode)
-    urls = find_archives(loc)[:1]
+    urls = find_archives(loc)
     dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset
 
@@ -103,7 +103,7 @@ def image_dataset(mode, config, norm):
 
     data_dir = config['dataset_folder']
     loc = os.path.join(data_dir, mode)
-    urls = find_archives(loc)[:1]
+    urls = find_archives(loc)
     dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset
 

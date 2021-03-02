@@ -10,7 +10,7 @@ from matplotlib import colors
 from utils import recursive_todevice
 from learning.metrics import get_conf_matrix, confusion_matrix_analysis
 from models.model_init import get_model
-from data_load.data_loader import get_predict_loader, get_loaders
+from data_load.data_loader import get_predict_loader
 from configure import get_config
 from data_preproc import feature_spec
 
