@@ -2,7 +2,7 @@ import pickle as pkl
 
 from torch.utils import data as data
 
-from data_load.dataset import image_dataset, pixel_dataset, pixelset_dataset, predict_dataset
+from data_load.dataset import temporal_image_dataset, image_dataset, pixel_dataset, pixelset_dataset, predict_dataset
 
 
 def get_predict_loader(config):
@@ -12,6 +12,8 @@ def get_predict_loader(config):
 
     if config['predict_mode'] == 'pixel':
         dt = predict_dataset(config, mean_std)
+    elif config['predict_mode'] == 'temporal_image':
+        dt = temporal_image_dataset('test', config, mean_std)
     elif config['predict_mode'] == 'image':
         dt = image_dataset('test', config, mean_std)
     else:
@@ -33,7 +35,7 @@ def get_loaders(config):
     if config['model'] == 'ltae':
         dt = (pixelset_dataset(split, config, mean_std) for split in splits)
 
-    if config['model'] == 'clstm':
+    if config['model'] in ['clstm', 'unet']:
         dt = (image_dataset(split, config, mean_std) for split in splits)
 
     train, test, valid = (get_dataloader(d, config) for d in dt)

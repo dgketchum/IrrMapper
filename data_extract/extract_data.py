@@ -163,7 +163,7 @@ def run_extract_irr_points(input_json, overwrite=False):
 
     exported = None
     if not overwrite:
-        contents = get_bucket_contents('ts_data')[0]['cm_12']
+        contents = get_bucket_contents('ts_data')[0]['nm_12']
         exported = [x[0].split('.')[0] for x in contents]
 
     with open(input_json) as j:
@@ -185,7 +185,7 @@ def run_extract_irr_points(input_json, overwrite=False):
                     continue
             if len(pf) > 1:
                 extract_by_point(year=y, grid_fid=gfid, point_fids=pf,
-                                 cloud_mask=True, split=split)
+                                 cloud_mask=False, split=split)
     print(shard_ct)
 
 

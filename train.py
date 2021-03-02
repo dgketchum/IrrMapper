@@ -31,6 +31,12 @@ def train_epoch(model, optimizer, criterion, loader, config):
             pred = out[0][0]
             loss = criterion(pred, y)
 
+        elif config['model'] == 'unet':
+            y = y.argmax(dim=1).to(device)
+            optimizer.zero_grad()
+            out = model(x)
+            loss = criterion(out, y)
+
         else:
             y = y.to(device)
             optimizer.zero_grad()
@@ -39,20 +45,24 @@ def train_epoch(model, optimizer, criterion, loader, config):
             loss = criterion(out, y)
 
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         if (i + 1) % config['display_step'] == 0:
             print('Train Step {}, Loss: {:.4f}'.format(i, loss.item()))
 
     t_delta = datetime.now() - ts
-    print('Train Loss: {:.4f} in {:.2f} minutes'.format(loss.item(), t_delta.seconds / 60.))
+    print('Train Loss: {:.4f} in {:.2f} minutes {} steps'.format(loss.item(),
+                                                                 t_delta.seconds / 60.,
+                                                                 i + 1))
     return {'train_loss': loss.item()}
 
 
-def evaluate_epoch(model, criterion, loader, config, mode='valid'):
+def evaluate_epoch(model, loader, config, mode='valid'):
+    i = None
     ts = datetime.now()
     device = torch.device(config['device'])
     n_class = config['num_classes']
-    confusion = torch.tensor(np.zeros((n_class, n_class))).to(device)
+    confusion = np.zeros((n_class, n_class))
 
     for i, (x, y, g) in enumerate(loader):
         x = recursive_todevice(x, device)
@@ -62,33 +72,43 @@ def evaluate_epoch(model, criterion, loader, config, mode='valid'):
             with torch.no_grad():
                 out, att = model(x)
                 pred = out[0][0]
-                loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
-                confusion += get_conf_matrix(y[mask], pred[mask], n_class, device)
+                confusion += get_conf_matrix(y[mask], pred[mask], n_class)
+
+        elif config['model'] == 'unet':
+            mask = (y.sum(1) > 0).flatten().numpy()
+            y = y.argmax(dim=1).numpy().flatten()
+            with torch.no_grad():
+                out = model(x)
+                pred = torch.argmax(out, dim=1).cpu().numpy().flatten()
+                confusion += get_conf_matrix(y[mask], pred[mask], n_class)
+
         else:
             y = y.squeeze().to(device)
             mask = (y > 0).flatten()
             x = x.squeeze()
             with torch.no_grad():
                 pred, att = model(x)
-                loss = criterion(pred, y)
                 pred = torch.argmax(pred, dim=1)
                 if config['batch_size'] > 1:
                     y = y.flatten()
-                confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'], device)
+                confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'])
+
+        if (i + 1) % config['display_step'] == 0:
+            print('Eval Step {}'.format(i))
 
     per_class, overall = confusion_matrix_analysis(confusion)
     t_delta = datetime.now() - ts
-    print('Evaluation Loss: {:.4f}, IOU: {:.4f}, Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
-          'in {:.2f} minutes, {} steps'.format(loss.item(), overall['iou'], overall['precision'],
-                                               overall['recall'], overall['f1-score'],
-                                               t_delta.seconds / 60., i))
+    print('Evaluation: IOU: {:.4f}, '
+          'in {:.2f} minutes, {} steps'.format(overall['iou'],
+                                               t_delta.seconds / 60.,
+                                               i))
 
     if mode == 'valid':
-        overall['{}_loss'.format(mode)] = loss.item()
+        overall['{}_iou'.format(mode)] = overall['iou']
         return overall
     elif mode == 'test':
-        overall['{}_loss'.format(mode)] = loss.item()
+        overall['{}_iou'.format(mode)] = overall['iou']
         return overall, confusion
 
 
@@ -133,7 +153,8 @@ def train(config):
     model.apply(weight_init)
 
     optimizer = torch.optim.Adam(model.parameters())
-    criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
+    # criterion = FocalLoss(alpha=config['alpha'], gamma=2, size_average=True)
+    criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
     # config['N_params'] = model.param_ratio()
 
@@ -150,7 +171,7 @@ def train(config):
         model.train()
         train_metrics = train_epoch(model, optimizer, criterion, train_loader, config=config)
         model.eval()
-        val_metrics = evaluate_epoch(model, criterion, val_loader, config=config)
+        val_metrics = evaluate_epoch(model, train_loader, config=config)
 
         train_log[epoch] = {**train_metrics, **val_metrics}
         if val_metrics['iou'] >= best_iou:
@@ -162,14 +183,14 @@ def train(config):
     print('\nRun test set....')
     model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
     model.eval()
-    metrics, conf = evaluate_epoch(model, criterion, test_loader, config=config, mode='test')
+    metrics, conf = evaluate_epoch(model, train_loader, config=config, mode='test')
     overall_performance(config, conf)
     t_delta = datetime.now() - TIME_START
     print('Total Time: {:.2f} minutes'.format(t_delta.seconds / 60.))
 
 
 if __name__ == '__main__':
-    config = get_config('clstm', mode='irr')
+    config = get_config('unet', mode='irr')
     train(config)
 
 # ========================================================================================

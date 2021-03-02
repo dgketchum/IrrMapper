@@ -3,6 +3,7 @@ from models.dcm.dcm import DCM
 from models.temp_cnn.temp_cnn import TempConv
 from models.conv_lstm.conv_lstm import ConvLSTM
 from models.nnet.nnet import NNet
+from models.unet.unet import UNet
 
 
 def get_model(config):
@@ -34,6 +35,10 @@ def get_model(config):
         else:
             model_config.update(with_extra=False, extra_size=None)
         model = PseLTae(**model_config)
+
+    if config['model'] == 'unet':
+        model_config = dict(n_channels=config['input_dim'], n_classes=config['num_classes'])
+        model = UNet(**model_config)
 
     elif config['model'] == 'clstm':
         model_config = dict(input_dim=config['input_dim'], kernel_size=config['kernel_size'],

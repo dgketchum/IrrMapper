@@ -69,7 +69,7 @@ def pixelset_dataset(mode, config, norm):
     return ds
 
 
-def image_dataset(mode, config, norm):
+def temporal_image_dataset(mode, config, norm):
     """ Use for training and prediction of image datasets"""
 
     def map_fn(item):
@@ -84,7 +84,26 @@ def image_dataset(mode, config, norm):
 
     data_dir = config['dataset_folder']
     loc = os.path.join(data_dir, mode)
-    urls = find_archives(loc)
+    urls = find_archives(loc)[:1]
+    dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
+    return dataset
+
+
+def image_dataset(mode, config, norm):
+    """ Use for training and prediction of image datasets"""
+
+    def map_fn(item):
+        features = item['pth'][:, :, :BANDS + TERRAIN]
+        features = transform_(features, norm).float()
+        x = features[:, :, :BANDS]
+        x = x.permute((2, 0, 1)).float()
+        y = item['pth'][:, :, -4:].permute(2, 0, 1).int()
+        g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
+        return x, y, g
+
+    data_dir = config['dataset_folder']
+    loc = os.path.join(data_dir, mode)
+    urls = find_archives(loc)[:1]
     dataset = wds.Dataset(urls).decode('torchl').map(map_fn).batched(config['batch_size'])
     return dataset
 

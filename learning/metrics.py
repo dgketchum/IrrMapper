@@ -1,11 +1,13 @@
 import numpy as np
-import torch
 
 
-def get_conf_matrix(y, pred, n_class, device):
-    batch_conf = torch.tensor(np.zeros((n_class, n_class))).to(device)
+def get_conf_matrix(y, pred, n_class):
+    batch_conf = np.zeros((n_class, n_class))
     for i in range(len(y)):
-        batch_conf[y[i]][pred[i]] += 1
+        try:
+            batch_conf[y[i], pred[i]] += 1
+        except IndexError as e:
+            print(e)
     return batch_conf
 
 
@@ -19,9 +21,9 @@ def confusion_matrix_analysis(mat):
 
     for j in range(mat.shape[0]):
         d = {}
-        tp = torch.sum(mat[j, j])
-        fp = torch.sum(mat[:, j]) - tp
-        fn = torch.sum(mat[j, :]) - tp
+        tp = np.sum(mat[j, j])
+        fp = np.sum(mat[:, j]) - tp
+        fn = np.sum(mat[j, :]) - tp
 
         d['iou'] = tp / (tp + fp + fn + epsilon)
         d['precision'] = tp / (tp + fp + epsilon)
@@ -38,7 +40,7 @@ def confusion_matrix_analysis(mat):
                'precision': TP / (TP + FP + epsilon),
                'recall': TP / (TP + FN + epsilon),
                'f1-score': 2 * TP / (2 * TP + FP + FN + epsilon),
-               'accuracy': torch.sum(torch.diag(mat)) / torch.sum(mat)}
+               'accuracy': np.sum(np.diag(mat)) / np.sum(mat)}
 
     overall = {k: v.item() for k, v in overall.items()}
 

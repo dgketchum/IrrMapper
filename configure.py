@@ -35,8 +35,8 @@ def get_config(model='clstm', mode='irr'):
     config = {'model': model,
               'mode': mode,
               'rdm_seed': 1,
-              'display_step': 1000,
-              'epochs': 300,
+              'display_step': 100,
+              'epochs': 100,
               'num_classes': 4,
               'input_dim': CHANNELS,
               'geomfeat': None,
@@ -111,7 +111,7 @@ def get_config(model='clstm', mode='irr'):
 
     if config['model'] == 'clstm':
         config['dataset_folder'] = images
-        config['predict_mode'] = 'image'
+        config['predict_mode'] = 'temporal_image'
         config['batch_size'] = 16 * device_ct
         config['input_dim'] = 7
         config['num_layers'] = 1
@@ -119,6 +119,18 @@ def get_config(model='clstm', mode='irr'):
         config['hidden_dim'] = 4
         config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')
         with open(os.path.join(path[0], 'models', 'conv_lstm', 'config.json'), 'w') as file:
+            file.write(json.dumps(config, indent=4))
+
+    if config['model'] == 'unet':
+        config['dataset_folder'] = images
+        config['batch_size'] = 4 * device_ct
+        config['input_dim'] = BANDS
+        config['predict_mode'] = 'image'
+        # config['sample_n'] = [1012505459, 337955249, 43964057, 153976261, 222513580, 69336274]
+        config['seed'] = 121
+        config['lr'] = 0.0001
+        config['res_dir'] = os.path.join(path[0], 'models', config['model'], 'results')
+        with open(os.path.join(path[0], 'models', config['model'], 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
 
     for k, v in config.items():
