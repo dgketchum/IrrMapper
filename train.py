@@ -23,7 +23,7 @@ def train_epoch(model, optimizer, criterion, loader, config):
     ts = datetime.now()
     device = torch.device(config['device'])
     loss = None
-    mean_loss = 0.0
+    sum_loss = 0.0
     for i, (x, y, g) in enumerate(loader):
         x = recursive_todevice(x, device)
         if config['model'] == 'clstm':
@@ -34,26 +34,26 @@ def train_epoch(model, optimizer, criterion, loader, config):
             loss = criterion(pred, y)
 
         elif config['model'] == 'unet':
-            y = y.argmax(dim=1).to(device)
+            y = y.to(device)
             optimizer.zero_grad()
             out = model(x)
             loss = criterion(out, y)
 
         else:
-            y = y.to(device).reshape(-1, 1)
+            y = y.to(device)
             optimizer.zero_grad()
-            x = torch.squeeze(x)
             out, att = model(x)
+            out = out.permute(0, 2, 1)
             loss = criterion(out, y)
 
-        mean_loss += loss.item()
+        sum_loss += loss.item()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         if (i + 1) % config['display_step'] == 0:
-            print('Train Step {}, Loss: {:.4f}'.format(i + 1, loss.item()))
+            print('Train Step {}, Loss: {:.4f}'.format(i + 1, sum_loss / (i + 1)))
 
-    mean_loss = mean_loss / (i + 1)
+    mean_loss = sum_loss / (i + 1)
     t_delta = datetime.now() - ts
     print('Train Loss: {:.4f} in {:.2f} minutes {} steps'.format(loss.item(),
                                                                  t_delta.seconds / 60.,
@@ -80,8 +80,8 @@ def evaluate_epoch(model, loader, config, mode='valid'):
                 confusion += get_conf_matrix(y[mask], pred[mask], n_class)
 
         elif config['model'] == 'unet':
-            mask = (y.sum(1) > 0).flatten().numpy()
-            y = y.argmax(dim=1).numpy().flatten()
+            mask = (y > 0).numpy().flatten()
+            y = y.numpy().flatten()
             with torch.no_grad():
                 out = model(x)
                 pred = torch.argmax(out, dim=1).cpu().numpy().flatten()
@@ -159,11 +159,6 @@ def train(config):
     model.apply(weight_init)
 
     lr = config['lr']
-    # weights = torch.tensor(config['sample_n'], dtype=torch.float32)
-    # weights = weights / weights.sum()
-    # weights = 1.0 / weights
-    # weights = weights / weights.sum()
-    # weights = torch.FloatTensor(weights).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, eps=1e-4)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
@@ -203,10 +198,6 @@ def train(config):
 
 if __name__ == '__main__':
     for m in ['unet']:
-        try:
-            config = get_config(m, 'irr')
-            train(config)
-        except Exception as e:
-            print(m)
-            print(e)
+        config = get_config(m, 'irr')
+        train(config)
 # ========================================================================================

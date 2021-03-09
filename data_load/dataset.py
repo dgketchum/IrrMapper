@@ -25,6 +25,7 @@ def pixel_dataset(mode, config, norm):
         x, g = features[:, :BANDS], features[:, BANDS:BANDS + TERRAIN]
         x = x.reshape((x.shape[0], SEQUENCE_LEN, CHANNELS))
         y = item['pth'][:, -1].long()
+        y -= 1
         if config['model'] == 'nnet':
             x = x.reshape((x.shape[0], x.shape[1] * x.shape[2]))
         if config['model'] == 'tcnn':
@@ -68,7 +69,7 @@ def image_dataset(mode, config, norm):
         features = features.float()
         x = features[:, :, :BANDS]
         x = x.permute((2, 0, 1)).float()
-        y = item['pth'][:, :, -4:].permute(2, 0, 1).int()
+        y = item['pth'][:, :, -1].long()
         g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
         return x, y, g
 

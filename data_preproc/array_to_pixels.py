@@ -7,7 +7,8 @@ import tempfile
 import torch
 import shutil
 
-FEATURES = 96
+from configure import BANDS, TERRAIN, CDL
+FEATURES = BANDS + TERRAIN + CDL
 
 # not incl background (0) class
 N_CLASSES = 3
@@ -22,7 +23,7 @@ def push_tar(t_dir, out_dir, mode, items, ind):
     shutil.rmtree(t_dir)
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
+def write_pixel_blocks(data_dir, out, mode, n_subset=1000, n_items=100, out_norm=None):
     """ write tensorflow records to class-balanced torch arrays every n samples"""
 
     label_count, pth_count, out_pixels = 0, 0, 0
@@ -37,12 +38,12 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
 
         dataset = wds.Dataset(urls).decode('torchl')
         items, tar_count, = [], 0
-        tmpdirname = tempfile.mkdtemp()
+        tmpdirname = tempfile.mkdtemp(dir=TEMP)
 
         for j, f in enumerate(dataset):
             a = f['pth'].numpy()
-            labels = a[:, :, 98].reshape(a.shape[0] * a.shape[1])
-            features = a[:, :, :98].reshape(a.shape[0] * a.shape[1], 98)
+            labels = a[:, :, FEATURES].reshape(a.shape[0] * a.shape[1])
+            features = a[:, :, :FEATURES].reshape(a.shape[0] * a.shape[1], 98)
             mask = labels > 0
             labels = labels[mask]
             features = features[mask, :]
@@ -57,11 +58,12 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
             pixel_stack = np.append(features, labels, axis=1)
             pix_ct += classes
 
-            delta = np.nanmean(features, axis=0) - mean_
-            mean_ = mean_ + delta / label_count
-            delta2 = np.nanmean(features, axis=0) - mean_
-            M2 = M2 + delta * delta2
-            std_ = np.sqrt(M2 / label_count)
+            if out_norm:
+                delta = np.nanmean(features, axis=0) - mean_
+                mean_ = mean_ + delta / (j + 1)
+                delta2 = np.nanmean(features, axis=0) - mean_
+                M2 = M2 + delta * delta2
+                std_ = np.sqrt(M2 / (j + 1))
 
             for k, v in obj_cntr.items():
                 if isinstance(obj_cntr[k], np.ndarray):
@@ -82,25 +84,27 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
                 left_over = {x: obj_cntr[x][ac, :] for x, ac in zip(obj_cntr.keys(), choice_inv)}
 
                 array = np.concatenate(select, axis=0)
+                np.random.shuffle(array)
                 out_pixels += array.shape[0]
                 array = torch.from_numpy(array)
-                tmp_tensor = os.path.join(tmpdirname, '{}.pth'.format(str(label_count).rjust(7, '0')))
-                pth_count += 1
+                tmp_tensor = os.path.join(tmpdirname, '{}.pth'.format(str(pth_count).rjust(7, '0')))
                 torch.save(array, tmp_tensor)
                 items.append(tmp_tensor)
+                pth_count += 1
 
                 for k, v in obj_cntr.items():
                     if v.shape[0] > 5 * n_subset:
                         left_over[k] = v[:n_subset * 5, :]
                     obj_cntr[k] = left_over[k]
 
-            if len(items) == 200:
+            if len(items) == n_items:
                 push_tar(tmpdirname, out, mode, items, tar_count)
-                tmpdirname = tempfile.mkdtemp()
+                tmpdirname = tempfile.mkdtemp(dir=TEMP)
                 items = []
                 tar_count += 1
 
     if len(items) > 0:
+        print('\n{}'.format(items))
         push_tar(tmpdirname, out, mode, items, tar_count)
 
     print('\n{}'.format(mode.upper()))
@@ -113,12 +117,17 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
 
 
 if __name__ == '__main__':
+
+    TEMP = '/nobackup/dketchu1/temp'
     data = '/nobackup/dketchu1/ts_data'
+    if not os.path.isdir(data):
+        TEMP = '/media/hdisk/temp'
+        data = '/media/hdisk/ts_data'
 
     images_dir = os.path.join(data, 'images')
     pixels_dir = os.path.join(data, 'pixels')
 
-    for split in ['valid', 'test', 'train']:
+    for split in ['train']:
         np_images = os.path.join(images_dir, split)
         pixel_dst = os.path.join(pixels_dir, split)
         if split == 'train':

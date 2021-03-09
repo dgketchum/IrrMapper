@@ -30,7 +30,7 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=
 
     dataset = make_test_dataset(recs, pattern)
     obj_ct = np.zeros((1, N_CLASSES))
-    tmpdirname = tempfile.mkdtemp()
+    tmpdirname = tempfile.mkdtemp(dir=TEMP)
     items = []
     for j, (features, labels) in enumerate(dataset):
         labels = labels.numpy()
@@ -53,9 +53,11 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=
 
         if len(items) == 20:
             push_tar(tmpdirname, out_dir, split, items, count)
-            tmpdirname = tempfile.mkdtemp()
+            tmpdirname = tempfile.mkdtemp(dir=TEMP)
             items = []
             count += 1
+            if count > 20:
+                break
 
     if len(items) > 0:
         push_tar(tmpdirname, out_dir, split, items, count)
@@ -65,16 +67,16 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=
 
 
 if __name__ == '__main__':
-    home = os.path.expanduser('~')
-    # bucket_root = 'ta_data'
-    # split = 'train'
-    # bucket_dir = '/tar/{}'.format(split)
-    # tf_recs = 'gs://ta_data/{}'.format(split)
-    # glob_pattern = '*{}*gz'.format(split)
-    # write_tfr_to_gcs(tf_recs, bucket=bucket_root, bucket_dst=bucket_dir, category=_type, start_count=0)
+
+    TEMP = '/nobackup/dketchu1/temp'
+    data = '/nobackup/dketchu1/ts_data'
+
+    if not os.path.isdir(data):
+        TEMP = '/media/hdisk/temp'
+        data = '/media/hdisk/ts_data'
 
     for split in ['train', 'test', 'valid']:
-        dir_ = '/nobackup/dketchu1/ts_data/tfrecords/{}'.format(split)
-        out_dir = '/nobackup/dketchu1/ts_data/images/{}'.format(split)
+        dir_ = os.path.join(data, 'tfrecords', '{}'.format(split))
+        out_dir = os.path.join(data, 'images', '{}'.format(split))
         write_tfr_to_local(dir_, out_dir, split=split, start_count=0, plot=False)
 # ========================= EOF ====================================================================
