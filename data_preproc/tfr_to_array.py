@@ -5,59 +5,11 @@ import shutil
 import tarfile
 import torch
 
-from google.cloud import storage
 from tfr_utils import make_test_dataset
 from data_preproc.plot_data import plot_image_data
 
 N_CLASSES = 3
 PLOTS = '/media/hdisk/t_data/tfrecords/plots'
-
-
-def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None,
-                     pattern='*gz', category='irrigated', start_count=0):
-    """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to GCS bucket"""
-    storage_client = storage.Client()
-
-    def push_tar(t_dir, bckt, items, ind):
-        tar_filename = '{}_{}.tar'.format(category, str(ind).zfill(6))
-        tar_archive = os.path.join(t_dir, tar_filename)
-        with tarfile.open(tar_archive, 'w') as tar:
-            for i in items:
-                tar.add(i, arcname=os.path.basename(i))
-        bucket = storage_client.get_bucket(bckt)
-        blob_name = os.path.join(bucket_dst, tar_filename)
-        blob = bucket.blob(blob_name)
-        print('push {}'.format(blob_name))
-        blob.upload_from_filename(tar_archive)
-        shutil.rmtree(t_dir)
-
-    count = start_count
-
-    dataset = make_test_dataset(recs, pattern)
-    obj_ct = np.array([0, 0, 0, 0])
-    tmpdirname = tempfile.mkdtemp()
-    items = []
-    for j, (features, labels) in enumerate(dataset):
-        labels = labels.numpy().squeeze()
-        classes = np.array([np.any(labels[:, :, i]) for i in range(4)])
-        obj_ct += classes
-        features = features.numpy().squeeze()
-        a = np.append(features, labels, axis=2)
-        a = torch.from_numpy(a)
-        tmp_name = os.path.join(tmpdirname, '{}.pth'.format(str(j).zfill(7)))
-        torch.save(a, tmp_name)
-        items.append(tmp_name)
-
-        if len(items) == 20:
-            push_tar(tmpdirname, bucket, items, count)
-            tmpdirname = tempfile.mkdtemp()
-            items = []
-            count += 1
-
-    if len(items) > 0:
-        push_tar(tmpdirname, bucket, items, count)
-
-    print(obj_ct)
 
 
 def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=False):
@@ -122,7 +74,7 @@ if __name__ == '__main__':
     # write_tfr_to_gcs(tf_recs, bucket=bucket_root, bucket_dst=bucket_dir, category=_type, start_count=0)
 
     for split in ['train', 'test', 'valid']:
-        dir_ = '/media/hdisk/ts_data/tfrecords/{}'.format(split)
-        out_dir = '/media/hdisk/ts_data/images/{}'.format(split)
+        dir_ = '/nobackup/dketchu1/ts_data/tfrecords/{}'.format(split)
+        out_dir = '/nobackup/dketchu1/ts_data/images/{}'.format(split)
         write_tfr_to_local(dir_, out_dir, split=split, start_count=0, plot=False)
 # ========================= EOF ====================================================================

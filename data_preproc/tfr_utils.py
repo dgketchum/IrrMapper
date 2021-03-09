@@ -10,6 +10,7 @@ step_, length_ = 7, len(FEATURES)
 NDVI_INDICES = [(x, y) for x, y in zip(range(2, length_, step_), range(3, length_, step_))]
 N_CLASSES = 3
 
+
 def make_test_dataset(root, pattern='*gz'):
     training_root = os.path.join(root, pattern)
     datasets = get_dataset(training_root)

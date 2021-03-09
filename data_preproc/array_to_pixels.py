@@ -113,7 +113,7 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100, out_norm=None):
 
 
 if __name__ == '__main__':
-    data = '/media/hdisk/ts_data'
+    data = '/nobackup/dketchu1/ts_data'
 
     images_dir = os.path.join(data, 'images')
     pixels_dir = os.path.join(data, 'pixels')
