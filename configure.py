@@ -22,7 +22,6 @@ def get_config(model='clstm', mode='irr'):
     data = '/media/hdisk/t_data/tarchives'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
-    pixel_sets = os.path.join(data, 'pixel_sets')
 
     if not os.path.isdir(data):
         data = '/mnt/beegfs/dk128872/ts_data/cmask/tar'
@@ -41,36 +40,13 @@ def get_config(model='clstm', mode='irr'):
               'input_dim': CHANNELS,
               'geomfeat': None,
               'device': 'cuda:0',
-              'num_workers': 1,
+              'num_workers': 4,
               'pooling': 'mean_std',
               'dropout': 0.2,
               'gamma': 1,
               'alpha': None,
               'prediction_dir': os.path.join(images, 'test'),
               'norm': os.path.join(data, 'pixels', 'meanstd.pkl'), }
-
-    if config['model'] == 'ltae':
-        config['dataset_folder'] = pixel_sets
-        config['batch_size'] = 128 * device_ct
-        config['mlp1'] = '[7, 32, 64]'
-        config['mlp2'] = '[128, 128]'
-        config['mlp3'] = '[256,128]'
-        config['mlp4'] = '[128, 64, 32, 4]'
-        config['n_head'] = 16
-        config['d_k'] = 8
-        config['d_model'] = 256
-        config['T'] = 1000
-        config['positions'] = None
-        config['geom_dim'] = 5
-        config['geomfeat'] = False
-        config['lms'] = 13
-        config['n_pixel'] = 64
-        config['subset'] = None
-        config['lr'] = 0.00025
-        config['num_classes'] = 4
-        config['res_dir'] = os.path.join(path[0], 'models', 'ltae_pse', 'results')
-        with open(os.path.join(path[0], 'models', 'ltae_pse', 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'dcm':
         config['dataset_folder'] = pixels
@@ -132,12 +108,6 @@ def get_config(model='clstm', mode='irr'):
         config['res_dir'] = os.path.join(path[0], 'models', config['model'], 'results')
         with open(os.path.join(path[0], 'models', config['model'], 'config.json'), 'w') as file:
             file.write(json.dumps(config, indent=4))
-
-    for k, v in config.items():
-        if 'mlp' in k or k == 'nker':
-            v = v.replace('[', '')
-            v = v.replace(']', '')
-            config[k] = list(map(int, v.split(',')))
 
     return config
 

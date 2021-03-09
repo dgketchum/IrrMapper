@@ -67,8 +67,8 @@ def to_tuple(add_ndvi):
         else:
             image_stack = stacked
         # 'constant' is the label for label raster.
-        labels = one_hot(inputs.get(MODE), n_classes=N_CLASSES)
-        labels = tf.cast(labels, tf.int32)
+        # labels = one_hot(inputs.get(MODE), n_classes=N_CLASSES)
+        labels = tf.cast(inputs.get(MODE), tf.int32)
         return image_stack, labels
 
     return to_tup

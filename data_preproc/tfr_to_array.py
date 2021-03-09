@@ -6,7 +6,7 @@ import tarfile
 import torch
 
 from google.cloud import storage
-from tf_dataset import make_test_dataset
+from tfr_utils import make_test_dataset
 from data_preproc.plot_data import plot_image_data
 
 N_CLASSES = 3
@@ -33,7 +33,7 @@ def write_tfr_to_gcs(recs, bucket=None, bucket_dst=None,
 
     count = start_count
 
-    dataset = make_test_dataset(recs, pattern).batch(1)
+    dataset = make_test_dataset(recs, pattern)
     obj_ct = np.array([0, 0, 0, 0])
     tmpdirname = tempfile.mkdtemp()
     items = []
@@ -81,8 +81,10 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=
     tmpdirname = tempfile.mkdtemp()
     items = []
     for j, (features, labels) in enumerate(dataset):
-        labels = labels.numpy().squeeze()
-        classes = np.array([np.any(labels[:, :, i]) for i in range(N_CLASSES)])
+        labels = labels.numpy()
+        # impervious was cast to 4, force to 3
+        labels[labels > 3] = 3
+        classes = np.array([np.any(labels == i) for i in range(N_CLASSES)])
         obj_ct += classes
         features = features.numpy().squeeze()
 
@@ -90,6 +92,7 @@ def write_tfr_to_local(recs, out_dir, split, pattern='*gz', start_count=0, plot=
             out_plot = os.path.join(PLOTS, '{}.png'.format(j))
             plot_image_data(features, labels, out_file=out_plot)
 
+        labels = labels.reshape(labels.shape[0], labels.shape[1], 1)
         a = np.append(features, labels, axis=2)
         a = torch.from_numpy(a)
         tmp_name = os.path.join(tmpdirname, '{}.pth'.format(str(j).zfill(7)))
@@ -118,8 +121,8 @@ if __name__ == '__main__':
     # glob_pattern = '*{}*gz'.format(split)
     # write_tfr_to_gcs(tf_recs, bucket=bucket_root, bucket_dst=bucket_dir, category=_type, start_count=0)
 
-    for split in ['test']:
-        dir_ = '/media/hdisk/t_data/tfrecords/{}'.format(split)
-        out_dir = '/media/hdisk/t_data/tarchives/images/{}'.format(split)
-        write_tfr_to_local(dir_, out_dir, split=split, start_count=0, plot=True)
+    for split in ['train', 'test', 'valid']:
+        dir_ = '/media/hdisk/ts_data/tfrecords/{}'.format(split)
+        out_dir = '/media/hdisk/ts_data/images/{}'.format(split)
+        write_tfr_to_local(dir_, out_dir, split=split, start_count=0, plot=False)
 # ========================= EOF ====================================================================

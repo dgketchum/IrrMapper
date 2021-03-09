@@ -39,36 +39,6 @@ def pixel_dataset(mode, config, norm):
     return ds
 
 
-def pixelset_dataset(mode, config, norm):
-    n_pixel = config['n_pixel']
-
-    def map_input(item):
-        features = item['pth'][:, :BANDS + TERRAIN]
-        features = transform_(features, norm).float()
-        x, g = features[:, :BANDS], features[:, BANDS:BANDS + TERRAIN]
-        x = x.reshape((x.shape[0], SEQUENCE_LEN, CHANNELS))
-        y = item['pth'][0, -1].long()
-
-        if x.shape[0] >= n_pixel:
-            perm = torch.randperm(x.shape[0])
-            idx = perm[:n_pixel]
-            x = x[idx, :, :]
-            g = g[idx, :]
-        else:
-            repeats = torch.ceil(torch.tensor(n_pixel).float() / x.shape[0]).int()
-            x = x.repeat(repeats, 1, 1)[:n_pixel, :, :]
-            g = g.repeat(repeats, 1)[:n_pixel, :]
-        x = x.permute(1, 2, 0)
-        return x, y, g
-
-    root = config['dataset_folder']
-    loc = os.path.join(root, mode)
-    urls = find_archives(loc)
-    ds = wds.Dataset(urls)
-    ds = ds.decode('torchl').map(map_input).batched(config['batch_size'])
-    return ds
-
-
 def temporal_image_dataset(mode, config, norm):
     """ Use for training and prediction of image datasets"""
 
@@ -94,7 +64,8 @@ def image_dataset(mode, config, norm):
 
     def map_fn(item):
         features = item['pth'][:, :, :BANDS + TERRAIN]
-        features = transform_(features, norm).float()
+        # features = transform_(features, norm).float()
+        features = features.float()
         x = features[:, :, :BANDS]
         x = x.permute((2, 0, 1)).float()
         y = item['pth'][:, :, -4:].permute(2, 0, 1).int()

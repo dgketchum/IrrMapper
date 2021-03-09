@@ -30,17 +30,13 @@ def plot_image_data(x, label=None, out_file=None):
 
     lat, lon = x[:, :, lat_idx].mean(), x[:, :, lon_idx].mean()
 
-    mask = label.sum(2) == 0
-    label = label.argmax(2) + 1
-    label[mask] = 0
-
     ax[0].imshow(rgb)
     ax[0].set(xlabel='image')
 
     ax[1].imshow(label, cmap=cmap_label, norm=norm)
     ax[1].set(xlabel='label')
 
-    plt.suptitle('{:.3f}, {:.3f}'.format(lat, lon))
+    plt.suptitle('{:.3f}, {:.3f} {}'.format(lat, lon, np.unique(label)))
     plt.tight_layout()
     if out_file:
         plt.savefig(out_file)
