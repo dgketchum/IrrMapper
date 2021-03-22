@@ -1,203 +1,75 @@
 import os
 import json
-import pickle as pkl
-import numpy as np
 from datetime import datetime
+from argparse import ArgumentParser
 
-import torch
-import torch.nn as nn
-from torch.utils.tensorboard import SummaryWriter
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import TensorBoardLogger
 
-from learning.focal_loss import FocalLoss
-from learning.weight_init import weight_init
-from learning.metrics import confusion_matrix_analysis, get_conf_matrix
-from models.model_init import get_model
-from data_load.data_loader import get_loaders
+from models.unet.unet import UNet
 from configure import get_config
-from utils import recursive_todevice
-
-TIME_START = datetime.now()
-
-
-def train_epoch(model, optimizer, criterion, loader, config):
-    ts = datetime.now()
-    device = torch.device(config['device'])
-    loss = None
-    sum_loss = 0.0
-    for i, (x, y, g) in enumerate(loader):
-        x = recursive_todevice(x, device)
-        if config['model'] == 'clstm':
-            y = y.argmax(dim=1).to(device)
-            optimizer.zero_grad()
-            out, att = model(x)
-            pred = out[0][0]
-            loss = criterion(pred, y)
-
-        elif config['model'] == 'unet':
-            y = y.to(device)
-            optimizer.zero_grad()
-            out = model(x)
-            loss = criterion(out, y)
-
-        else:
-            y = y.to(device)
-            optimizer.zero_grad()
-            out, att = model(x)
-            out = out.permute(0, 2, 1)
-            loss = criterion(out, y)
-
-        sum_loss += loss.item()
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        if (i + 1) % config['display_step'] == 0:
-            print('Train Step {}, Loss: {:.4f}'.format(i + 1, sum_loss / (i + 1)))
-
-    mean_loss = sum_loss / (i + 1)
-    t_delta = datetime.now() - ts
-    print('Train Loss: {:.4f} in {:.2f} minutes {} steps'.format(loss.item(),
-                                                                 t_delta.seconds / 60.,
-                                                                 i + 1))
-    return {'train_loss': mean_loss}
-
-
-def evaluate_epoch(model, loader, config, mode='valid'):
-    i = None
-    ts = datetime.now()
-    device = torch.device(config['device'])
-    n_class = config['num_classes']
-    confusion = np.zeros((n_class, n_class))
-
-    for i, (x, y, g) in enumerate(loader):
-        x = recursive_todevice(x, device)
-        if config['model'] == 'clstm':
-            mask = y.sum(1) > 0
-            y = y.argmax(dim=1).to(device)
-            with torch.no_grad():
-                out, att = model(x)
-                pred = out[0][0]
-                pred = torch.argmax(pred, dim=1)
-                confusion += get_conf_matrix(y[mask], pred[mask], n_class)
-
-        elif config['model'] == 'unet':
-            mask = (y > 0).numpy().flatten()
-            y = y.numpy().flatten()
-            with torch.no_grad():
-                out = model(x)
-                pred = torch.argmax(out, dim=1).cpu().numpy().flatten()
-                confusion += get_conf_matrix(y[mask], pred[mask], n_class)
-
-        else:
-            y = y.squeeze().to(device)
-            mask = (y > 0).flatten()
-            x = x.squeeze()
-            with torch.no_grad():
-                pred, att = model(x)
-                pred = torch.argmax(pred, dim=1)
-                if config['batch_size'] > 1:
-                    y = y.flatten()
-                confusion += get_conf_matrix(y[mask], pred[mask], config['num_classes'])
-        if (i + 1) % config['display_step'] == 0:
-            print('Eval Step {}'.format(i + 1))
-
-    per_class, overall = confusion_matrix_analysis(confusion)
-    t_delta = datetime.now() - ts
-    print('Evaluation: IOU: {:.4f}, '
-          'in {:.2f} minutes, {} steps'.format(overall['iou'],
-                                               t_delta.seconds / 60.,
-                                               i + 1))
-
-    if mode == 'valid':
-        overall['{}_iou'.format(mode)] = overall['iou']
-        return overall
-    elif mode == 'test':
-        overall['{}_iou'.format(mode)] = overall['iou']
-        return overall, confusion
 
 
 def prepare_output(config):
-    os.makedirs(config['res_dir'], exist_ok=True)
-    os.makedirs(os.path.join(config['res_dir'], 'figures'), exist_ok=True)
+    dt = datetime.now().strftime('{}-%Y.%m.%d.%H.%M-{}-{}'.format(config.machine,
+                                                                  config.model,
+                                                                  config.mode))
+    new_dir = os.path.join(config.res_dir, dt)
+    os.makedirs(new_dir, exist_ok=True)
+    os.makedirs(os.path.join(new_dir, 'checkpoints'), exist_ok=True)
+    with open(os.path.join(new_dir, 'config.json'), 'w') as file:
+        file.write(json.dumps(vars(config), indent=4))
+    return new_dir
 
 
-def checkpoint(log, config):
-    with open(os.path.join(config['res_dir'], 'trainlog.json'), 'w') as outfile:
-        json.dump(log, outfile, indent=4)
+def main(params):
 
+    config = get_config(**vars(params))
 
-def save_results(metrics, conf_mat, config):
-    with open(os.path.join(config['res_dir'], 'test_metrics.json'), 'w') as outfile:
-        json.dump(metrics, outfile, indent=4)
-    pkl.dump(conf_mat, open(os.path.join(config['res_dir'], 'conf_mat.pkl'), 'wb'))
+    model = UNet(config)
 
+    log_dir = prepare_output(config)
+    logger = TensorBoardLogger(log_dir, name='log')
 
-def overall_performance(config, conf):
-    _, perf = confusion_matrix_analysis(conf)
-    print('Test Precision {:.4f}, Recall {:.4f}, F1 Score {:.2f}'
-          ''.format(perf['precision'], perf['recall'], perf['f1-score']))
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=os.path.join(log_dir, 'checkpoints'),
+        save_top_k=1,
+        monitor='val_acc',
+        verbose=True)
 
-    with open(os.path.join(config['res_dir'], 'overall.json'), 'w') as file:
-        file.write(json.dumps(perf, indent=4))
+    stop_callback = EarlyStopping(
+        monitor='val_acc',
+        mode='auto',
+        patience=15,
+        verbose=False)
 
+    trainer = Trainer(
+        precision=16,
+        min_epochs=100,
+        limit_val_batches=250,
+        # overfit_batches=100,
+        auto_lr_find=True,
+        gpus=config.device_ct,
+        num_nodes=config.node_ct,
+        callbacks=[checkpoint_callback, stop_callback],
+        progress_bar_refresh_rate=params.progress,
+        log_every_n_steps=5,
+        logger=logger)
 
-def train(config):
-
-    writer = SummaryWriter(config['res_dir'])
-
-    np.random.seed(config['rdm_seed'])
-    torch.manual_seed(config['rdm_seed'])
-
-    prepare_output(config)
-    device = torch.device(config['device'])
-
-    train_loader, test_loader, val_loader = get_loaders(config)
-    model = get_model(config)
-    if torch.cuda.device_count() > 1:
-        print(torch.cuda.device_count(), "GPUs")
-        model = nn.DataParallel(model)
-    model = model.to(device)
-    model.apply(weight_init)
-
-    lr = config['lr']
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, eps=1e-4)
-    criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
-
-    with open(os.path.join(config['res_dir'], 'config.json'), 'w') as _file:
-        _file.write(json.dumps(config, indent=4))
-
-    train_log = {}
-    best_iou = 0.0
-
-    print('\nTrain {}'.format(config['model'].upper()))
-    for epoch in range(1, config['epochs'] + 1):
-        print('\nEPOCH {}/{}'.format(epoch, config['epochs']))
-
-        model.train()
-        train_metrics = train_epoch(model, optimizer, criterion, train_loader, config=config)
-        writer.add_scalar('training_loss', train_metrics['train_loss'], epoch)
-        model.eval()
-        val_metrics = evaluate_epoch(model, val_loader, config=config)
-        writer.add_scalar('accuracy', val_metrics['accuracy'], epoch)
-
-        train_log[epoch] = {**train_metrics, **val_metrics}
-        if val_metrics['accuracy'] >= best_iou:
-            best_iou = val_metrics['accuracy']
-            torch.save({'epoch': epoch, 'state_dict': model.state_dict(),
-                        'optimizer': optimizer.state_dict()},
-                       os.path.join(config['res_dir'], 'model.pth.tar'))
-
-    print('\nRun test set....')
-    model.load_state_dict(torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))['state_dict'])
-    model.eval()
-    metrics, conf = evaluate_epoch(model, test_loader, config=config, mode='test')
-    overall_performance(config, conf)
-    t_delta = datetime.now() - TIME_START
-    print('Total Time: {:.2f} minutes'.format(t_delta.seconds / 60.))
-    writer.close()
+    trainer.tune(model)
+    trainer.fit(model)
 
 
 if __name__ == '__main__':
-    for m in ['unet']:
-        config = get_config(m, 'irr')
-        train(config)
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument('--model', default='unet')
+    parser.add_argument('--mode', default='image')
+    parser.add_argument('--gpu', default='RTX')
+    parser.add_argument('--machine', default='pc')
+    parser.add_argument('--nodes', default=1, type=int)
+    parser.add_argument('--progress', default=0, type=int)
+    parser.add_argument('--workers', default=6, type=int)
+    args = parser.parse_args()
+    main(args)
 # ========================================================================================

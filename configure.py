@@ -1,16 +1,20 @@
 import os
 import json
 from pathlib import Path
+from argparse import Namespace
 
 import torch
 
 path = Path(__file__).parents
+N_CLASSES = 4
 
 CHANNELS = 7
 BANDS = 91
 TERRAIN = 5
 CDL = 2
 SEQUENCE_LEN = 13
+
+PIXEL_CLASS_DIST = [6618464, 7235264, 59574370]
 
 
 # CHANNELS = 7
@@ -19,36 +23,48 @@ SEQUENCE_LEN = 13
 # SEQUENCE_LEN = 10
 
 
-def get_config(model='clstm', mode='irr'):
-    data = '/nobackup/dketchu1/ts_data'
-    if not os.path.isdir(data):
-        data = '/media/hdisk/ts_data'
+def get_config(**params):
+    params = Namespace(**params)
 
+    gpu_map = {'V100': 3,
+               'RTX': 1,
+               'K40': 1.5}
+
+    b_sizes = {'pixel': 3,
+               'image': 12,
+               'temporal_image': 6}
+
+    params.batch_size = int(b_sizes[params.mode] * gpu_map[params.gpu])
+
+    data = '/media/nvm/ts_data'
+    if not os.path.isdir(data):
+        data = '/nobackup/dketchu1/ts_data'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
 
     device_ct = torch.cuda.device_count()
+    print('device count: {}'.format(device_ct))
 
-    config = {'model': model,
-              'mode': mode,
+    config = {'model': params.model,
+              'mode': params.mode,
+              'input_dim': 6,
+              'dataset_folder': data,
               'rdm_seed': 1,
-              'display_step': 100,
               'epochs': 100,
-              'input_dim': CHANNELS,
-              'geomfeat': None,
-              'device': 'cuda:0',
-              'num_workers': 4,
-              'pooling': 'mean_std',
-              'dropout': 0.2,
-              'gamma': 1,
-              'alpha': None,
-              'prediction_dir': os.path.join(images, 'test'),
-              'norm': os.path.join(data, 'pixels', 'meanstd.pkl'), }
+              'lr': 0.0001,
+              'n_classes': N_CLASSES,
+              'device_ct': device_ct,
+              'node_ct': params.nodes,
+              'num_workers': params.workers,
+              'machine': params.machine,
+              'batch_size': params.batch_size,
+              'sample_n': [0.0, 0.49362077, 0.45154002, 0.05483921],
+              'res_dir': os.path.join(path[0], 'models', params.model, 'results'),
+              }
 
     if config['model'] == 'dcm':
         config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
-        config['batch_size'] = 1 * device_ct
         config['num_classes'] = 3
         config['hidden_size'] = 18
         config['num_layers'] = 2
@@ -62,10 +78,7 @@ def get_config(model='clstm', mode='irr'):
     if config['model'] == 'nnet':
         config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
-        config['batch_size'] = 1 * device_ct
-        config['num_classes'] = 3
         config['hidden_size'] = 256
-        config['input_dim'] = BANDS
         config['seed'] = 121
         config['lr'] = 0.0025
         config['res_dir'] = os.path.join(path[0], 'models', 'nnet', 'results')
@@ -75,8 +88,6 @@ def get_config(model='clstm', mode='irr'):
     if config['model'] == 'tcnn':
         config['dataset_folder'] = pixels
         config['predict_mode'] = 'pixel'
-        config['batch_size'] = 1 * device_ct
-        config['num_classes'] = 3
         config['sequence_len'] = SEQUENCE_LEN
         config['lr'] = 0.0025
         config['hidden_dim'] = 4
@@ -89,7 +100,6 @@ def get_config(model='clstm', mode='irr'):
     if config['model'] == 'clstm':
         config['dataset_folder'] = images
         config['predict_mode'] = 'temporal_image'
-        config['batch_size'] = 16 * device_ct
         config['input_dim'] = 7
         config['num_layers'] = 1
         config['kernel_size'] = (3, 3)
@@ -100,18 +110,11 @@ def get_config(model='clstm', mode='irr'):
 
     if config['model'] == 'unet':
         config['dataset_folder'] = images
-        config['batch_size'] = 8 * device_ct
-        config['input_dim'] = BANDS
-        config['num_classes'] = 4
         config['predict_mode'] = 'image'
-        # config['sample_n'] = [1012505459, 337955249, 43964057, 153976261, 222513580, 69336274]
         config['seed'] = 121
         config['lr'] = 0.0001
-        config['res_dir'] = os.path.join(path[0], 'models', config['model'], 'results')
-        with open(os.path.join(path[0], 'models', config['model'], 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
 
-    return config
+    return Namespace(**config)
 
 
 if __name__ == '__main__':
