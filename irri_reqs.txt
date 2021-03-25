@@ -50,7 +50,7 @@ pyproj==1.9.5.1
 pytest-runner==4.2
 python-dateutil==2.7.2
 pytz==2018.4
-PyYAML==5.1
+PyYAML==5.4
 rasterio==1.0a12
 requests==2.20.0
 SatelliteImage==0.1.26
