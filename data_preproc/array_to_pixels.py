@@ -9,7 +9,7 @@ FEATURES = BANDS + TERRAIN + CDL
 # not incl background (0) class
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=1000, out_norm=None):
+def write_pixel_blocks(data_dir, out, mode, n_subset=100000, out_norm=None):
     """ write tensorflow records to class-balanced torch arrays every n samples"""
 
     label_count, pth_count, out_pixels = 0, 0, 0
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     images_dir = os.path.join(data, 'images')
     pixels_dir = os.path.join(data, 'pixels')
 
-    for split in ['test', 'valid']:
+    for split in ['train']:
         np_images = os.path.join(images_dir, split)
         pixel_dst = os.path.join(pixels_dir, split)
         if split == 'train':

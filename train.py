@@ -4,11 +4,18 @@ from datetime import datetime
 from argparse import ArgumentParser
 
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from models.unet.unet import UNet
+from models.nnet.nnet import NNet
+from models.temp_cnn.temp_cnn import TempConv
 from configure import get_config
+
+
+MODEL_MAP = {'unet': UNet,
+             'nnet': NNet,
+             'tcnn': TempConv}
 
 
 def prepare_output(config):
@@ -27,7 +34,8 @@ def main(params):
 
     config = get_config(**vars(params))
 
-    model = UNet(config)
+    model = MODEL_MAP[config.model]
+    model = model(config)
 
     log_dir = prepare_output(config)
     logger = TensorBoardLogger(log_dir, name='log')
@@ -41,30 +49,30 @@ def main(params):
     stop_callback = EarlyStopping(
         monitor='val_acc',
         mode='auto',
-        patience=15,
+        patience=25,
         verbose=False)
+
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     trainer = Trainer(
         precision=16,
         min_epochs=100,
-        limit_val_batches=250,
-        # overfit_batches=100,
-        auto_lr_find=True,
+        # auto_lr_find=True,
         gpus=config.device_ct,
         num_nodes=config.node_ct,
-        callbacks=[checkpoint_callback, stop_callback],
+        callbacks=[checkpoint_callback, stop_callback, lr_monitor],
         progress_bar_refresh_rate=params.progress,
         log_every_n_steps=5,
         logger=logger)
 
-    trainer.tune(model)
+    # trainer.tune(model)
     trainer.fit(model)
 
 
 if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='unet')
-    parser.add_argument('--mode', default='image')
+    parser.add_argument('--model', default='tcnn')
+    parser.add_argument('--mode', default='pixel')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--nodes', default=1, type=int)

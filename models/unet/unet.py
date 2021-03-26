@@ -18,7 +18,6 @@ import pytorch_lightning as pl
 from data_load.dataset import IrrMapDataModule
 
 
-
 class UNet(pl.LightningModule):
     def __init__(self, hparams, bilinear=True):
         super(UNet, self).__init__()
@@ -26,17 +25,18 @@ class UNet(pl.LightningModule):
         self.hparams = hparams
         self.configure_model()
 
-        self.inc = DoubleConv(self.input_dim, 64)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
+        seed = 32
+        self.inc = DoubleConv(self.input_dim, seed)
+        self.down1 = Down(seed, seed * 2)
+        self.down2 = Down(seed * 2, seed * 4)
+        self.down3 = Down(seed * 4, seed * 8)
         factor = 2 if bilinear else 1
-        self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, bilinear)
-        self.up2 = Up(512, 256 // factor, bilinear)
-        self.up3 = Up(256, 128 // factor, bilinear)
-        self.up4 = Up(128, 64, bilinear)
-        self.outc = OutConv(64, self.n_classes)
+        self.down4 = Down(seed * 8, seed * 16 // factor)
+        self.up1 = Up(seed * 16, seed * 8 // factor, bilinear)
+        self.up2 = Up(seed * 8, seed * 4 // factor, bilinear)
+        self.up3 = Up(seed * 4, seed * 2 // factor, bilinear)
+        self.up4 = Up(seed * 2, seed, bilinear)
+        self.outc = OutConv(seed, self.n_classes)
 
         self.train_acc = pl.metrics.Accuracy()
         self.valid_acc = pl.metrics.Accuracy()
@@ -59,19 +59,35 @@ class UNet(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                               mode='max',
+                                                               factor=0.5,
+                                                               patience=5,
+                                                               verbose=True)
+
+        return {'optimizer': optimizer,
+                'lr_scheduler': {'scheduler': scheduler,
+                                 'interval': 'epoch',
+                                 'monitor': 'val_acc'}}
 
     def cross_entropy_loss(self, logits, labels):
         weights = torch.tensor(self.hparams['sample_n'], dtype=torch.float32, device=self.device)
         loss = nn.CrossEntropyLoss(ignore_index=0, weight=weights)
         return loss(logits, labels)
 
+    def _mask_out(self, y, logits):
+        mask = y.flatten() > 0
+        y = y.flatten()[mask]
+        pred = torch.softmax(logits, 1)
+        pred = torch.argmax(pred, dim=1).flatten()[mask]
+        return y, pred
+
     def training_step(self, batch, batch_idx):
         x, g, y = batch
         logits = self.forward(x)
         loss = self.cross_entropy_loss(logits, y)
         self.log('train_loss', loss)
-        pred = torch.softmax(logits, 1)
+        y, pred = self._mask_out(y, logits)
         self.log('train_acc_step', self.train_acc(pred, y), prog_bar=True, logger=True)
         return {'loss': loss}
 
@@ -83,12 +99,24 @@ class UNet(pl.LightningModule):
         logits = self.forward(x)
         loss = self.cross_entropy_loss(logits, y)
         self.log('val_loss', loss)
-        pred = torch.softmax(logits, 1)
+        y, pred = self._mask_out(y, logits)
         self.log('val_acc', self.valid_acc(pred, y), on_epoch=True)
         self.log('val_f1', self.valid_f1(pred, y), on_epoch=True)
         self.log('val_rec', self.valid_rec(pred, y), on_epoch=True)
         self.log('val_prec', self.valid_prec(pred, y), on_epoch=True)
         return {'val_acc': self.valid_acc(pred, y)}
+
+    def test_step(self, batch, batch_idx):
+        x, g, y = batch
+        logits = self.forward(x)
+        loss = self.cross_entropy_loss(logits, y)
+        self.log('test_loss', loss)
+        y, pred = self._mask_out(y, logits)
+        self.log('test_acc', self.valid_acc(pred, y), on_epoch=True)
+        self.log('test_f1', self.valid_f1(pred, y), on_epoch=True)
+        self.log('test_rec', self.valid_rec(pred, y), on_epoch=True)
+        self.log('test_prec', self.valid_prec(pred, y), on_epoch=True)
+        return {'test_acc': self.valid_acc(pred, y)}
 
     @staticmethod
     def validation_end(outputs):

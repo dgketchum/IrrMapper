@@ -10,7 +10,7 @@ PLOTS = '/media/hdisk/t_data/tfrecords/plots'
 
 
 def write_tfr_to_local(recs, out_dir, split, plot=False):
-    """ Write tfrecord.gz to torch tensor, push .tar of torch tensor.pth to local"""
+    """ Write tfrecord.gz to torch tensor, push torch tensor.pth to local"""
 
     dataset = make_test_dataset(recs, '*gz')
     obj_ct = np.zeros((1, N_CLASSES))

@@ -4,6 +4,7 @@ from typing import Optional
 
 import webdataset as wds
 from webdataset import dataset as wds
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
@@ -15,9 +16,10 @@ SELECT_CHANNELS = torch.tensor([44, 45, 48, 65, 66, 69])
 
 class IrrMapDataset(Dataset):
 
-    def __init__(self, data_dir, mode, transforms=None):
+    def __init__(self, data_dir, mode, transforms=None, model=None):
         self.data_dir = data_dir
         self.mode = mode
+        self.model = model
         self.img_paths = glob(os.path.join(data_dir, '*.pth'))
         self.transforms = transforms
 
@@ -29,13 +31,15 @@ class IrrMapDataset(Dataset):
             features = img[:, :BANDS + TERRAIN]
             x, g = features[:, :BANDS], features[:, BANDS:BANDS + TERRAIN]
             x = x.reshape((x.shape[0], SEQUENCE_LEN, CHANNELS))
+            g = g.float()
             y = img[:, -1].long()
             y -= 1
-            # TODO: move model-specific reshape to ptl module
-            if self.mode == 'nnet':
-                x = x.reshape((x.shape[0], x.shape[1] * x.shape[2]))
-            if self.mode == 'tcnn':
-                x = x.permute(0, 2, 1)
+
+            if self.model == 'nnet':
+                x = x.reshape((x.shape[0], x.shape[1] * x.shape[2])).float()
+
+            if self.model == 'tcnn':
+                x = x.permute(0, 2, 1).float()
 
         elif self.mode == 'image':
             features = img[:, :, :BANDS + TERRAIN]
@@ -85,10 +89,11 @@ class IrrMapDataModule(pl.LightningDataModule):
         self.data_dir = os.path.join(config['dataset_folder'])
         self.batch_sz = config['batch_size']
         self.mode = config['mode']
+        self.model = config['model']
 
     def train_dataloader(self):
         train_dir = os.path.join(self.data_dir, 'train')
-        train_ds = IrrMapDataset(train_dir, self.mode, transforms=None)
+        train_ds = IrrMapDataset(train_dir, self.mode, transforms=None, model=self.model)
         dl = DataLoader(
             train_ds,
             shuffle=True,
@@ -101,7 +106,7 @@ class IrrMapDataModule(pl.LightningDataModule):
 
     def val_loader(self):
         val_dir = os.path.join(self.data_dir, 'valid')
-        valid_ds = IrrMapDataset(val_dir, self.mode, transforms=None)
+        valid_ds = IrrMapDataset(val_dir, self.mode, transforms=None, model=self.model)
         dl = DataLoader(
             valid_ds,
             shuffle=False,
@@ -113,7 +118,7 @@ class IrrMapDataModule(pl.LightningDataModule):
 
     def test_loader(self):
         test_dir = os.path.join(self.data_dir, 'test')
-        test_ds = IrrMapDataset(test_dir, self.mode, transforms=None)
+        test_ds = IrrMapDataset(test_dir, self.mode, transforms=None, model=self.model)
         dl = DataLoader(
             test_ds,
             shuffle=False,

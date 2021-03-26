@@ -404,8 +404,6 @@ def bands():
 def features(kind='interp'):
     if kind == 'interp':
         features = list(features_dict_interp.keys())[:-1]
-        for i, k in enumerate(features_dict_interp.keys()):
-            print((i, k))
         return features
     elif kind == 'means':
         features = list(features_dict_means.keys())[:-1]

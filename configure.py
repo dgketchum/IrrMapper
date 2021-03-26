@@ -1,9 +1,11 @@
 import os
-import json
 from pathlib import Path
 from argparse import Namespace
 
 import torch
+from pytorch_lightning.utilities import seed
+seed.seed_everything(42)
+
 
 path = Path(__file__).parents
 N_CLASSES = 4
@@ -30,7 +32,7 @@ def get_config(**params):
                'RTX': 1,
                'K40': 1.5}
 
-    b_sizes = {'pixel': 3,
+    b_sizes = {'pixel': 1,
                'image': 12,
                'temporal_image': 6}
 
@@ -43,15 +45,11 @@ def get_config(**params):
     images = os.path.join(data, 'images')
 
     device_ct = torch.cuda.device_count()
-    print('device count: {}'.format(device_ct))
 
     config = {'model': params.model,
               'mode': params.mode,
-              'input_dim': 6,
               'dataset_folder': data,
-              'rdm_seed': 1,
               'epochs': 100,
-              'lr': 0.0001,
               'n_classes': N_CLASSES,
               'device_ct': device_ct,
               'node_ct': params.nodes,
@@ -69,33 +67,28 @@ def get_config(**params):
         config['hidden_size'] = 18
         config['num_layers'] = 2
         config['bidirectional'] = True
-        config['seed'] = 121
         config['lr'] = 0.0025
-        config['res_dir'] = os.path.join(path[0], 'models', 'dcm', 'results')
-        with open(os.path.join(path[0], 'models', 'dcm', 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'nnet':
         config['dataset_folder'] = pixels
+        config['input_dim'] = BANDS
         config['predict_mode'] = 'pixel'
         config['hidden_size'] = 256
-        config['seed'] = 121
-        config['lr'] = 0.0025
-        config['res_dir'] = os.path.join(path[0], 'models', 'nnet', 'results')
-        with open(os.path.join(path[0], 'models', 'nnet', 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
+        config['n_classes'] -= 1
+        config['sample_n'] = config['sample_n'][1:]
+        config['lr'] = 0.001
 
     if config['model'] == 'tcnn':
         config['dataset_folder'] = pixels
+        config['input_dim'] = 7
         config['predict_mode'] = 'pixel'
         config['sequence_len'] = SEQUENCE_LEN
+        config['n_channels'] = CHANNELS
         config['lr'] = 0.0025
+        config['n_classes'] -= 1
         config['hidden_dim'] = 4
-        config['nker'] = '[16, 16, 16]'
+        config['kernel_size'] = '[16, 16, 16]'
         config['mlp3'] = '[16, 4]'
-        config['res_dir'] = os.path.join(path[0], 'models', 'temp_cnn', 'results')
-        with open(os.path.join(path[0], 'models', 'temp_cnn', 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'clstm':
         config['dataset_folder'] = images
@@ -104,9 +97,6 @@ def get_config(**params):
         config['num_layers'] = 1
         config['kernel_size'] = (3, 3)
         config['hidden_dim'] = 4
-        config['res_dir'] = os.path.join(path[0], 'models', 'conv_lstm', 'results')
-        with open(os.path.join(path[0], 'models', 'conv_lstm', 'config.json'), 'w') as file:
-            file.write(json.dumps(config, indent=4))
 
     if config['model'] == 'unet':
         config['dataset_folder'] = images

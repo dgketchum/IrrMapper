@@ -1,111 +1,30 @@
-import os
 import pickle as pkl
 import numpy as np
-from copy import deepcopy
+from argparse import ArgumentParser
 
-import torch
 from matplotlib import pyplot as plt
 from matplotlib import colors
+from pytorch_lightning import Trainer
 
-from utils import recursive_todevice
-from learning.metrics import get_conf_matrix, confusion_matrix_analysis
-from models.model_init import get_model
-from data_load.data_loader import get_predict_loader
-from configure import get_config
 from data_preproc import feature_spec
+from models.unet.unet import UNet
+from configure import get_config
 
 FEATURES = feature_spec.features()
 
 
-def inv_normalize(x, config):
-    """ get original image data (1 X H x W x T x C ) ==> ( H x W x C )"""
-    mean_std = pkl.load(open(config['norm'], 'rb'))
-    x = x.squeeze()
-    if config['predict_mode'] == 'temporal_image':
-        x = x.permute(2, 3, 0, 1)
-    if config['predict_mode'] == 'image':
-        x = x.permute(1, 2, 0)
-    if config['predict_mode'] != 'image':
-        x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
-    mean, std = torch.tensor(mean_std[0][:x.shape[-1]]), torch.tensor(mean_std[1][:x.shape[-1]])
-    x = x.mul_(std).add_(mean)
-    x = x.detach().numpy()
-    return x
+def main(params):
+    config = get_config(**vars(params))
 
+    model = UNet.load_from_checkpoint(checkpoint_path=params.checkpoint)
 
-def predict(config):
-    device = torch.device(config['device'])
+    trainer = Trainer(
+        precision=16,
+        gpus=config.device_ct,
+        num_nodes=config.node_ct,
+        log_every_n_steps=5)
 
-    n_class = config['num_classes']
-    confusion = np.zeros((n_class, n_class))
-
-    val_loader = get_predict_loader(config)
-    model = get_model(config)
-    check_pt = torch.load(os.path.join(config['res_dir'], 'model.pth.tar'))
-    optimizer = torch.optim.Adam(model.parameters())
-    model.load_state_dict(check_pt['state_dict'], strict=False)
-    model.to(device)
-    optimizer.load_state_dict(check_pt['optimizer'])
-    model.eval()
-
-    for i, (x, y, g) in enumerate(val_loader):
-        image = inv_normalize(deepcopy(x), config)
-        x = recursive_todevice(x, device)
-
-        if config['model'] == 'clstm':
-            y = y.squeeze().to(device)
-            mask = (y.sum(0) > 0).flatten()
-            y = y.argmax(0)
-            y = y.reshape(1, y.shape[0], y.shape[1])
-            y_flat = y.flatten()
-            with torch.no_grad():
-                out, att = model(x)
-                pred = out[0][0]
-                pred_img = torch.argmax(pred, dim=1)
-                pred_flat = pred_img.flatten()
-
-        elif config['model'] == 'unet':
-            y = y.squeeze().to(device)
-            mask = (y.sum(0) > 0).flatten()
-            y = y.argmax(0)
-            y = y.reshape(1, y.shape[0], y.shape[1])
-            y_flat = y.flatten()
-            with torch.no_grad():
-                out = model(x)
-                pred_img = torch.argmax(out, dim=1)
-                pred_flat = pred_img.flatten()
-
-        else:
-            y = y.squeeze().to(device)
-            x = x.squeeze()
-            mask = (y.sum(0) > 0).flatten()
-
-            if config['model'] == 'nnet':
-                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2] * x.shape[3])
-            elif config['model'] == 'tcnn':
-                x = x.reshape(x.shape[0] * x.shape[1], x.shape[3], x.shape[2])
-            else:
-                x = x.reshape(x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
-
-            with torch.no_grad():
-                pred, att = model(x)
-                pred_flat = torch.argmax(pred, dim=1)
-                pred_img = pred_flat.reshape((image.shape[0], image.shape[1]))
-                y_flat = y.argmax(0).flatten()
-
-        pred_img = pred_img.cpu().numpy()
-        y = y.cpu().numpy()
-        print(np.unique(pred_img))
-        g = g.numpy()
-        out_fig = os.path.join(config['res_dir'], 'figures', '{}.png'.format(i))
-        plot_prediction(image, pred_img, y, geo=g, out_file=out_fig, config=config)
-
-        confusion += get_conf_matrix(y_flat[mask], pred_flat[mask], config['num_classes'])
-
-    _, overall = confusion_matrix_analysis(confusion)
-    prec, rec, f1 = overall['precision'], overall['recall'], overall['f1-score']
-    print(confusion)
-    print('Precision {:.4f}, Recall {:.4f}, F1 {:.2f},'.format(prec, rec, f1))
+    trainer.test(model)
 
 
 def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=None):
@@ -161,6 +80,17 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=No
 
 
 if __name__ == '__main__':
-    config = get_config('unet')
-    predict(config)
+    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/unet/results/' \
+                     'pc-2021.03.22.15.03-unet-image/checkpoints/epoch=71-step=8135.ckpt'
+    parser = ArgumentParser(add_help=False)
+    parser.add_argument('--model', default='unet')
+    parser.add_argument('--mode', default='image')
+    parser.add_argument('--gpu', default='RTX')
+    parser.add_argument('--machine', default='pc')
+    parser.add_argument('--nodes', default=1, type=int)
+    parser.add_argument('--progress', default=0, type=int)
+    parser.add_argument('--workers', default=6, type=int)
+    parser.add_argument('--checkpoint', default=checkpoint_pth)
+    args = parser.parse_args()
+    main(args)
 # ========================= EOF ====================================================================
