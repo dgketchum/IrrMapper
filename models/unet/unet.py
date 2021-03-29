@@ -25,8 +25,8 @@ class UNet(pl.LightningModule):
         self.hparams = hparams
         self.configure_model()
 
-        seed = 32
-        self.inc = DoubleConv(self.input_dim, seed)
+        seed = 64
+        self.inc = DoubleConv(self.n_channels, seed)
         self.down1 = Down(seed, seed * 2)
         self.down2 = Down(seed * 2, seed * 4)
         self.down3 = Down(seed * 4, seed * 8)

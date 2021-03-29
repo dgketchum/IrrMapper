@@ -71,13 +71,12 @@ def main(params):
 
 if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='tcnn')
-    parser.add_argument('--mode', default='pixel')
+    parser.add_argument('--model', default='unet')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--nodes', default=1, type=int)
     parser.add_argument('--progress', default=0, type=int)
-    parser.add_argument('--workers', default=6, type=int)
+    parser.add_argument('--workers', default=16, type=int)
     args = parser.parse_args()
     main(args)
 # ========================================================================================

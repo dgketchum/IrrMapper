@@ -4,8 +4,8 @@ from argparse import Namespace
 
 import torch
 from pytorch_lightning.utilities import seed
-seed.seed_everything(42)
 
+seed.seed_everything(42)
 
 path = Path(__file__).parents
 N_CLASSES = 4
@@ -28,16 +28,6 @@ PIXEL_CLASS_DIST = [6618464, 7235264, 59574370]
 def get_config(**params):
     params = Namespace(**params)
 
-    gpu_map = {'V100': 3,
-               'RTX': 1,
-               'K40': 1.5}
-
-    b_sizes = {'pixel': 1,
-               'image': 12,
-               'temporal_image': 6}
-
-    params.batch_size = int(b_sizes[params.mode] * gpu_map[params.gpu])
-
     data = '/media/nvm/ts_data'
     if not os.path.isdir(data):
         data = '/nobackup/dketchu1/ts_data'
@@ -47,7 +37,6 @@ def get_config(**params):
     device_ct = torch.cuda.device_count()
 
     config = {'model': params.model,
-              'mode': params.mode,
               'dataset_folder': data,
               'epochs': 100,
               'n_classes': N_CLASSES,
@@ -55,14 +44,13 @@ def get_config(**params):
               'node_ct': params.nodes,
               'num_workers': params.workers,
               'machine': params.machine,
-              'batch_size': params.batch_size,
               'sample_n': [0.0, 0.49362077, 0.45154002, 0.05483921],
               'res_dir': os.path.join(path[0], 'models', params.model, 'results'),
               }
 
     if config['model'] == 'dcm':
         config['dataset_folder'] = pixels
-        config['predict_mode'] = 'pixel'
+        config['mode'] = 'pixel'
         config['num_classes'] = 3
         config['hidden_size'] = 18
         config['num_layers'] = 2
@@ -71,8 +59,8 @@ def get_config(**params):
 
     if config['model'] == 'nnet':
         config['dataset_folder'] = pixels
-        config['input_dim'] = BANDS
-        config['predict_mode'] = 'pixel'
+        config['n_channels'] = CHANNELS
+        config['mode'] = 'pixel'
         config['hidden_size'] = 256
         config['n_classes'] -= 1
         config['sample_n'] = config['sample_n'][1:]
@@ -81,7 +69,7 @@ def get_config(**params):
     if config['model'] == 'tcnn':
         config['dataset_folder'] = pixels
         config['input_dim'] = 7
-        config['predict_mode'] = 'pixel'
+        config['mode'] = 'pixel'
         config['sequence_len'] = SEQUENCE_LEN
         config['n_channels'] = CHANNELS
         config['lr'] = 0.0025
@@ -92,7 +80,7 @@ def get_config(**params):
 
     if config['model'] == 'clstm':
         config['dataset_folder'] = images
-        config['predict_mode'] = 'temporal_image'
+        config['mode'] = 'temporal_image'
         config['input_dim'] = 7
         config['num_layers'] = 1
         config['kernel_size'] = (3, 3)
@@ -100,9 +88,20 @@ def get_config(**params):
 
     if config['model'] == 'unet':
         config['dataset_folder'] = images
-        config['predict_mode'] = 'image'
+        config['mode'] = 'image'
+        config['n_channels'] = BANDS
         config['seed'] = 121
         config['lr'] = 0.0001
+
+    gpu_map = {'V100': 3,
+               'RTX': 1,
+               'K40': 1.5}
+
+    b_sizes = {'pixel': 1,
+               'image': 24,
+               'temporal_image': 6}
+
+    config['batch_size'] = int(b_sizes[config['mode']] * gpu_map[params.gpu])
 
     return Namespace(**config)
 

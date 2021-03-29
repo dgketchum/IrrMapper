@@ -46,7 +46,7 @@ class IrrMapDataset(Dataset):
             features = features.float()
             x = features[:, :, :BANDS]
             x = x.permute((2, 0, 1)).float()
-            x = x.index_select(dim=0, index=SELECT_CHANNELS)
+            # x = x.index_select(dim=0, index=SELECT_CHANNELS)
             y = img[:, :, -1].long()
             g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
             # give C x H x W
