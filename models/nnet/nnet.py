@@ -13,7 +13,7 @@ class NNet(pl.LightningModule):
         self.configure_model()
 
         self.classifier = nn.Sequential(
-            nn.Linear(self.input_dim, self.hidden_size),
+            nn.Linear(self.n_channels, self.hidden_size),
             nn.BatchNorm1d(self.hidden_size),
             nn.ReLU(),
             nn.Linear(self.hidden_size, int(self.hidden_size / 2)),
@@ -77,11 +77,19 @@ class NNet(pl.LightningModule):
         loss = self.cross_entropy_loss(logits, y)
         self.log('val_loss', loss)
         y, pred = self._mask_out(y, logits)
-        self.log('val_acc', self.valid_acc(pred, y), on_epoch=True)
-        self.log('val_f1', self.valid_f1(pred, y), on_epoch=True)
-        self.log('val_rec', self.valid_rec(pred, y), on_epoch=True)
-        self.log('val_prec', self.valid_prec(pred, y), on_epoch=True)
-        return {'val_acc': self.valid_acc(pred, y)}
+        acc = self.valid_acc(pred, y)
+        f1 = self.valid_f1(pred, y)
+        rec = self.valid_rec(pred, y)
+        prec = self.valid_prec(pred, y)
+        self.log('val_acc', acc, on_epoch=True)
+        self.log('val_f1', f1, on_epoch=True)
+        self.log('val_rec', rec, on_epoch=True)
+        self.log('val_prec', prec, on_epoch=True)
+        return {'val_loss': loss,
+                'val_acc': acc,
+                'val_f1': f1,
+                'val_rec': rec,
+                'val_prec': prec}
 
     def test_step(self, batch, batch_idx):
         x, g, y = batch

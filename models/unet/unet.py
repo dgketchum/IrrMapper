@@ -135,7 +135,7 @@ class UNet(pl.LightningModule):
     def __dataloader(self):
         itdl = IrrMapDataModule(self.hparams)
         loaders = {'train': itdl.train_dataloader(),
-                   'val': itdl.val_loader(),
+                   'valid': itdl.val_loader(),
                    'test': itdl.test_loader()}
         return loaders
 
@@ -143,10 +143,10 @@ class UNet(pl.LightningModule):
         return self.__dataloader()['train']
 
     def val_dataloader(self):
-        return self.__dataloader()['val']
+        return self.__dataloader()['valid']
 
     def test_dataloader(self):
-        return self.__dataloader()['test']
+        return self.__dataloader()['valid']
 
     def configure_model(self):
         for name, val in self.hparams.items():

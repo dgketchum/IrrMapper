@@ -28,15 +28,16 @@ PIXEL_CLASS_DIST = [6618464, 7235264, 59574370]
 def get_config(**params):
     params = Namespace(**params)
 
-    data = '/media/nvm/ts_data/cm'
+    data = '/media/nvm/ts_data/{}'.format(params.stack)
     if not os.path.isdir(data):
-        data = '/nobackup/dketchu1/ts_data/cm'
+        data = '/nobackup/dketchu1/ts_data/{}'.format(params.stack)
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
 
     device_ct = torch.cuda.device_count()
 
     config = {'model': params.model,
+              'stack': params.stack,
               'dataset_folder': data,
               'epochs': 100,
               'n_classes': N_CLASSES,
@@ -59,7 +60,7 @@ def get_config(**params):
 
     if config['model'] == 'nnet':
         config['dataset_folder'] = pixels
-        config['n_channels'] = CHANNELS
+        config['n_channels'] = BANDS
         config['mode'] = 'pixel'
         config['hidden_size'] = 256
         config['n_classes'] -= 1

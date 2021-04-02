@@ -1,5 +1,4 @@
 import os
-import pickle as pkl
 import numpy as np
 from argparse import ArgumentParser
 
@@ -45,23 +44,26 @@ def main(params):
         plot_prediction(x, pred=pred, label=y, geo=g, out_file=fig)
 
 
-def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=None):
+def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
     cmap_label = colors.ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
     cmap_pred = colors.ListedColormap(['blue', 'purple', 'pink', 'green'])
 
-    r_idx, g_idx, b_idx = [FEATURES.index(x) for x in FEATURES if 'red' in x], \
-                          [FEATURES.index(x) for x in FEATURES if 'green' in x], \
-                          [FEATURES.index(x) for x in FEATURES if 'blue' in x]
+    r_idx, g_idx, b_idx, n_idx = [FEATURES.index(x) for x in FEATURES if 'red' in x], \
+                                 [FEATURES.index(x) for x in FEATURES if 'green' in x], \
+                                 [FEATURES.index(x) for x in FEATURES if 'blue' in x], \
+                                 [FEATURES.index(x) for x in FEATURES if 'nir' in x]
 
-    r_idx, g_idx, b_idx = r_idx[3:10], g_idx[3:10], b_idx[3:10]
-    fig, ax = plt.subplots(ncols=3, nrows=1, figsize=(20, 10))
-    r, g, b = x[r_idx, :, :], x[g_idx, :, :], x[b_idx, :, :]
+    ndvi = np.max(((x[n_idx, :, :] - x[r_idx, :, :]) / (x[n_idx, :, :] + x[r_idx, :, :]) + 1e-5), axis=0)
 
     def norm_rgb(arr):
         arr = ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255)).astype('uint8')
         return arr
 
-    rgb = map(norm_rgb, [np.max(r, axis=0), np.max(g, axis=0), np.max(b, axis=0)])
+    fig, ax = plt.subplots(ncols=4, nrows=1, figsize=(20, 10))
+    r_idx, g_idx, b_idx = r_idx[3:10], g_idx[3:10], b_idx[3:10]
+    r, g, b = x[r_idx, :, :], x[g_idx, :, :], x[b_idx, :, :]
+    rgb = map(norm_rgb, [np.median(r, axis=0), np.median(g, axis=0), np.median(b, axis=0)])
+
     rgb = np.dstack(list(rgb))
 
     lat = geo[0, :, :].mean()
@@ -69,20 +71,17 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=No
 
     print(lat, lon)
 
-    mask = label.sum(0) == 0
-    label = label.argmax(0) + 1
-    label[mask] = 0
-    pred += 1
-    pred, label = pred.squeeze(), label.squeeze()
-
     ax[0].imshow(rgb)
     ax[0].set(xlabel='image')
 
-    ax[1].imshow(label, cmap=cmap_label)
-    ax[1].set(xlabel='label')
+    ax[1].imshow(ndvi, cmap='RdYlGn')
+    ax[1].set(xlabel='ndvi_max')
 
-    ax[2].imshow(pred, cmap=cmap_pred)
-    ax[2].set(xlabel='pred')
+    ax[2].imshow(label, cmap=cmap_label)
+    ax[2].set(xlabel='label {}'.format(np.unique(label)))
+
+    ax[3].imshow(pred, cmap=cmap_pred)
+    ax[3].set(xlabel='pred {}'.format(np.unique(pred)))
 
     plt.suptitle('{:.3f}, {:.3f}'.format(lat, lon))
     plt.tight_layout()
@@ -104,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--nodes', default=1, type=int)
     parser.add_argument('--progress', default=0, type=int)
     parser.add_argument('--workers', default=6, type=int)
+    parser.add_argument('--stack', default='cm')
     parser.add_argument('--checkpoint', default=checkpoint_pth)
     parser.add_argument('--metrics', default=False, type=bool)
     args = parser.parse_args()

@@ -25,6 +25,7 @@ def prepare_output(config):
     new_dir = os.path.join(config.res_dir, dt)
     os.makedirs(new_dir, exist_ok=True)
     os.makedirs(os.path.join(new_dir, 'checkpoints'), exist_ok=True)
+    os.makedirs(os.path.join(new_dir, 'figures'), exist_ok=True)
     with open(os.path.join(new_dir, 'config.json'), 'w') as file:
         file.write(json.dumps(vars(config), indent=4))
     return new_dir
@@ -43,13 +44,14 @@ def main(params):
     checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(log_dir, 'checkpoints'),
         save_top_k=1,
+        save_last=True,
         monitor='val_acc',
         verbose=True)
 
     stop_callback = EarlyStopping(
         monitor='val_acc',
         mode='auto',
-        patience=25,
+        patience=3,
         verbose=False)
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
@@ -57,6 +59,8 @@ def main(params):
     trainer = Trainer(
         precision=16,
         min_epochs=100,
+        # max_epochs=3,
+        # overfit_batches=10,
         # auto_lr_find=True,
         gpus=config.device_ct,
         num_nodes=config.node_ct,
@@ -71,12 +75,13 @@ def main(params):
 
 if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='unet')
+    parser.add_argument('--model', default='nnet')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
+    parser.add_argument('--stack', default='cm')
     parser.add_argument('--nodes', default=1, type=int)
     parser.add_argument('--progress', default=0, type=int)
-    parser.add_argument('--workers', default=16, type=int)
+    parser.add_argument('--workers', default=4, type=int)
     args = parser.parse_args()
     main(args)
 # ========================================================================================
