@@ -88,6 +88,7 @@ def get_config(**params):
 
     if config['model'] == 'unet':
         config['dataset_folder'] = images
+        config['unet_dim_seed'] = 32
         config['mode'] = 'image'
         config['n_channels'] = BANDS
         config['seed'] = 121

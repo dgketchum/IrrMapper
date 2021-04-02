@@ -41,12 +41,12 @@ def write_tfr_to_local(recs, out_dir, split, plot=False):
 
 if __name__ == '__main__':
 
-    data = '/nobackup/dketchu1/ts_data'
+    data = '/nobackup/dketchu1/ts_data/nm'
 
     if not os.path.isdir(data):
-        data = '/media/nvm/ts_data'
+        data = '/media/nvm/ts_data/nm'
 
-    for split in ['train', 'test', 'valid']:
+    for split in ['valid', 'test', 'train']:
         dir_ = os.path.join(data, 'tfrecords', '{}'.format(split))
         out_dir = os.path.join(data, 'images', '{}'.format(split))
         write_tfr_to_local(dir_, out_dir, split=split, plot=False)
