@@ -17,8 +17,8 @@ def write_tfr_to_local(recs, out_dir, split, plot=False):
 
     for j, (features, labels) in enumerate(dataset):
         labels = labels.numpy()
-        # impervious was cast to 4, force to 3
-        labels[labels > 3] = 3
+        # impervious was cast to 4, force to 3 or 0
+        labels[labels > 3] = 0
         classes = np.array([np.any(labels == i) for i in range(N_CLASSES)])
         obj_ct += classes
         features = features.numpy().squeeze()

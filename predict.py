@@ -1,3 +1,4 @@
+import os
 import pickle as pkl
 import numpy as np
 from argparse import ArgumentParser
@@ -16,15 +17,32 @@ FEATURES = feature_spec.features()
 def main(params):
     config = get_config(**vars(params))
 
-    model = UNet.load_from_checkpoint(checkpoint_path=params.checkpoint)
+    checkpoint_dir = os.path.join(params.checkpoint, 'checkpoints')
+    figures_dir = os.path.join(params.checkpoint, 'figures')
+    checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][0]
 
-    trainer = Trainer(
-        precision=16,
-        gpus=config.device_ct,
-        num_nodes=config.node_ct,
-        log_every_n_steps=5)
+    model = UNet.load_from_checkpoint(checkpoint_path=checkpoint)
+    model.freeze()
+    model.hparams.dataset_folder = '/media/nvm/ts_data/cm/images'
+    model.hparams.batch_size = 1
 
-    trainer.test(model)
+    if params.metrics:
+        trainer = Trainer(
+            precision=16,
+            gpus=config.device_ct,
+            num_nodes=config.node_ct,
+            log_every_n_steps=5)
+
+        trainer.test(model)
+
+    loader = model.test_dataloader()
+    for i, (x, g, y) in enumerate(loader):
+        out = model(x)  # .permute(0, 2, 3, 1)
+        pred = out.argmax(1)
+        x, g = x.squeeze().numpy(), g.squeeze().numpy()
+        y, pred = y.squeeze().numpy(), pred.squeeze().numpy()
+        fig = os.path.join(figures_dir, '{}.png'.format(i))
+        plot_prediction(x, pred=pred, label=y, geo=g, out_file=fig)
 
 
 def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=None):
@@ -37,21 +55,17 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=No
 
     r_idx, g_idx, b_idx = r_idx[3:10], g_idx[3:10], b_idx[3:10]
     fig, ax = plt.subplots(ncols=3, nrows=1, figsize=(20, 10))
-    r, g, b = x[:, :, r_idx], x[:, :, g_idx], x[:, :, b_idx]
+    r, g, b = x[r_idx, :, :], x[g_idx, :, :], x[b_idx, :, :]
 
     def norm_rgb(arr):
         arr = ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255)).astype('uint8')
         return arr
 
-    rgb = map(norm_rgb, [np.median(r, axis=2), np.median(g, axis=2), np.median(b, axis=2)])
+    rgb = map(norm_rgb, [np.max(r, axis=0), np.max(g, axis=0), np.max(b, axis=0)])
     rgb = np.dstack(list(rgb))
 
-    geo = geo.squeeze()
-    mean_std = pkl.load(open(config['norm'], 'rb'))
-    lat_std, lat_mn = mean_std[1][91], mean_std[0][91]
-    lon_std, lon_mn = mean_std[1][92], mean_std[0][92]
-    lat = geo[0, :, :].mean() * lat_std + lat_mn
-    lon = geo[1, :, :].mean() * lon_std + lon_mn
+    lat = geo[0, :, :].mean()
+    lon = geo[1, :, :].mean()
 
     print(lat, lon)
 
@@ -80,8 +94,8 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None, config=No
 
 
 if __name__ == '__main__':
-    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/unet/results/' \
-                     'pc-2021.03.22.15.03-unet-image/checkpoints/epoch=71-step=8135.ckpt'
+    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/' \
+                     'unet/results/cas-2021.03.29.10.02-unet-image'
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model', default='unet')
     parser.add_argument('--mode', default='image')
@@ -91,6 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--progress', default=0, type=int)
     parser.add_argument('--workers', default=6, type=int)
     parser.add_argument('--checkpoint', default=checkpoint_pth)
+    parser.add_argument('--metrics', default=False, type=bool)
     args = parser.parse_args()
     main(args)
 # ========================= EOF ====================================================================

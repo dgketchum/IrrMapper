@@ -28,9 +28,9 @@ PIXEL_CLASS_DIST = [6618464, 7235264, 59574370]
 def get_config(**params):
     params = Namespace(**params)
 
-    data = '/media/nvm/ts_data'
+    data = '/media/nvm/ts_data/cm'
     if not os.path.isdir(data):
-        data = '/nobackup/dketchu1/ts_data'
+        data = '/nobackup/dketchu1/ts_data/cm'
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
 
@@ -91,7 +91,6 @@ def get_config(**params):
         config['unet_dim_seed'] = 32
         config['mode'] = 'image'
         config['n_channels'] = BANDS
-        config['seed'] = 121
         config['lr'] = 0.0001
 
     gpu_map = {'V100': 3,
