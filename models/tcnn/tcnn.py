@@ -71,8 +71,8 @@ class TemporalConvNet(pl.LightningModule):
 
 
 class TempConv(StandardModule):
-    def __init__(self, hparams):
-        StandardModule.__init__(self, hparams)
+    def __init__(self, **hparams):
+        StandardModule.__init__(self, **hparams)
         hid_channels = [25 for x in range(0, 8)]
         self.tcn = TemporalConvNet(self.n_channels, hid_channels, kernel_size=self.kernel_size)
         self.linear = nn.Linear(hid_channels[-1], self.n_classes)
@@ -84,6 +84,17 @@ class TempConv(StandardModule):
     def forward(self, x):
         y1 = self.tcn(x)
         return self.linear(y1[:, :, -1])
+
+    def predict_example(self, x, g, y):
+        x = x.squeeze()
+        out = self.forward(x)
+        pred = out.argmax(1)
+        x = x.reshape(x.shape[0], g.shape[-1], g.shape[-1], x.shape[-1])
+        x = x.squeeze().permute(2, 0, 1).numpy()
+        pred = pred.reshape(y.shape).squeeze().numpy()
+        g = g.squeeze().numpy()
+        y = y.squeeze().numpy()
+        return x, g, y, pred
 
     def __dataloader(self):
         itdl = IrrMapDataModule(self.hparams)

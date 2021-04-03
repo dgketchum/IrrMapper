@@ -9,8 +9,8 @@ from data_load.dataset import IrrMapDataModule
 
 
 class NNet(StandardModule):
-    def __init__(self, hparams):
-        StandardModule.__init__(self, hparams)
+    def __init__(self, **hparams):
+        StandardModule.__init__(self, **hparams)
 
         self.classifier = nn.Sequential(
             nn.Linear(self.n_channels, self.hidden_size),

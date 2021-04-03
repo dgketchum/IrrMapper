@@ -10,7 +10,7 @@ from data_load.dataset import IrrMapDataModule
 
 
 class StandardModule(pl.LightningModule):
-    def __init__(self, hparams):
+    def __init__(self, **hparams):
         super().__init__()
 
         self.hparams = hparams

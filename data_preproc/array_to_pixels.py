@@ -31,7 +31,9 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000, out_norm=None):
         if not np.isfinite(features).all():
             print('image {} has nan/inf'.format(f))
             continue
-
+        if not np.isfinite(labels).all():
+            print('labels {} has nan/inf'.format(f))
+            continue
         classes = np.array([np.count_nonzero(labels == i) for i in obj_cntr.keys()])
 
         labels = labels.reshape(labels.shape[0], 1)
@@ -79,6 +81,10 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000, out_norm=None):
         if (j + 1) % 100 == 0:
             print('{} items'.format(j + 1))
 
+        if (j + 1) % 1000 == 0:
+            print('{} items'.format(j + 1))
+            break
+
     print('\n{}'.format(mode.upper()))
     print('pixel count: {}, {} total'.format(pix_ct, out_pixels))
 
@@ -95,9 +101,9 @@ if __name__ == '__main__':
         data = '/media/nvm/ts_data/cm'
 
     images_dir = os.path.join(data, 'images')
-    pixels_dir = os.path.join(data, 'pixels')
+    pixels_dir = os.path.join(data, 'pixels', 'medium')
 
-    for split in ['valid', 'test']:
+    for split in ['train', 'valid', 'test']:
         np_images = os.path.join(images_dir, split)
         pixel_dst = os.path.join(pixels_dir, split)
         if split == 'train':

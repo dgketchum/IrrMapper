@@ -71,7 +71,7 @@ def get_config(**params):
         config['mode'] = 'pixel'
         config['sequence_len'] = SEQUENCE_LEN
         config['n_channels'] = CHANNELS
-        config['lr'] = 0.0025
+        config['lr'] = 0.001
         config['hidden_dim'] = 4
         config['kernel_size'] = 3
 
@@ -88,7 +88,7 @@ def get_config(**params):
         config['unet_dim_seed'] = 32
         config['mode'] = 'image'
         config['n_channels'] = BANDS
-        config['lr'] = 0.0001
+        config['lr'] = 0.001
 
     gpu_map = {'V100': 3,
                'RTX': 1,

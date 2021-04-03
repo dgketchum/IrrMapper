@@ -50,10 +50,12 @@ def main(params):
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
+    accelerator = 'ddp' if config.device_ct > 1 else None
+
     trainer = Trainer(
         precision=16,
-        min_epochs=500,
-        # overfit_batches=10,
+        max_epochs=10,
+        accelerator=accelerator,
         gpus=config.device_ct,
         num_nodes=config.node_ct,
         callbacks=[checkpoint_callback, lr_monitor],
@@ -66,12 +68,12 @@ def main(params):
 
 if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='tcnn')
+    parser.add_argument('--model', default='nnet')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--stack', default='cm')
     parser.add_argument('--nodes', default=1, type=int)
-    parser.add_argument('--progress', default=10, type=int)
+    parser.add_argument('--progress', default=0, type=int)
     parser.add_argument('--workers', default=4, type=int)
     args = parser.parse_args()
     main(args)

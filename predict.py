@@ -9,7 +9,7 @@ from pytorch_lightning import Trainer
 from data_preproc import feature_spec
 from models.unet.unet import UNet
 from models.nnet.nnet import NNet
-from models.temp_cnn.temp_cnn import TempConv
+from models.tcnn.tcnn import TempConv
 from configure import get_config
 
 FEATURES = feature_spec.features()
@@ -23,10 +23,10 @@ def main(params):
 
     checkpoint_dir = os.path.join(params.checkpoint, 'checkpoints')
     figures_dir = os.path.join(params.checkpoint, 'figures')
-    checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][0]
+    checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][1]
 
     model = MODEL_MAP[config.model]
-    model = model.load_from_checkpoint(checkpoint_path=checkpoint)
+    model = model.load_from_checkpoint(checkpoint)
     model.freeze()
 
     if 'nobackup' in model.hparams.dataset_folder:
@@ -100,12 +100,10 @@ def plot_prediction(x, geo=None, label=None, pred=None, out_file=None):
 
 
 if __name__ == '__main__':
-    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/nnet/results/pc-2021.04.02.19.10-nnet-pixel'
-    # checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/unet/' \
-    #                  'results/cas-2021.03.29.10.02-unet-image'
+    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/tcnn/results/pc-2021.04.03.13.13-tcnn-pixel'
 
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='nnet')
+    parser.add_argument('--model', default='tcnn')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--nodes', default=1, type=int)
