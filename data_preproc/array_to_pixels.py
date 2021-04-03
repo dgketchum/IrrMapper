@@ -9,7 +9,7 @@ FEATURES = BANDS + TERRAIN + CDL
 # not incl background (0) class
 
 
-def write_pixel_blocks(data_dir, out, mode, n_subset=100000, out_norm=None):
+def write_pixel_blocks(data_dir, out, mode, n_subset=10000, out_norm=None):
     """ write tensorflow records to class-balanced torch arrays every n samples"""
 
     label_count, pth_count, out_pixels = 0, 0, 0
@@ -90,18 +90,18 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=100000, out_norm=None):
 
 if __name__ == '__main__':
 
-    data = '/nobackup/dketchu1/ts_data'
+    data = '/nobackup/dketchu1/ts_data/cm'
     if not os.path.isdir(data):
-        data = '/media/nvm/ts_data'
+        data = '/media/nvm/ts_data/cm'
 
     images_dir = os.path.join(data, 'images')
     pixels_dir = os.path.join(data, 'pixels')
 
-    for split in ['train']:
+    for split in ['valid', 'test']:
         np_images = os.path.join(images_dir, split)
         pixel_dst = os.path.join(pixels_dir, split)
         if split == 'train':
-            write_pixel_blocks(data_dir=np_images, out=pixel_dst, mode=split, out_norm=pixels_dir)
+            write_pixel_blocks(data_dir=np_images, out=pixel_dst, mode=split)
         else:
             write_pixel_blocks(data_dir=np_images, out=pixel_dst, mode=split)
 

@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 
 from data_load.dataset import IrrMapDataModule
 
-"""Standard Module holds all possible methods standard accross models"""
+"""Standard Module holds all methods we want standard accross models"""
 
 
 class StandardModule(pl.LightningModule):
@@ -109,6 +109,22 @@ class StandardModule(pl.LightningModule):
         avg_loss = torch.stack([x['val_acc'] for x in outputs]).mean()
         tensorboard_logs = {'val_acc': avg_loss}
         return {'avg_val_acc': avg_loss, 'log': tensorboard_logs}
+
+    def __dataloader(self):
+        itdl = IrrMapDataModule(self.hparams)
+        loaders = {'train': itdl.train_dataloader(),
+                   'valid': itdl.val_loader(),
+                   'test': itdl.test_loader()}
+        return loaders
+
+    def train_dataloader(self):
+        return self.__dataloader()['train']
+
+    def val_dataloader(self):
+        return self.__dataloader()['valid']
+
+    def test_dataloader(self):
+        return self.__dataloader()['test']
 
     def configure_model(self):
         for name, val in self.hparams.items():

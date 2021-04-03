@@ -9,7 +9,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from models.unet.unet import UNet
 from models.nnet.nnet import NNet
-from models.temp_cnn.temp_cnn import TempConv
+from models.tcnn.tcnn import TempConv
 from configure import get_config
 
 
@@ -45,42 +45,33 @@ def main(params):
         dirpath=os.path.join(log_dir, 'checkpoints'),
         save_top_k=1,
         save_last=True,
-        monitor='val_acc',
+        monitor='val_loss',
         verbose=True)
-
-    stop_callback = EarlyStopping(
-        monitor='val_acc',
-        mode='auto',
-        patience=3,
-        verbose=False)
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     trainer = Trainer(
         precision=16,
-        min_epochs=100,
-        # max_epochs=3,
+        min_epochs=500,
         # overfit_batches=10,
-        # auto_lr_find=True,
         gpus=config.device_ct,
         num_nodes=config.node_ct,
-        callbacks=[checkpoint_callback, stop_callback, lr_monitor],
+        callbacks=[checkpoint_callback, lr_monitor],
         progress_bar_refresh_rate=params.progress,
         log_every_n_steps=5,
         logger=logger)
-
-    # trainer.tune(model)
+    # exit()
     trainer.fit(model)
 
 
 if __name__ == '__main__':
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='nnet')
+    parser.add_argument('--model', default='tcnn')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--stack', default='cm')
     parser.add_argument('--nodes', default=1, type=int)
-    parser.add_argument('--progress', default=0, type=int)
+    parser.add_argument('--progress', default=10, type=int)
     parser.add_argument('--workers', default=4, type=int)
     args = parser.parse_args()
     main(args)

@@ -103,11 +103,11 @@ ENV/
 .idea/*
 /.idea
 
-data/*
-/home/dgketchum/PycharmProjects/IrrMapper/models/ltae_pse/*.json
+*.json
+
 
 /utils.py
-/models/nnet/results/figures/
-/models/dcm/results/figures/
-/models/temp_cnn/results/figures/
-/models/dcm/results/figures/
+/models/nnet/results/
+/models/dcm/results/
+/models/tcnn/results/
+/models/unet/results/

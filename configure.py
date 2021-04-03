@@ -63,8 +63,6 @@ def get_config(**params):
         config['n_channels'] = BANDS
         config['mode'] = 'pixel'
         config['hidden_size'] = 256
-        config['n_classes'] -= 1
-        config['sample_n'] = config['sample_n'][1:]
         config['lr'] = 0.001
 
     if config['model'] == 'tcnn':
@@ -74,10 +72,8 @@ def get_config(**params):
         config['sequence_len'] = SEQUENCE_LEN
         config['n_channels'] = CHANNELS
         config['lr'] = 0.0025
-        config['n_classes'] -= 1
         config['hidden_dim'] = 4
-        config['kernel_size'] = '[16, 16, 16]'
-        config['mlp3'] = '[16, 4]'
+        config['kernel_size'] = 3
 
     if config['model'] == 'clstm':
         config['dataset_folder'] = images

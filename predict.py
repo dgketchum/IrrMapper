@@ -8,9 +8,14 @@ from pytorch_lightning import Trainer
 
 from data_preproc import feature_spec
 from models.unet.unet import UNet
+from models.nnet.nnet import NNet
+from models.temp_cnn.temp_cnn import TempConv
 from configure import get_config
 
 FEATURES = feature_spec.features()
+MODEL_MAP = {'unet': UNet,
+             'nnet': NNet,
+             'tcnn': TempConv}
 
 
 def main(params):
@@ -20,9 +25,13 @@ def main(params):
     figures_dir = os.path.join(params.checkpoint, 'figures')
     checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][0]
 
-    model = UNet.load_from_checkpoint(checkpoint_path=checkpoint)
+    model = MODEL_MAP[config.model]
+    model = model.load_from_checkpoint(checkpoint_path=checkpoint)
     model.freeze()
-    model.hparams.dataset_folder = '/media/nvm/ts_data/cm/images'
+
+    if 'nobackup' in model.hparams.dataset_folder:
+        model.hparams.dataset_folder = '/media/nvm/ts_data/cm/images'
+
     model.hparams.batch_size = 1
 
     if params.metrics:
@@ -35,16 +44,14 @@ def main(params):
         trainer.test(model)
 
     loader = model.test_dataloader()
+
     for i, (x, g, y) in enumerate(loader):
-        out = model(x)  # .permute(0, 2, 3, 1)
-        pred = out.argmax(1)
-        x, g = x.squeeze().numpy(), g.squeeze().numpy()
-        y, pred = y.squeeze().numpy(), pred.squeeze().numpy()
+        x, g, y, pred = model.predict_example(x, g, y)
         fig = os.path.join(figures_dir, '{}.png'.format(i))
-        plot_prediction(x, pred=pred, label=y, geo=g, out_file=fig)
+        plot_prediction(x, geo=g, label=y, pred=pred, out_file=fig)
 
 
-def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
+def plot_prediction(x, geo=None, label=None, pred=None, out_file=None):
     cmap_label = colors.ListedColormap(['grey', 'blue', 'purple', 'pink', 'green'])
     cmap_pred = colors.ListedColormap(['blue', 'purple', 'pink', 'green'])
 
@@ -93,11 +100,12 @@ def plot_prediction(x, pred=None, label=None, geo=None, out_file=None):
 
 
 if __name__ == '__main__':
-    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/' \
-                     'unet/results/cas-2021.03.29.10.02-unet-image'
+    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/nnet/results/pc-2021.04.02.19.10-nnet-pixel'
+    # checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/unet/' \
+    #                  'results/cas-2021.03.29.10.02-unet-image'
+
     parser = ArgumentParser(add_help=False)
-    parser.add_argument('--model', default='unet')
-    parser.add_argument('--mode', default='image')
+    parser.add_argument('--model', default='nnet')
     parser.add_argument('--gpu', default='RTX')
     parser.add_argument('--machine', default='pc')
     parser.add_argument('--nodes', default=1, type=int)
@@ -106,6 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--stack', default='cm')
     parser.add_argument('--checkpoint', default=checkpoint_pth)
     parser.add_argument('--metrics', default=False, type=bool)
+
     args = parser.parse_args()
     main(args)
 # ========================= EOF ====================================================================
