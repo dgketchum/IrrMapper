@@ -23,7 +23,8 @@ def main(params):
 
     checkpoint_dir = os.path.join(params.checkpoint, 'checkpoints')
     figures_dir = os.path.join(params.checkpoint, 'figures')
-    checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][1]
+    checkpoint = [os.path.join(checkpoint_dir, x) for x in os.listdir(checkpoint_dir)][0]
+    print(checkpoint)
 
     model = MODEL_MAP[config.model]
     model = model.load_from_checkpoint(checkpoint)
@@ -42,13 +43,14 @@ def main(params):
             log_every_n_steps=5)
 
         trainer.test(model)
+        return
 
     loader = model.test_dataloader()
 
     for i, (x, g, y) in enumerate(loader):
         x, g, y, pred = model.predict_example(x, g, y)
         fig = os.path.join(figures_dir, '{}.png'.format(i))
-        plot_prediction(x, geo=g, label=y, pred=pred, out_file=fig)
+        plot_prediction(x, geo=g, label=y, pred=pred, out_file=None)
 
 
 def plot_prediction(x, geo=None, label=None, pred=None, out_file=None):
@@ -62,14 +64,14 @@ def plot_prediction(x, geo=None, label=None, pred=None, out_file=None):
 
     ndvi = np.max(((x[n_idx, :, :] - x[r_idx, :, :]) / (x[n_idx, :, :] + x[r_idx, :, :]) + 1e-5), axis=0)
 
-    def norm_rgb(arr):
+    def to_rgb(arr):
         arr = ((arr - arr.min()) * (1 / (arr.max() - arr.min()) * 255)).astype('uint8')
         return arr
 
     fig, ax = plt.subplots(ncols=4, nrows=1, figsize=(20, 10))
     r_idx, g_idx, b_idx = r_idx[3:10], g_idx[3:10], b_idx[3:10]
     r, g, b = x[r_idx, :, :], x[g_idx, :, :], x[b_idx, :, :]
-    rgb = map(norm_rgb, [np.median(r, axis=0), np.median(g, axis=0), np.median(b, axis=0)])
+    rgb = map(to_rgb, [np.median(r, axis=0), np.median(g, axis=0), np.median(b, axis=0)])
 
     rgb = np.dstack(list(rgb))
 
@@ -100,7 +102,10 @@ def plot_prediction(x, geo=None, label=None, pred=None, out_file=None):
 
 
 if __name__ == '__main__':
-    checkpoint_pth = '/home/dgketchum/PycharmProjects/IrrMapper/models/tcnn/results/pc-2021.04.03.13.13-tcnn-pixel'
+    # TODO: check nnet predictions
+    # TODO: inv norm tcnn loader
+    project = '/home/dgketchum/PycharmProjects/IrrMapper'
+    checkpoint_pth = os.path.join(project, 'models/tcnn/results/pc-2021.04.06.14.11-tcnn-pixel')
 
     parser = ArgumentParser(add_help=False)
     parser.add_argument('--model', default='tcnn')

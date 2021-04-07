@@ -19,20 +19,20 @@ from models.standard import StandardModule
 
 
 class UNet(StandardModule):
-    def __init__(self, hparams, bilinear=True):
-        StandardModule.__init__(self, hparams)
+    def __init__(self, **hparams):
+        StandardModule.__init__(self, **hparams)
 
         seed = 64
         self.inc = DoubleConv(self.n_channels, seed)
         self.down1 = Down(seed, seed * 2)
         self.down2 = Down(seed * 2, seed * 4)
         self.down3 = Down(seed * 4, seed * 8)
-        factor = 2 if bilinear else 1
+        factor = 2
         self.down4 = Down(seed * 8, seed * 16 // factor)
-        self.up1 = Up(seed * 16, seed * 8 // factor, bilinear)
-        self.up2 = Up(seed * 8, seed * 4 // factor, bilinear)
-        self.up3 = Up(seed * 4, seed * 2 // factor, bilinear)
-        self.up4 = Up(seed * 2, seed, bilinear)
+        self.up1 = Up(seed * 16, seed * 8 // factor)
+        self.up2 = Up(seed * 8, seed * 4 // factor)
+        self.up3 = Up(seed * 4, seed * 2 // factor)
+        self.up4 = Up(seed * 2, seed)
         self.outc = OutConv(seed, self.n_classes)
 
         self.train_acc = pl.metrics.Accuracy()

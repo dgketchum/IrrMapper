@@ -81,10 +81,6 @@ def write_pixel_blocks(data_dir, out, mode, n_subset=10000, out_norm=None):
         if (j + 1) % 100 == 0:
             print('{} items'.format(j + 1))
 
-        if (j + 1) % 1000 == 0:
-            print('{} items'.format(j + 1))
-            break
-
     print('\n{}'.format(mode.upper()))
     print('pixel count: {}, {} total'.format(pix_ct, out_pixels))
 
@@ -101,7 +97,7 @@ if __name__ == '__main__':
         data = '/media/nvm/ts_data/cm'
 
     images_dir = os.path.join(data, 'images')
-    pixels_dir = os.path.join(data, 'pixels', 'medium')
+    pixels_dir = os.path.join(data, 'pixels')
 
     for split in ['train', 'valid', 'test']:
         np_images = os.path.join(images_dir, split)

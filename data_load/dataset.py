@@ -7,11 +7,14 @@ from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 
 from configure import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
+from data_load import NORM
 
 SELECT_CHANNELS = torch.tensor([44, 45, 48, 65, 66, 69])
 
 """WARNING This dataloader hijacks 'test' data and puts it in the training data stack, when test_loader is called
     it is just getting the valid data. For pixel models, it pulls valid data in image format, rather than pixel stack"""
+
+# only sample-wise normalization is for tcnn, others use model
 
 
 class IrrMapDataset(Dataset):
@@ -20,6 +23,8 @@ class IrrMapDataset(Dataset):
         self.data_dir = data_dir
         self.mode = mode
         self.model = model
+        self.mean = torch.tensor(NORM[0][:91]).float()
+        self.std = torch.tensor(NORM[1][:91]).float()
         self.img_paths = glob(os.path.join(data_dir, '*.pth'))
         # add test to train for two-way train/valid split
         if 'train' in data_dir:
@@ -36,38 +41,35 @@ class IrrMapDataset(Dataset):
             img = img[torch.randperm(img.size()[0])]
             features = img[:, :BANDS + TERRAIN]
             x, g = features[:, :BANDS], features[:, BANDS:BANDS + TERRAIN]
-            x = x.reshape((x.shape[0], SEQUENCE_LEN, CHANNELS))
-            g = g.float()
-            y = img[:, -1].long()
-            # y -= 1
+            y = img[:, -1]
 
             if self.model == 'nnet':
-                x = x.reshape((x.shape[0], x.shape[1] * x.shape[2])).float()
+                pass
 
             if self.model == 'tcnn':
-                x = x.permute(0, 2, 1).float()
+                x = self.transform_(x)
+                x = x.reshape((x.shape[0], CHANNELS, SEQUENCE_LEN))
 
         elif self.mode == 'image':
             features = img[:, :, :BANDS + TERRAIN]
-            features = features.float()
             x = features[:, :, :BANDS]
-            x = x.permute((2, 0, 1)).float()
-            # x = x.index_select(dim=0, index=SELECT_CHANNELS)
-            y = img[:, :, -1].long()
+            x = x.permute((2, 0, 1))
+            y = img[:, :, -1]
             g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
-            # give C x H x W
 
             if self.model == 'nnet':
-                x = x.reshape((x.shape[0], x.shape[1] * x.shape[2])).permute(1, 0).float()
+                x = x.reshape(x.shape[1] * x.shape[2], x.shape[0])
 
             if self.model == 'tcnn':
-                x = x.permute(0, 2, 1).float()
+                x = x.reshape(x.shape[-1] * x.shape[-1], CHANNELS * SEQUENCE_LEN)
+                x = self.transform_(x)
+                x = x.reshape(x.shape[0], CHANNELS, SEQUENCE_LEN)
 
         elif self.mode == 'temporal_image':
             features = img[:, :, :BANDS + TERRAIN]
             x = features[:, :, :BANDS]
             x = x.reshape(x.shape[0], x.shape[1], SEQUENCE_LEN, CHANNELS)
-            x = x.permute((2, 3, 0, 1)).float()
+            x = x.permute((2, 3, 0, 1))
             y = img[:, :, -4:].permute(2, 0, 1).int()
             g = features[:, :, BANDS:BANDS + TERRAIN].permute(2, 0, 1)
 
@@ -78,19 +80,17 @@ class IrrMapDataset(Dataset):
                                                           'temporal_image']))
 
         if not torch.isfinite(img).all():
-            print('non-finite in {}'.format(img_path))
-            if not torch.isfinite(x).all():
-                raise ArithmeticError('lalbel has nan/inf')
-            if not torch.isfinite(y).all():
-                raise ArithmeticError('lalbel has nan/inf')
+            print('bad image {}'.format(self.img_paths[item]))
+            x, g, y = self.__getitem__(item + 1)
 
-        if self.transforms:
-            x = self.transforms(features)
-
-        return x, g, y
+        return x.float(), g.float(), y.long()
 
     def __len__(self):
         return len(self.img_paths)
+
+    def transform_(self, x):
+        x = (x - self.mean) / (self.std + 1e-6)
+        return x
 
 
 class IrrMapDataModule(pl.LightningDataModule):

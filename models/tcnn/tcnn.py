@@ -1,10 +1,71 @@
 """"Credit: https://github.com/locuslab/TCN"""
+from copy import deepcopy
+import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
 import pytorch_lightning as pl
 
 from models.standard import StandardModule
 from data_load.dataset import IrrMapDataModule
+from configure import BANDS, CHANNELS, TERRAIN, SEQUENCE_LEN
+from data_load import NORM
+
+
+# TODO: batch norm
+
+class TempConv(StandardModule):
+    def __init__(self, **hparams):
+        StandardModule.__init__(self, **hparams)
+        hid_channels = [25 for x in range(0, 8)]
+        self.tcn = TemporalConvNet(self.n_channels, hid_channels, kernel_size=self.kernel_size)
+        self.linear = nn.Linear(hid_channels[-1], self.n_classes)
+        self.init_weights()
+
+        self.mean = torch.tensor(NORM[0][:91]).float()
+        self.std = torch.tensor(NORM[1][:91]).float()
+
+    def init_weights(self):
+        self.linear.weight.data.normal_(0, 0.01)
+
+    def forward(self, x):
+        y1 = self.tcn(x)
+        return self.linear(y1[:, :, -1])
+
+    def predict_example(self, x, g, y):
+        def inv_transform_(x):
+            print(x.size(), self.std.size())
+            x = x.reshape(x.shape[0], x.shape[1] * x.shape[2])
+            x = x.mul_(self.std).add_(self.mean)
+            return x
+
+        x = x.squeeze()
+        out = self.forward(x)
+        pred = out.argmax(1)
+        pred = pred.reshape(g.shape[-1], g.shape[-1]).squeeze().numpy()
+        g = g.squeeze().numpy()
+        y = y.squeeze().numpy()
+        x = inv_transform_(x)
+        x = x.reshape(x.shape[-1], g.shape[-1], g.shape[-1])
+        return x, g, y, pred
+
+    def __dataloader(self):
+        itdl = IrrMapDataModule(self.hparams)
+        loaders = {'train': itdl.train_dataloader(),
+                   'val': itdl.val_loader()}
+        dct = deepcopy(self.hparams)
+        dct['dataset_folder'] = dct['dataset_folder'].replace('pixels', 'images')
+        dct['mode'] = 'image'
+        loaders['test'] = IrrMapDataModule(dct).test_loader()
+        return loaders
+
+    def train_dataloader(self):
+        return self.__dataloader()['train']
+
+    def val_dataloader(self):
+        return self.__dataloader()['val']
+
+    def test_dataloader(self):
+        return self.__dataloader()['test']
 
 
 class Chomp1d(pl.LightningModule):
@@ -68,49 +129,6 @@ class TemporalConvNet(pl.LightningModule):
 
     def forward(self, x):
         return self.network(x)
-
-
-class TempConv(StandardModule):
-    def __init__(self, **hparams):
-        StandardModule.__init__(self, **hparams)
-        hid_channels = [25 for x in range(0, 8)]
-        self.tcn = TemporalConvNet(self.n_channels, hid_channels, kernel_size=self.kernel_size)
-        self.linear = nn.Linear(hid_channels[-1], self.n_classes)
-        self.init_weights()
-
-    def init_weights(self):
-        self.linear.weight.data.normal_(0, 0.01)
-
-    def forward(self, x):
-        y1 = self.tcn(x)
-        return self.linear(y1[:, :, -1])
-
-    def predict_example(self, x, g, y):
-        x = x.squeeze()
-        out = self.forward(x)
-        pred = out.argmax(1)
-        x = x.reshape(x.shape[0], g.shape[-1], g.shape[-1], x.shape[-1])
-        x = x.squeeze().permute(2, 0, 1).numpy()
-        pred = pred.reshape(y.shape).squeeze().numpy()
-        g = g.squeeze().numpy()
-        y = y.squeeze().numpy()
-        return x, g, y, pred
-
-    def __dataloader(self):
-        itdl = IrrMapDataModule(self.hparams)
-        loaders = {'train': itdl.train_dataloader(),
-                   'val': itdl.val_loader(),
-                   'test': itdl.test_loader()}
-        return loaders
-
-    def train_dataloader(self):
-        return self.__dataloader()['train']
-
-    def val_dataloader(self):
-        return self.__dataloader()['val']
-
-    def test_dataloader(self):
-        return self.__dataloader()['test']
 
 
 if __name__ == '__main__':
