@@ -23,8 +23,13 @@ class IrrMapDataset(Dataset):
         self.data_dir = data_dir
         self.mode = mode
         self.model = model
-        self.mean = torch.tensor(NORM[0][:91]).float()
-        self.std = torch.tensor(NORM[1][:91]).float()
+
+        try:
+            self.mean = torch.tensor(NORM[0][:91]).float()
+            self.std = torch.tensor(NORM[1][:91]).float()
+        except TypeError:
+            pass
+
         self.img_paths = glob(os.path.join(data_dir, '*.pth'))
         # add test to train for two-way train/valid split
         if 'train' in data_dir:
