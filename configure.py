@@ -95,7 +95,7 @@ def get_config(**params):
                'K40': 1.5}
 
     b_sizes = {'pixel': 1,
-               'image': 24,
+               'image': 12,
                'temporal_image': 6}
 
     config['batch_size'] = int(b_sizes[config['mode']] * gpu_map[params.gpu])

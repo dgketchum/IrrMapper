@@ -54,7 +54,7 @@ def main(params):
 
     trainer = Trainer(
         precision=16,
-        max_epochs=5,
+        min_epochs=100,
         accelerator=accelerator,
         gpus=config.device_ct,
         num_nodes=config.node_ct,

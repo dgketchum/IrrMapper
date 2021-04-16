@@ -116,12 +116,12 @@ class TemporalConvNet(pl.LightningModule):
     def __init__(self, num_inputs, num_channels, kernel_size=3, dropout=0.2):
         super(TemporalConvNet, self).__init__()
         layers = []
-        num_levels = len(num_channels)
+        num_levels = len(num_channels)  # should be modified to look back over the whole sequence
         for i in range(num_levels):
-            dilation_size = 2 ** i
+            dilation_size = i + 1
             in_channels = num_inputs if i == 0 else num_channels[i - 1]
             out_channels = num_channels[i]
-            pad = (kernel_size - 1) * dilation_size
+            pad = (kernel_size - 1) * dilation_size  # remove dilation
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
                                      padding=pad, dropout=dropout)]
 
