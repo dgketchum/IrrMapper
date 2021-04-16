@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.plugins import DDPPlugin
 
 from models.unet.unet import UNet
 from models.nnet.nnet import NNet
@@ -51,11 +52,13 @@ def main(params):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
     accelerator = 'ddp' if config.device_ct > 1 else None
+    ddp_plug = DDPPlugin(find_unused_parameters=False) if config.device_ct > 1 else None
 
     trainer = Trainer(
         precision=16,
         min_epochs=100,
         accelerator=accelerator,
+        plugins=ddp_plug,
         gpus=config.device_ct,
         num_nodes=config.node_ct,
         callbacks=[checkpoint_callback, lr_monitor],
@@ -74,7 +77,7 @@ if __name__ == '__main__':
     parser.add_argument('--stack', default='nm')
     parser.add_argument('--nodes', default=1, type=int)
     parser.add_argument('--progress', default=0, type=int)
-    parser.add_argument('--workers', default=8, type=int)
+    parser.add_argument('--workers', default=16, type=int)
     args = parser.parse_args()
     main(args)
 # ========================================================================================
