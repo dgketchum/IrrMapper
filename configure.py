@@ -28,9 +28,15 @@ PIXEL_CLASS_DIST = [6618464, 7235264, 59574370]
 def get_config(**params):
     params = Namespace(**params)
 
+    # local
     data = '/media/nvm/ts_data/{}'.format(params.stack)
+    # nasa nas
     if not os.path.isdir(data):
         data = '/nobackup/dketchu1/ts_data/{}'.format(params.stack)
+    # aws
+    if not os.path.isdir(data):
+        data = '/home/ubuntu/data/ts_data/{}'.format(params.stack)
+
     pixels = os.path.join(data, 'pixels')
     images = os.path.join(data, 'images')
 
