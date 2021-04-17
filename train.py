@@ -56,7 +56,7 @@ def main(params):
 
     trainer = Trainer(
         precision=16,
-        min_epochs=100,
+        min_epochs=150,
         accelerator=accelerator,
         plugins=ddp_plug,
         gpus=config.device_ct,

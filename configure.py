@@ -94,15 +94,15 @@ def get_config(**params):
         config['unet_dim_seed'] = 32
         config['mode'] = 'image'
         config['n_channels'] = BANDS
-        config['lr'] = 0.001
+        config['lr'] = 0.00
 
     gpu_map = {'V100': 3,
                'RTX': 1,
                'K40': 1.5}
 
     b_sizes = {'pixel': 1,
-               'image': 46,
-               'temporal_image': 6}
+               'image': 32,
+               'temporal_image': 32}
 
     config['batch_size'] = int(b_sizes[config['mode']] * gpu_map[params.gpu])
 
