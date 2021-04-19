@@ -18,7 +18,7 @@ KERNEL_SHAPE = [KERNEL_SIZE, KERNEL_SIZE]
 list_ = ee.List.repeat(1, KERNEL_SIZE)
 lists = ee.List.repeat(list_, KERNEL_SIZE)
 KERNEL = ee.Kernel.fixed(KERNEL_SIZE, KERNEL_SIZE, lists)
-GS_BUCKET = 'ts_data'
+GS_BUCKET = 'ta_data'
 
 POINTS = 'users/dgketchum/grids/grid_pts'
 GRID = 'users/dgketchum/grids/grid'
@@ -123,7 +123,8 @@ def get_sr_stack(yr, s, e, interval, mask, geo_):
     return interp, target_rename
 
 
-def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=True, split='train', type='means'):
+def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=True,
+                     split='train', type='means'):
     if cloud_mask:
         cloud = 'cm'
     else:

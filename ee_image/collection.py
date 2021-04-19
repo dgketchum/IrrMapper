@@ -258,20 +258,21 @@ class MeanCollection:
 
 
 def ls57mask(img):
-    sr_bands = img.select('B1', 'B2', 'B3', 'B4', 'B5', 'B7')
+    sr_bands = img.select('B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'B6')
     mask_sat = sr_bands.neq(20000)
     img_nsat = sr_bands.updateMask(mask_sat)
     mask1 = img.select('pixel_qa').bitwiseAnd(8).eq(0)
     mask2 = img.select('pixel_qa').bitwiseAnd(32).eq(0)
     mask_p = mask1.And(mask2)
     img_masked = img_nsat.updateMask(mask_p)
-    mask_sel = img_masked.select(['B1', 'B2', 'B3', 'B4', 'B5', 'B7'], ['B2', 'B3', 'B4', 'B5', 'B6', 'B7'])
+    mask_sel = img_masked.select(['B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'B6'],
+                                 ['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10'])
     mask_mult = mask_sel.multiply(0.0001).copyProperties(img, ['system:time_start'])
     return mask_mult
 
 
 def ls8mask(img):
-    sr_bands = img.select('B2', 'B3', 'B4', 'B5', 'B6', 'B7')
+    sr_bands = img.select('B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10')
     mask_sat = sr_bands.neq(20000)
     img_nsat = sr_bands.updateMask(mask_sat)
     mask1 = img.select('pixel_qa').bitwiseAnd(8).eq(0)
@@ -305,14 +306,15 @@ def landsat_masked(yr, roi):
 
 def landsat_means(year, start, end, roi, append_name):
     lsSR_masked = landsat_masked(year, roi)
-    names = ['B2_{}'.format(append_name),
-             'B3_{}'.format(append_name),
-             'B4_{}'.format(append_name),
-             'B5_{}'.format(append_name),
-             'B6_{}'.format(append_name),
-             'B7_{}'.format(append_name)]
+    names = ['blue_{}'.format(append_name),
+             'green_{}'.format(append_name),
+             'red_{}'.format(append_name),
+             'nir_{}'.format(append_name),
+             'swir1_{}'.format(append_name),
+             'swir2_{}'.format(append_name),
+             'tir_{}'.format(append_name)]
     bands_means = ee.Image(lsSR_masked.filterDate(start, end).map(
-        lambda x: x.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7'], names)).mean())
+        lambda x: x.select(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10'], names)).mean())
 
     return bands_means, names
 

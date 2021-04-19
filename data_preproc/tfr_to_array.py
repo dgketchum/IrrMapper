@@ -6,7 +6,7 @@ from tfr_utils import make_test_dataset
 from data_preproc.plot_data import plot_image_data
 
 N_CLASSES = 3
-PLOTS = '/media/hdisk/t_data/tfrecords/plots'
+PLOTS = '/media/nvm/ta_data/cm/tfrecords/plots'
 
 
 def write_tfr_to_local(recs, out_dir, split, plot=False):
@@ -40,15 +40,16 @@ def write_tfr_to_local(recs, out_dir, split, plot=False):
 
 
 if __name__ == '__main__':
+    root = 'ta_data'
 
-    data = '/nobackup/dketchu1/ts_data/nm'
+    data = '/nobackup/dketchu1/{}/cm'.format(root)
     if not os.path.isdir(data):
-        data = '/media/nvm/ts_data/nm'
+        data = '/media/nvm/{}/cm'.format(root)
     if not os.path.isdir(data):
-        data = '/home/ubuntu/data/ts_data/nm'
+        data = '/home/ubuntu/data/{}/cm'.format(root)
 
     for split in ['valid', 'test', 'train']:
         dir_ = os.path.join(data, 'tfrecords', '{}'.format(split))
         out_dir = os.path.join(data, 'images', '{}'.format(split))
-        write_tfr_to_local(dir_, out_dir, split=split, plot=False)
+        write_tfr_to_local(dir_, out_dir, split=split, plot=True)
 # ========================= EOF ====================================================================
