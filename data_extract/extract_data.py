@@ -9,7 +9,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from ee_image.collection import get_target_dates, Collection, get_target_bands
+from ee_image.collection import InterpolatedCollection, MeanCollection
+from ee_image.collection import get_target_dates, get_target_bands
 from data_extract.bucket import get_bucket_contents
 
 KERNEL_SIZE = 256
@@ -78,6 +79,23 @@ def get_ancillary(year):
     return terrain, cdl
 
 
+def get_means_stack(yr, s, e, interval, mask, geo_):
+    s = datetime(yr, s, 1)
+    e = datetime(yr + 1, e, 1)
+    model_obj = MeanCollection(
+        collections=COLLECTIONS,
+        start_date=s,
+        end_date=e,
+        mask=mask,
+        geometry=geo_,
+        interval=interval,
+        cloud_cover_max=60)
+
+    means, names = model_obj.get_means()
+
+    return means, names
+
+
 def get_sr_stack(yr, s, e, interval, mask, geo_):
     s = datetime(yr, s, 1)
     e = datetime(yr + 1, e, 1)
@@ -86,7 +104,7 @@ def get_sr_stack(yr, s, e, interval, mask, geo_):
 
     target_dates = get_target_dates(s, e, interval_=target_interval)
 
-    model_obj = Collection(
+    model_obj = InterpolatedCollection(
         collections=COLLECTIONS,
         start_date=s,
         end_date=e,
@@ -105,7 +123,7 @@ def get_sr_stack(yr, s, e, interval, mask, geo_):
     return interp, target_rename
 
 
-def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, split='train'):
+def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=True, split='train', type='means'):
     if cloud_mask:
         cloud = 'cm'
     else:
@@ -116,7 +134,10 @@ def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, spl
     points_fc = ee.FeatureCollection(POINTS)
 
     s, e, interval_ = 1, 1, 30
-    image_stack, features = get_sr_stack(year, s, e, interval_, cloud_mask, roi)
+    if type == 'means':
+        image_stack, features = get_means_stack(year, s, e, interval_, cloud_mask, roi)
+    elif type == 'interpolate':
+        image_stack, features = get_sr_stack(year, s, e, interval_, cloud_mask, roi)
 
     irr = create_class_labels(year, roi)
     terrain_, cdl_ = get_ancillary(year)
@@ -160,10 +181,10 @@ def extract_by_point(year, grid_fid=1440, point_fids=None, cloud_mask=False, spl
 
 
 def run_extract_irr_points(input_json, overwrite=False):
-
     exported = None
     if not overwrite:
-        contents = get_bucket_contents('ts_data')[0]['nm_12']
+        # contents = get_bucket_contents('ts_data')[0]['nm_12']
+        contents = get_bucket_contents('ta_data')[0]
         exported = [x[0].split('.')[0] for x in contents]
 
     with open(input_json) as j:
@@ -185,7 +206,7 @@ def run_extract_irr_points(input_json, overwrite=False):
                     continue
             if len(pf) > 1:
                 extract_by_point(year=y, grid_fid=gfid, point_fids=pf,
-                                 cloud_mask=False, split=split)
+                                 cloud_mask=True, split=split, type='means')
     print(shard_ct)
 
 
