@@ -205,9 +205,8 @@ def run_extract_irr_points(input_json, overwrite=False):
                 if record in exported:
                     print('{} exists'.format(record))
                     continue
-            if len(pf) > 1:
-                extract_by_point(year=y, grid_fid=gfid, point_fids=pf,
-                                 cloud_mask=True, split=split, type='means')
+            extract_by_point(year=y, grid_fid=gfid, point_fids=pf,
+                             cloud_mask=True, split=split, type='means')
     print(shard_ct)
 
 
