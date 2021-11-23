@@ -1,3 +1,5 @@
+Note: This repository are computer vision approaches to irrigated lands mapping. To see Earth Engine-based code referred to in our [Remote Sensing](https://www.mdpi.com/2072-4292/12/14/2328) article, go to [EEMapper](https://github.com/dgketchum/EEMapper)
+
 # IrrMapper
 Automate Mapping of Irrigated Lands
 
