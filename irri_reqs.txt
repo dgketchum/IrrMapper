@@ -63,7 +63,7 @@ snuggs==1.4.1
 ssebop==0.0.2
 suds-jurko==0.6
 tensorboard==1.8.0
-tensorflow==1.15.2
+tensorflow==2.6.4
 termcolor==1.1.0
 thrift==0.11.0
 toolz==0.9.0
