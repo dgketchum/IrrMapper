@@ -35,7 +35,7 @@ multiprocess==0.70.5
 munch==2.3.2
 netCDF4==1.4.1
 numba==0.39.0
-numpy==1.15.1
+numpy==1.22.0
 opendem==0.0.21
 OWSLib==0.16.0
 pandas==0.22.0
