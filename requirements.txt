@@ -11,7 +11,7 @@ cligj==0.4.0
 Fiona==1.7.11.post2
 gast==0.2.0
 grpcio==1.11.0
-html5lib==0.9999999
+html5lib==0.999999999
 idna==2.6
 Landsat578==0.4.89
 Markdown==2.6.11
