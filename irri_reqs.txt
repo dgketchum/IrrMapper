@@ -23,7 +23,7 @@ gast==0.2.0
 geographiclib==1.49
 geopy==1.16.0
 grpcio==1.11.0
-html5lib==0.9999999
+html5lib==0.999999999
 idna==2.6
 Landsat578==0.5.0
 llvmlite==0.24.0
