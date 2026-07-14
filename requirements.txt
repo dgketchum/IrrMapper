@@ -16,7 +16,7 @@ idna==2.6
 Landsat578==0.4.89
 Markdown==2.6.11
 munch==2.3.2
-numpy==1.14.3
+numpy==1.22.0
 pandas==0.22.0
 protobuf==3.15.0
 pyparsing==2.2.0
